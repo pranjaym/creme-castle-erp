@@ -106,7 +106,14 @@ carries hardcoded secrets and is deliberately excluded.
 
 ## Open items / next up
 
-1. Build the Creme Castle ERP portal (Phase 1).
+1. Creme Castle ERP portal, Phase 1: BUILT 24 Jul 2026 in `portal/` (see
+   `docs/erp-portal-plan.md`). Next.js app, builds clean. Email + password login
+   (`kitchen/migrations/040_portal_profiles.sql` adds `public.profiles` + role), the
+   daily dashboard latest + archive (reads a new `dashboard-html` Storage bucket that
+   `dashboard/auto/run_daily.py` now uploads to), and order/item report CSV downloads
+   (PII-free, from `landing`). PENDING Pranjay (outward, live secrets): apply the
+   migration, create the Vercel project (root `portal/`) + env, create the
+   `dashboard-html` bucket, create the accounts. Then Phase 2 (in-app browse/filter).
 2. Route the daily Petpooja data into the spine DB (unify the split above).
 3. Stand up the 4-computer failover network for the scrape.
 4. Build 1a (D2C reconciliation) real volume is gated on OMS billing go-live (F13).

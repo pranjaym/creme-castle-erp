@@ -115,6 +115,45 @@ def build_dashboard():
     return out, focal
 
 
+def archive_dashboard(html_path, focal):
+    """Upload the built dashboard to the spine Storage bucket the ERP portal reads
+    (DASH_HTML_BUCKET, default 'dashboard-html'), as cc_daily_<focal>.html. This is
+    what makes 'latest + archive' work in the portal. Best effort: if the spine env
+    is not set, skip quietly (the email path is unaffected). Upsert so a same-day
+    re-run overwrites rather than erroring."""
+    import requests
+    base = os.environ.get("SPINE_SUPABASE_URL")
+    key = os.environ.get("SPINE_SUPABASE_SERVICE_ROLE_KEY")
+    if not base or not key:
+        print("archive skipped (SPINE_SUPABASE_* not set).")
+        return False
+    bucket = os.environ.get("DASH_HTML_BUCKET", "dashboard-html")
+    name = f"cc_daily_{focal}.html"
+    url = f"{base.rstrip('/')}/storage/v1/object/{bucket}/{name}"
+    with open(html_path, "rb") as f:
+        data = f.read()
+    try:
+        r = requests.post(
+            url,
+            data=data,
+            headers={
+                "Authorization": f"Bearer {key}",
+                "apikey": key,
+                "Content-Type": "text/html",
+                "x-upsert": "true",
+            },
+            timeout=120,
+        )
+        if r.status_code in (200, 201):
+            print(f"archived {name} to bucket {bucket} ({len(data)//1024} KB)")
+            return True
+        print(f"archive failed ({r.status_code}): {r.text[:200]}")
+        return False
+    except Exception as e:
+        print(f"archive error: {str(e)[:150]}")
+        return False
+
+
 def send_email(html_path, focal, unmapped):
     host = os.environ.get("DASH_SMTP_HOST", "smtp.gmail.com")
     port = int(os.environ.get("DASH_SMTP_PORT", "587"))
@@ -178,6 +217,7 @@ def main():
             sys.exit(2)
 
     html, focal = build_dashboard()
+    archive_dashboard(html, focal)          # push to the portal's archive bucket
     if not args.no_email:
         send_email(html, focal, unmapped)
     if cloud:

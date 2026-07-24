@@ -1,0 +1,19 @@
+# Secrets: never commit. All secrets live in env vars only.
+.env
+.env.local
+.env.*.local
+*.key
+*-service-account*.json
+
+# Node / Next
+node_modules/
+.next/
+out/
+dist/
+npm-debug.log*
+
+# Vercel
+.vercel
+
+# OS
+.DS_Store
