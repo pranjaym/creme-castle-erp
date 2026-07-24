@@ -1,14 +1,15 @@
-// The report exports. Each report reads one private `landing` table over the
-// direct pg pool and streams a clean CSV. Customer name and phone are NEVER
-// emitted, even though the item table has those columns (the daily loader strips
-// them, and we exclude them here too, so an export can never leak PII).
+// The report exports. Each report reads one public view (over the private landing
+// tables) through the Supabase REST client, the SAME connection the portal already
+// uses for login and dashboards. No direct database connection, so none of the
+// host / DNS / SSL / password-in-URL problems apply. Customer name and phone are
+// never exposed (the views do not include them).
 import 'server-only';
-import { pool } from '@/lib/db';
+import { spine } from '@/lib/supabase/service';
 
 export interface ReportDef {
   key: string;         // url token
   label: string;       // shown in the picker
-  table: string;       // qualified landing table
+  view: string;        // public view name (migration 041)
   columns: string[];   // columns to emit, in order (no PII)
   filenameStem: string;
 }
@@ -17,7 +18,7 @@ export const REPORTS: Record<string, ReportDef> = {
   order: {
     key: 'order',
     label: 'Order report (Petpooja online orders)',
-    table: 'landing.petpooja_online_orders',
+    view: 'v_report_online_orders',
     columns: [
       'business_date', 'order_ts', 'aggregator_order_no', 'pos_invoice_no',
       'order_from', 'outlet_name', 'order_type', 'status', 'my_amount', 'total',
@@ -27,8 +28,7 @@ export const REPORTS: Record<string, ReportDef> = {
   item: {
     key: 'item',
     label: 'Item report (Petpooja order summary item)',
-    table: 'landing.petpooja_order_summary_item',
-    // No customer_name / customer_phone: never export PII.
+    view: 'v_report_order_summary_item',
     columns: [
       'business_date', 'restaurant_name', 'invoice_no', 'order_ts', 'payment_type',
       'order_type', 'status', 'area', 'virtual_brand_name', 'my_amount', 'total_tax',
@@ -42,6 +42,7 @@ export const REPORTS: Record<string, ReportDef> = {
 // A generous but bounded window for Phase 1 downloads. The 2-year bulk history is
 // a separate importer/exporter task, not this on-demand button.
 export const MAX_RANGE_DAYS = 92;
+const PAGE = 1000; // REST page size; we loop until a short page.
 
 export function isValidDate(s: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
@@ -64,23 +65,31 @@ function csvCell(v: unknown): string {
   return s;
 }
 
-// Fetch the chosen report for [from, to] (inclusive, by business_date). Runs the
-// whole query up front and THROWS on any connection/query error, so the caller can
-// return a clean error. This is deliberate: a failure here must never turn into a
-// half-written file (headers only), which is exactly what a mid-stream error does.
+// Fetch the report for [from, to] (inclusive, by business_date). Pages through the
+// REST API and THROWS on any error, so the caller returns a clean message instead
+// of a half-written file. Rows come back ordered (business_date, id) so the file
+// is stable and re-downloadable identically.
 export async function fetchReportRows(def: ReportDef, from: string, to: string): Promise<unknown[][]> {
-  const cols = def.columns;
-  const sql =
-    `select ${cols.join(', ')} from ${def.table} ` +
-    `where business_date >= $1 and business_date <= $2 ` +
-    `order by business_date, id`;
-  const client = await pool().connect();
-  try {
-    const res = await client.query({ text: sql, values: [from, to], rowMode: 'array' });
-    return res.rows as unknown[][];
-  } finally {
-    client.release();
+  const client = spine();
+  const rows: unknown[][] = [];
+  let offset = 0;
+  for (;;) {
+    const { data, error } = await client
+      .from(def.view)
+      .select(def.columns.join(','))
+      .gte('business_date', from)
+      .lte('business_date', to)
+      .order('business_date', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw new Error(error.message);
+    const batch = (data ?? []) as unknown as Record<string, unknown>[];
+    if (batch.length === 0) break;
+    for (const obj of batch) rows.push(def.columns.map((c) => obj[c]));
+    if (batch.length < PAGE) break;
+    offset += PAGE;
   }
+  return rows;
 }
 
 // Turn already-fetched rows into a CSV stream. No I/O happens here, so this stream
