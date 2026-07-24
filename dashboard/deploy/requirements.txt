@@ -1,0 +1,8 @@
+pandas>=2.0
+pyarrow>=14
+openpyxl>=3.1
+pyxlsb>=1.0.10
+requests>=2.31
+# Match the base image (v1.48.0-jammy) so the pre-installed browsers are reused and the
+# app's own `from playwright.sync_api import ...` works in the same Python.
+playwright==1.48.0

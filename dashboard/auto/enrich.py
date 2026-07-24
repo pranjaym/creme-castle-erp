@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""
+Turn a RAW Petpooja item-sales export (order_summary_item) into the ENRICHED item
+sheet the Creme Castle daily dashboard expects. Validated to reproduce the existing
+"1 April onwards" enriched file (Alias/Category/City/Actial Date 100%, Hour 99.98%).
+
+What it does, in order (per Pranjay, 23 Jul 2026):
+  1. Keep only Zomato and Swiggy rows. Zomato_Creme Castle counts as Zomato and
+     Toing by Swiggy counts as Swiggy; everything else (D2C/website) is dropped.
+  2. Add the glossary layer: item_name -> Alias Name + Alias Category (streamlines
+     categories), plus City / Store Type / Location Code from the outlet glossaries.
+  3. Compute the 7:00 business-day columns: a sale before 07:00 belongs to the
+     PREVIOUS day and its Hour is shown as +24 (01:00 -> Hour 25). Actial Date and
+     Week follow that boundary. (NB: the dashboard's day is 07:00, NOT the spine's
+     04:00 rule; the two tools use different conventions on purpose.)
+  4. Report any item_name missing from the glossary so a human can add the mapping
+     before the dashboard is built (never guess an alias).
+
+Glossaries live as editable CSVs in ./glossary and are extended when a new item is
+mapped, so the mapping is a growing, owned asset.
+"""
+from datetime import datetime, timedelta
+import os
+import pandas as pd
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+GLOSSARY_DIR = os.path.join(HERE, "glossary")
+
+# area labels that fold into a parent platform before the Zomato/Swiggy filter
+AREA_MAP = {
+    "Zomato_Creme Castle": "Zomato",
+    "Zomato_Creme_Castle": "Zomato",
+    "Toing by Swiggy": "Swiggy",
+}
+KEEP_PLATFORMS = {"Zomato", "Swiggy"}
+
+
+def load_glossary():
+    """Return the mapping dicts built from the CSVs in ./glossary."""
+    g_item = pd.read_csv(os.path.join(GLOSSARY_DIR, "item_glossary.csv"))
+    g_city = pd.read_csv(os.path.join(GLOSSARY_DIR, "city_glossary.csv"))
+    g_out = pd.read_csv(os.path.join(GLOSSARY_DIR, "outlet_glossary.csv"))
+    g_loc = pd.read_csv(os.path.join(GLOSSARY_DIR, "location_codes.csv"))
+    strip = lambda s: s.astype(str).str.strip()
+    return {
+        "item_alias": dict(zip(strip(g_item["item_name"]), g_item["Alias"])),
+        "item_cat": dict(zip(strip(g_item["item_name"]), g_item["Category"])),
+        "out_city": dict(zip(strip(g_city["Outlet Name"]), g_city["City"])),
+        "out_type": dict(zip(strip(g_out["restaurant_name"]), g_out["Type"])),
+        "out_loc": dict(zip(strip(g_loc["Location"]), g_loc["Location Code"])),
+    }
+
+
+def _to_ts(x):
+    """Parse a Petpooja item-report timestamp: raw CSV is 'dd/mm/yy H:MM', the .xlsb
+    stores an Excel serial. Returns a datetime or None (never guessed)."""
+    if isinstance(x, (int, float)):
+        try:
+            return datetime(1899, 12, 30) + timedelta(days=float(x))
+        except (ValueError, OverflowError):
+            return None
+    for fmt in ("%d/%m/%y %H:%M", "%d/%m/%y %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(str(x).strip(), fmt)
+        except (ValueError, AttributeError):
+            continue
+    return None
+
+
+def enrich(raw_df, glossary=None):
+    """raw_df: an order_summary_item DataFrame (raw Petpooja columns). Returns
+    (enriched_df, unmapped_items) where unmapped_items is the sorted list of item
+    names with no glossary alias (the caller should ask a human, then add them)."""
+    g = glossary or load_glossary()
+    df = raw_df.copy()
+
+    df["_ts"] = df["date"].apply(_to_ts)
+    dropped = int(df["_ts"].isna().sum())
+    df = df.dropna(subset=["_ts"])
+
+    df["area"] = df["area"].replace(AREA_MAP)
+    df = df[df["area"].isin(KEEP_PLATFORMS)]
+
+    df["Hour"] = df["_ts"].apply(lambda t: t.hour + 24 if t.hour < 7 else t.hour)
+    df["Actial Date"] = df["_ts"].apply(
+        lambda t: (t - timedelta(days=1)).date() if t.hour < 7 else t.date())
+    df["Week"] = df["Actial Date"].apply(lambda d: d.isocalendar()[1])
+
+    key = df["item_name"].astype(str).str.strip()
+    df["Alias Name"] = key.map(g["item_alias"])
+    df["Alias Category"] = key.map(g["item_cat"])
+    out_key = df["restaurant_name"].astype(str).str.strip()
+    df["City"] = out_key.map(g["out_city"])
+    df["Store Type"] = out_key.map(g["out_type"])
+    df["Location Code"] = out_key.map(g["out_loc"])
+
+    unmapped = sorted(set(key[df["Alias Name"].isna()]))
+    df = df.drop(columns=["_ts"])
+    if dropped:
+        print(f"  enrich: skipped {dropped} rows with an unparseable date")
+    return df, unmapped
+
+
+def add_item_mappings(mappings):
+    """Append new item mappings to the item glossary CSV. `mappings` is a list of
+    dicts with keys item_name, Alias, Category (Shelf Life optional). Idempotent:
+    an item_name already present is left as-is."""
+    path = os.path.join(GLOSSARY_DIR, "item_glossary.csv")
+    g = pd.read_csv(path)
+    have = set(g["item_name"].astype(str).str.strip())
+    rows = [m for m in mappings if str(m.get("item_name", "")).strip() not in have]
+    if not rows:
+        return 0
+    g = pd.concat([g, pd.DataFrame(rows)], ignore_index=True)
+    g.to_csv(path, index=False)
+    return len(rows)

@@ -1,0 +1,31 @@
+# Secrets: never commit. All secrets live in env vars only.
+.env
+.env.local
+.env.*.local
+*.key
+*-service-account*.json
+petpooja_session.json
+
+# Reference-only assets that carry live secrets or are not ours to carry.
+# (Kept OUT of this repo on purpose; see docs and F10.)
+petpooja_pipeline.py
+cc_spotcheck/
+cc_spotcheck.zip
+
+# Node / Next
+node_modules/
+.next/
+out/
+dist/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
+.vercel
+.env*

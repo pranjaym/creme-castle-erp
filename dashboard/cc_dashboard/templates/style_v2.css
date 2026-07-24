@@ -1,0 +1,716 @@
+/* =====================================================================
+   V2 ADDITIONS — May 2026
+   Tabs, multi-range tables, lux matrix, city platform splits
+   ===================================================================== */
+
+/* ---------- Tab control ---------- */
+.tab-control {
+  display: inline-flex;
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 3px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+}
+.tab-control button {
+  background: transparent;
+  border: none;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.tab-control button:hover { color: var(--text); }
+.tab-control button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.tab-control button.active.plat-z { color: var(--critical); }
+.tab-control button.active.plat-s { color: var(--watch); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ---------- Multi-range metric table ---------- */
+.range-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.range-table thead th {
+  text-align: right;
+  padding: 8px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.range-table thead th:first-child {
+  text-align: left;
+  padding-left: 14px;
+}
+.range-table thead th .dt-sub {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 400;
+  text-transform: none;
+  color: var(--text-dim);
+  margin-top: 2px;
+  letter-spacing: 0;
+}
+.range-table tbody td {
+  padding: 9px 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--surface-2);
+  font-size: 12.5px;
+}
+.range-table tbody td:first-child {
+  text-align: left;
+  padding-left: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.range-table tbody td.focal-cell {
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(139,90,43,0.04);
+}
+.range-table .micro-delta {
+  display: block;
+  font-size: 10px;
+  margin-top: 2px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+.range-table .micro-delta.up   { color: var(--positive); }
+.range-table .micro-delta.down { color: var(--critical); }
+.range-table .row-divider td {
+  border-bottom: 1px solid var(--border);
+}
+.range-table tbody tr.section-header td {
+  background: var(--surface-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 6px 14px;
+}
+
+/* ---------- Lux Cakes section ---------- */
+.lux-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.lux-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 16px 14px;
+  position: relative;
+}
+.lux-card .lux-name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+.lux-card .lux-qty {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin: 6px 0 4px;
+}
+.lux-card .lux-qty .unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+.lux-card .lux-delta {
+  font-size: 11px;
+  margin-bottom: 12px;
+}
+.lux-card .lux-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--surface-2);
+  padding-top: 10px;
+  margin-top: 8px;
+}
+.lux-card .lux-meta .v {
+  display: block;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+}
+.lux-card .lux-spark {
+  width: 100%;
+  height: 28px;
+  margin-top: 4px;
+}
+.lux-card .lux-split-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+  display: flex;
+  margin-top: 6px;
+}
+.lux-card .lux-split-bar .seg-z { background: var(--critical); }
+.lux-card .lux-split-bar .seg-s { background: var(--watch); }
+.lux-card .lux-split-bar .seg {
+  height: 100%;
+}
+
+/* SKU x outlet heatmap matrix */
+.lux-matrix {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+}
+.lux-matrix-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.lux-matrix-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+.lux-heatmap {
+  border-collapse: collapse;
+  font-size: 11px;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.lux-heatmap thead th {
+  padding: 8px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-align: center;
+  vertical-align: bottom;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+}
+.lux-heatmap thead th:first-child {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-muted);
+  min-width: 180px;
+}
+.lux-heatmap tbody td {
+  padding: 5px 6px;
+  text-align: center;
+  border: 1px solid var(--surface);
+  font-weight: 600;
+  font-size: 11px;
+}
+.lux-heatmap tbody td:first-child {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface) !important;
+  border-right: 1px solid var(--border);
+}
+.lux-heatmap tbody td.h-0 { background: #FBF8F2; color: var(--text-dim); }
+.lux-heatmap tbody td.h-1 { background: #F4ECDC; color: var(--text); }
+.lux-heatmap tbody td.h-2 { background: #E6CFA0; color: #5A3F1C; }
+.lux-heatmap tbody td.h-3 { background: #C58B47; color: white; }
+.lux-heatmap tbody td.h-4 { background: #8B5A2B; color: white; }
+.lux-heatmap tbody td.h-5 { background: #5A3F1C; color: white; }
+.lux-heatmap tbody td .micro {
+  display: block;
+  font-size: 9px;
+  font-weight: 500;
+  opacity: 0.85;
+  margin-top: 1px;
+}
+
+/* ---------- City Cluster v2 ---------- */
+.city-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.city-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 18px 14px;
+}
+.city-card .city-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--surface-2);
+}
+.city-card .city-name {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.city-card .city-outlets {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.city-card .city-share {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.city-share-bar {
+  width: 160px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+  display: flex;
+  border: 1px solid var(--border);
+}
+.city-share-bar .seg-z { background: var(--critical); }
+.city-share-bar .seg-s { background: var(--watch); }
+.city-share-bar .seg { height: 100%; }
+.city-share-label {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.city-share-label .z { color: var(--critical); font-weight: 600; }
+.city-share-label .s { color: var(--watch); font-weight: 600; }
+
+/* ---------- Category cards v2 ---------- */
+.cat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 14px;
+}
+.cat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 18px;
+  border-top: 3px solid var(--accent);
+}
+.cat-card.cat-cakes { border-top-color: var(--accent); }
+.cat-card.cat-desserts { border-top-color: #B0795F; }
+.cat-card.cat-cheesecakes { border-top-color: #C9A96A; }
+.cat-card.cat-cookies { border-top-color: #A98760; }
+.cat-card .cat-name {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.cat-card .cat-headline {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin: 4px 0 2px;
+}
+.cat-card .cat-headline .unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-left: 3px;
+}
+.cat-card .cat-share {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.cat-card .cat-share .v {
+  color: var(--text);
+  font-weight: 600;
+}
+.cat-card .cat-trend {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--surface-2);
+  font-size: 10px;
+}
+.cat-card .cat-trend .item {
+  text-align: left;
+}
+.cat-card .cat-trend .lbl {
+  display: block;
+  color: var(--text-muted);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 3px;
+}
+.cat-card .cat-trend .v {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.cat-card .cat-trend .v.up   { color: var(--positive); }
+.cat-card .cat-trend .v.down { color: var(--critical); }
+
+/* ---------- SKU Concentration v2 ---------- */
+.sku-conc-grid {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .sku-conc-grid { grid-template-columns: 1fr; }
+}
+.conc-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+}
+.conc-tile .conc-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.conc-tile .conc-value {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.conc-tile .conc-value .unit {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+.conc-tile .conc-vs {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.conc-tile .conc-vs .v {
+  display: inline-block;
+  margin-left: 4px;
+  font-weight: 600;
+}
+
+/* ---------- Discount diagnostic v2 ---------- */
+.disc-brand-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.disc-brand-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  border-top: 3px solid var(--text);
+}
+.disc-brand-tile.plat-z { border-top-color: var(--critical); }
+.disc-brand-tile.plat-s { border-top-color: var(--watch); }
+.disc-brand-tile .lbl {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.disc-brand-tile .focal {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.disc-brand-tile .focal .unit {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+.disc-brand-tile .ranges {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+.disc-brand-tile .ranges .item .v {
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* helper */
+.section-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin: -4px 0 14px;
+}
+
+/* =====================================================================
+   V3 ADDITIONS — May 2026
+   Z vs S city comparison tiles, sortable tables, cake share chart
+   ===================================================================== */
+
+/* ---------- City body: 2-column layout (table + Z vs S compare) ---------- */
+.city-body {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .city-body { grid-template-columns: 1fr; }
+}
+.city-left { overflow-x: auto; }
+
+/* ---------- Z vs S side-by-side comparison ---------- */
+.zs-compare {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+.zs-compare-head {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.zs-compare-head .zs-z-dot,
+.zs-compare-head .zs-s-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  font-size: 10.5px;
+}
+.zs-compare-head .zs-z-dot::before {
+  content: ""; display: inline-block; width: 8px; height: 8px;
+  border-radius: 2px; background: var(--critical); margin-right: 2px;
+}
+.zs-compare-head .zs-s-dot::before {
+  content: ""; display: inline-block; width: 8px; height: 8px;
+  border-radius: 2px; background: var(--watch); margin-right: 2px;
+}
+.zs-compare-head .zs-z-dot { color: var(--critical); }
+.zs-compare-head .zs-s-dot { color: var(--watch); }
+.zs-compare-head .zs-meta {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-left: auto;
+}
+.zs-compare-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--surface);
+}
+.zs-compare-row:last-child { border-bottom: none; }
+.zs-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+.zs-bars {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 3px;
+}
+.zs-z, .zs-s {
+  position: relative;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.zs-z .zs-bar {
+  height: 100%;
+  background: rgba(194,74,61,0.30);
+  border-left: 3px solid var(--critical);
+  display: block;
+  border-radius: 0 3px 3px 0;
+  transition: width 0.3s;
+}
+.zs-s .zs-bar {
+  height: 100%;
+  background: rgba(184,134,11,0.30);
+  border-left: 3px solid var(--watch);
+  display: block;
+  border-radius: 0 3px 3px 0;
+  transition: width 0.3s;
+}
+.zs-z.winner .zs-bar { background: rgba(194,74,61,0.55); }
+.zs-s.winner .zs-bar { background: rgba(184,134,11,0.55); }
+.zs-z.loser .zs-bar  { opacity: 0.55; }
+.zs-s.loser .zs-bar  { opacity: 0.55; }
+.zs-val {
+  color: var(--text);
+  white-space: nowrap;
+}
+.zs-z.loser .zs-val,
+.zs-s.loser .zs-val { color: var(--text-muted); font-weight: 500; }
+
+/* ---------- Sortable table ---------- */
+.range-table.sortable thead th {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+.range-table.sortable thead th:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+.range-table.sortable thead th::after {
+  content: "↕";
+  display: inline-block;
+  margin-left: 5px;
+  opacity: 0.3;
+  font-size: 9px;
+}
+.range-table.sortable thead th.sort-asc::after {
+  content: "↑";
+  opacity: 1;
+  color: var(--accent);
+}
+.range-table.sortable thead th.sort-desc::after {
+  content: "↓";
+  opacity: 1;
+  color: var(--accent);
+}
+
+/* ---------- Cake share trend chart ---------- */
+.cake-share-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 20px 16px;
+  margin-bottom: 6px;
+}
+.cake-share-header { margin-bottom: 14px; }
+.cake-share-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.cake-share-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  line-height: 1.5;
+}
+.cake-share-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.cake-share-tile {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+}
+.cake-share-tile .lbl {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.cake-share-tile .val {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.cake-share-tile .val .unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+.cake-share-tile .sub {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.cake-share-chart-wrap {
+  height: 280px;
+  position: relative;
+}
+
+/* ---------- Orders-row Z/S split (City Clusters, single Total view) ---------- */
+.range-table td .zs-split {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.range-table td .zs-split .zs-z { color: var(--critical); }
+.range-table td .zs-split .zs-s { color: var(--watch); margin-left: 7px; }

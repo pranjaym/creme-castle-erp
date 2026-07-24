@@ -1,0 +1,40 @@
+# Secrets — NEVER commit. Only .env.example (templates) are tracked.
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+petpooja_session.json
+*-service-account*.json
+
+# Reference files that carry live secrets / customer PII — kept OUT on purpose.
+petpooja_pipeline.py
+cc_spotcheck/
+cc_spotcheck.zip
+
+# Data that must not live in git (PII, vendor financials, large, regeneratable).
+dashboard/auto/history/
+dashboard/cc_dashboard/uploads/
+**/*.parquet
+**/*.xlsb
+data-samples/
+
+# Generated dashboard output
+**/cc_daily*.html
+**/cc_weekend*.html
+**/cc_fathersday*.html
+*.log
+
+# Node / Next / Python / OS build artifacts
+node_modules/
+.next/
+out/
+dist/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.vercel
+.DS_Store
+**/.DS_Store
+*.tsbuildinfo

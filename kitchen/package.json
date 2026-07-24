@@ -1,0 +1,26 @@
+{
+  "name": "cremecastle-kitchen",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Creme Castle kitchen spine: canonical data layer, D2C reconciliation (Build 1a), intermediates logbook (Build 3a).",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "node --test",
+    "seed:gen": "python3 scripts/gen_seed_sql.py",
+    "db:migrate": "node scripts/migrate.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "next": "^15.0.0",
+    "pg": "^8.13.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0"
+  }
+}

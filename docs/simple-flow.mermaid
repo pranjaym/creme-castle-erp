@@ -1,0 +1,35 @@
+flowchart TD
+
+  subgraph DAILY["EVERY WEBSITE ORDER (at SPJ, FBD, GN, Meerut)"]
+    A["Customer orders cake<br/>on website"] --> B["Order comes into OMS<br/>OMS makes the bill<br/>example: Order 4521"]
+    B --> C["Store boy packs the cake<br/>and sends it with rider"]
+    C --> D["Store boy makes ONE punch<br/>in Petpooja: item went out<br/>writes 4521 in remarks"]
+    D --> E["Petpooja stock reduces<br/>stock count stays correct"]
+  end
+
+  subgraph MORNING["NEXT MORNING (10 minutes)"]
+    F["List 1: yesterday's orders<br/>from OMS"] --> H{"Compare<br/>by order number"}
+    G["List 2: yesterday's punches<br/>from Petpooja"] --> H
+    H --> I["Punch but no order?<br/>= someone ate a cake<br/>CALL THE STORE"]
+    H --> J["Order but no punch?<br/>= store forgot<br/>CALL THE STORE"]
+    H --> K["Everything matches?<br/>= all good, done"]
+  end
+
+  subgraph WEEK["THIS WEEK, THREE JOBS"]
+    L["1. Admin person spends 45 min<br/>in Petpooja settings<br/>(checklist already made)"]
+    M["2. Tell the 4 stores the rule:<br/>nothing leaves without a punch,<br/>every punch has the order number"]
+    N["3. From OMS day one,<br/>controls team does the<br/>morning compare in Excel"]
+  end
+
+  E -.-> G
+  B -.-> F
+
+  classDef blue fill:#dbeafe,stroke:#2563eb,color:#1e3a5f
+  classDef green fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef red fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+  classDef amber fill:#fef3c7,stroke:#d97706,color:#78350f
+
+  class A,B,C,D,E blue
+  class F,G,H,K green
+  class I,J red
+  class L,M,N amber

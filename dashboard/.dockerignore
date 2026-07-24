@@ -1,0 +1,13 @@
+# Keep secrets, local state, and big sample files OUT of the image.
+auto/.env
+auto/history
+auto/cc_daily*.html
+auto/__pycache__
+cc_dashboard/__pycache__
+cc_dashboard/uploads
+cc_dashboard/cc_daily.html
+cc_dashboard/cc_weekend.html
+cc_dashboard/cc_fathersday_vs_mothersday.html
+**/*.pyc
+.DS_Store
+**/.DS_Store

@@ -1,0 +1,71 @@
+flowchart LR
+
+  VEND[Vendors]
+
+  subgraph WH_G["Central Warehouse (ledger: SupplyNote)"]
+    WH["Raw materials, packaging,<br/>design items"]
+  end
+
+  subgraph CK_G["Central Kitchen (conversion: NO LEDGER, module target)"]
+    KFG["FG production, 78 Z/S SKUs<br/>logged on one paper sheet<br/>enters Petpooja via fake vendor<br/>'Production' purchase (jugaad)"]
+    KINT["Frozen buffer: sponges, ganache<br/>never produced on paper<br/>book stock NEGATIVE everywhere<br/>par stocks on paper, no trail"]
+    NSK["Noida Spoke (inside CK)<br/>draws direct from CK: to stop,<br/>relocation planned"]
+  end
+
+  CDIS["Central Dispatch<br/>accountability node<br/>(in Petpooja + SupplyNote)"]
+
+  subgraph DS_G["Dark Stores ~40 (ledger: Petpooja, Z/S menu FG only)"]
+    DS["Z/S stock, sales, wastage punched,<br/>variance checked here"]
+    D2CDS["D2C fulfillment DS x4:<br/>SPJ, FBD, GN, Meerut<br/>website bills punched in Petpooja"]
+  end
+
+  subgraph SK_G["Assembly Spokes: GGN, Janakpuri (+ Noida above)"]
+    SK["Custom cakes, variable recipe<br/>no inventory of regular FG,<br/>no receiving-side check"]
+  end
+
+  PLAN["Dispatch Console<br/>daily plan from DS closing stock"]
+  OMS["OMS: pilot now,<br/>billing live in ~2 weeks<br/>SPLIT-LEDGER FUSE"]
+  TALLY[("Tally<br/>financial source of truth")]
+
+  CZ((Z/S customer))
+  CD2((D2C customer))
+
+  VEND -->|"purchase invoice: SupplyNote, then Tally"| WH
+  WH -->|"issue recorded in SupplyNote,<br/>consumption NOT recipe-linked,<br/>month-end true-up, misused"| KFG
+  KFG --- KINT
+  KFG -->|"transfer"| CDIS
+  CDIS -->|"Petpooja transfer"| DS
+  CDIS -->|"Petpooja transfer"| D2CDS
+  WH -->|"packaging: SupplyNote PO"| DS
+  WH -->|"packaging + design: SupplyNote"| SK
+  KINT -->|"sponge + ganache to spokes,<br/>ordered via SupplyNote,<br/>drives stock negative"| SK
+  KINT -->|"direct draw (to stop)"| NSK
+  DS -->|"LEAK: FG transfer PO punched by DS,<br/>no receiving check at spoke"| SK
+  DS -->|"Z/S order, Petpooja POS"| CZ
+  D2CDS -->|"website order, own rider,<br/>bill in Petpooja today"| CD2
+  SK -->|"custom cake, billed Petpooja today,<br/>OMS in ~2 weeks"| CD2
+  NSK -->|"custom cake"| CD2
+
+  PLAN -.->|"production targets"| KFG
+  OMS -.->|"order tickets (going live)"| SK
+  OMS -.->|"billing moves here: Petpooja stock<br/>and console feed go blind unless fixed"| D2CDS
+  DS -.->|"sales, consolidated"| TALLY
+  SK -.->|"bills"| TALLY
+  WH -.->|"purchase invoices"| TALLY
+
+  classDef sn fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef pp fill:#dbeafe,stroke:#2563eb,color:#1e3a5f
+  classDef untracked fill:#fee2e2,stroke:#dc2626,stroke-dasharray: 5 5,color:#7f1d1d
+  classDef jugaad fill:#fef3c7,stroke:#d97706,color:#78350f
+  classDef ours fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
+  classDef fin fill:#f3f4f6,stroke:#6b7280,color:#111827
+  classDef cust fill:#fff7ed,stroke:#ea580c,color:#7c2d12
+
+  class WH sn
+  class DS,D2CDS pp
+  class KFG jugaad
+  class KINT,SK,NSK untracked
+  class CDIS fin
+  class PLAN,OMS ours
+  class TALLY fin
+  class CZ,CD2 cust
