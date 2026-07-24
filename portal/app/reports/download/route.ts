@@ -3,7 +3,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/session';
 import {
-  REPORTS, MAX_RANGE_DAYS, isValidDate, daysBetween, streamReportCsv,
+  REPORTS, MAX_RANGE_DAYS, isValidDate, daysBetween, fetchReportRows, rowsToCsvStream,
 } from '@/lib/reports';
 
 export async function GET(req: Request) {
@@ -22,8 +22,19 @@ export async function GET(req: Request) {
     return bad(`That range is ${span + 1} days. Keep a single download to ${MAX_RANGE_DAYS} days or fewer.`);
   }
 
+  // Run the query first so a DB failure returns a clean 500, never a header-only file.
+  let rows: unknown[][];
+  try {
+    rows = await fetchReportRows(def, from, to);
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : 'unknown error';
+    return new NextResponse(`Could not read the report from the database: ${detail}`, {
+      status: 500, headers: { 'Content-Type': 'text/plain' },
+    });
+  }
+
   const filename = `${def.filenameStem}_${from}_to_${to}.csv`;
-  const body = streamReportCsv(def, from, to);
+  const body = rowsToCsvStream(def, rows);
   return new NextResponse(body, {
     status: 200,
     headers: {

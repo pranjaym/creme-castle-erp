@@ -64,27 +64,35 @@ function csvCell(v: unknown): string {
   return s;
 }
 
-// Stream the chosen report for [from, to] (inclusive, by business_date) as CSV.
-// Rows come back ordered so the file is stable and re-downloadable identically.
-export function streamReportCsv(def: ReportDef, from: string, to: string): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
+// Fetch the chosen report for [from, to] (inclusive, by business_date). Runs the
+// whole query up front and THROWS on any connection/query error, so the caller can
+// return a clean error. This is deliberate: a failure here must never turn into a
+// half-written file (headers only), which is exactly what a mid-stream error does.
+export async function fetchReportRows(def: ReportDef, from: string, to: string): Promise<unknown[][]> {
   const cols = def.columns;
   const sql =
     `select ${cols.join(', ')} from ${def.table} ` +
     `where business_date >= $1 and business_date <= $2 ` +
     `order by business_date, id`;
+  const client = await pool().connect();
+  try {
+    const res = await client.query({ text: sql, values: [from, to], rowMode: 'array' });
+    return res.rows as unknown[][];
+  } finally {
+    client.release();
+  }
+}
 
+// Turn already-fetched rows into a CSV stream. No I/O happens here, so this stream
+// cannot fail midway: the download is complete or it never started.
+export function rowsToCsvStream(def: ReportDef, rows: unknown[][]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const header = def.columns.join(',') + '\n';
   return new ReadableStream<Uint8Array>({
-    async start(controller) {
-      controller.enqueue(encoder.encode(cols.join(',') + '\n'));
-      const client = await pool().connect();
-      try {
-        const res = await client.query({ text: sql, values: [from, to], rowMode: 'array' });
-        for (const row of res.rows as unknown[][]) {
-          controller.enqueue(encoder.encode(row.map(csvCell).join(',') + '\n'));
-        }
-      } finally {
-        client.release();
+    start(controller) {
+      controller.enqueue(encoder.encode(header));
+      for (const row of rows) {
+        controller.enqueue(encoder.encode(row.map(csvCell).join(',') + '\n'));
       }
       controller.close();
     },
