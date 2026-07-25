@@ -39,10 +39,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 V5 = os.path.dirname(HERE)
 # Paths are env-overridable so the same code runs on the Mac and in the container.
 DASH_DIR = os.environ.get("CC_DASH_DIR", os.path.join(V5, "cc_dashboard"))
+# The ingest worker lives in this same repo (kitchen/workers/petpooja-ingest), so the
+# default is resolved relative to here. It used to point at the old standalone
+# cremecastle-kitchen checkout, which does not exist in a fresh clone.
+REPO_ROOT = os.path.dirname(V5)
 SCRAPER_DIR = os.environ.get(
     "PETPOOJA_SCRAPER_DIR",
-    "/Users/Pranjay/Library/Mobile Documents/com~apple~CloudDocs/"
-    "Downloads Drive/cremecastle-kitchen/workers/petpooja-ingest")
+    os.path.join(REPO_ROOT, "kitchen", "workers", "petpooja-ingest"))
 sys.path.insert(0, HERE)
 import enrich
 import history_store as hist
@@ -66,7 +69,9 @@ def _load_env_file():
 
 def scrape_and_append(days):
     """Pull the last `days` days of both reports, enrich items, append to history.
-    Returns the sorted list of item names that had no glossary alias."""
+    Returns (unmapped_item_names, downloaded_files). The file paths are kept so the
+    spine sync can reuse the SAME downloads: Petpooja is slow and rate limited, so
+    it must be scraped once per morning, not twice."""
     sys.path.insert(0, SCRAPER_DIR)
     import scrape
     today = dt.date.today()
@@ -87,7 +92,38 @@ def scrape_and_append(days):
         enriched["Alias Name"] = enriched["Alias Name"].fillna(enriched["item_name"])
         enriched["Alias Category"] = enriched["Alias Category"].fillna("Unmapped")
     hist.append_items(enriched)
-    return unmapped
+    return unmapped, {"online_orders": ofile, "order_summary_item": ifile}
+
+
+def sync_spine(files):
+    """Feed this morning's already-downloaded reports into the spine and verify the
+    last few business days against them (see workers/petpooja-ingest/sync.py).
+
+    Best effort by design: the dashboard email is the business-critical output, so a
+    spine problem must never stop it going out. Returns a short human summary plus
+    the days where something MATERIAL changed (status, amounts, charges), which are
+    the only ones worth putting in front of a person."""
+    if not os.environ.get("SPINE_DATABASE_URL"):
+        print("spine sync skipped (SPINE_DATABASE_URL not set).")
+        return None, []
+    try:
+        sys.path.insert(0, SCRAPER_DIR)
+        import psycopg2
+        import sync as spine_sync
+        conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+        try:
+            results = []
+            for report, path in files.items():
+                print(f"\n[spine] verifying {report} ...")
+                results += spine_sync.sync_file(conn, report, path)
+            line, material = spine_sync.summarise(results)
+            print(f"spine sync: {line}")
+            return line, material
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"spine sync FAILED (dashboard unaffected): {type(e).__name__}: {str(e)[:200]}")
+        return f"spine sync failed: {type(e).__name__}", []
 
 
 def build_dashboard():
@@ -154,7 +190,7 @@ def archive_dashboard(html_path, focal):
         return False
 
 
-def send_email(html_path, focal, unmapped):
+def send_email(html_path, focal, unmapped, spine_line=None, spine_material=None):
     host = os.environ.get("DASH_SMTP_HOST", "smtp.gmail.com")
     port = int(os.environ.get("DASH_SMTP_PORT", "587"))
     sender = os.environ.get("DASH_EMAIL_SENDER")
@@ -178,6 +214,15 @@ def send_email(html_path, focal, unmapped):
     if unmapped:
         body += ("\n\nNOTE: new items with no glossary mapping (counted under their raw "
                  "name for now, please add an Alias + Category):\n- " + "\n- ".join(unmapped))
+    # Only surface the spine check when something MEANINGFUL moved (an order status,
+    # an amount, a charge). Routine confirmations and cosmetic label changes stay in
+    # the log: measured on real data, raw comparison shouts about ~292 rows a day
+    # when only a handful matter.
+    if spine_material:
+        body += "\n\nDATA CHECK: the database was corrected against a fresh Petpooja pull:"
+        for r in spine_material:
+            body += (f"\n- {r['report']} {r['business_date']}: "
+                     f"{r['material']} meaningful change(s)")
     msg.set_content(body)
     with open(html_path, "rb") as f:
         msg.add_attachment(f.read(), maintype="text", subtype="html",
@@ -193,7 +238,12 @@ def send_email(html_path, focal, unmapped):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-scrape", action="store_true")
-    ap.add_argument("--days", type=int, default=3)
+    ap.add_argument("--no-spine", action="store_true",
+                    help="skip the spine load and verification (dashboard only)")
+    # 4 days, not 3: the first and last business day of any pull are incomplete under
+    # the 04:00 rule, so a 4-day window is what lets the spine sync fully verify three
+    # business days per morning. The dashboard is unaffected (history dedups).
+    ap.add_argument("--days", type=int, default=4)
     ap.add_argument("--allow-unmapped", action="store_true")
     ap.add_argument("--no-email", action="store_true")
     args = ap.parse_args()
@@ -205,9 +255,9 @@ def main():
     if cloud:
         hist.pull_history()
 
-    unmapped = []
+    unmapped, files = [], {}
     if not args.no_scrape:
-        unmapped = scrape_and_append(args.days)
+        unmapped, files = scrape_and_append(args.days)
         if unmapped and not args.allow_unmapped:
             print("\nSTOP: these items have no glossary mapping. Add them to "
                   "glossary/item_glossary.csv (Alias + Category), or re-run with "
@@ -216,10 +266,16 @@ def main():
                 print("   -", u)
             sys.exit(2)
 
+    # Land this morning's reports in the spine and verify the recent days against
+    # them, reusing the downloads above. Never blocks the dashboard.
+    spine_line, spine_material = (None, [])
+    if files and not args.no_spine:
+        spine_line, spine_material = sync_spine(files)
+
     html, focal = build_dashboard()
     archive_dashboard(html, focal)          # push to the portal's archive bucket
     if not args.no_email:
-        send_email(html, focal, unmapped)
+        send_email(html, focal, unmapped, spine_line, spine_material)
     if cloud:
         hist.push_history()
     print("\ndone.")
