@@ -104,17 +104,62 @@ Gmail App Password for the dashboard mailer should be rotated (it leaked into a 
 file during setup) and kept only in the real `.env`. Rishabh's old `petpooja_pipeline.py`
 carries hardcoded secrets and is deliberately excluded.
 
-## Open items / next up
+## State as of 25 July 2026
 
-1. Creme Castle ERP portal, Phase 1: BUILT 24 Jul 2026 in `portal/` (see
-   `docs/erp-portal-plan.md`). Next.js app, builds clean. Email + password login
-   (`kitchen/migrations/040_portal_profiles.sql` adds `public.profiles` + role), the
-   daily dashboard latest + archive (reads a new `dashboard-html` Storage bucket that
-   `dashboard/auto/run_daily.py` now uploads to), and order/item report CSV downloads
-   (PII-free, from `landing`). PENDING Pranjay (outward, live secrets): apply the
-   migration, create the Vercel project (root `portal/`) + env, create the
-   `dashboard-html` bucket, create the accounts. Then Phase 2 (in-app browse/filter).
-2. Route the daily Petpooja data into the spine DB (unify the split above).
-3. Stand up the 4-computer failover network for the scrape.
-4. Build 1a (D2C reconciliation) real volume is gated on OMS billing go-live (F13).
-5. SupplyNote ingestion into the spine (the boundary is one-way, read only; see build-order).
+**Live and working**
+
+1. **ERP portal, Phase 1: DEPLOYED** at `creme-castle-erp.vercel.app` (see
+   `docs/erp-portal-plan.md`). Email + password login with roles
+   (`migrations/040_portal_profiles.sql`), daily dashboard latest + archive, and CSV
+   downloads of five reports. Runtime env is set; migration applied.
+2. **The 8am job actually runs now.** It had been failing silently since it was
+   created: macOS refuses to let a launchd agent execute anything inside iCloud Drive
+   ("Operation not permitted", exit 126). The runtime is now a LOCAL clone at
+   `~/creme-castle-erp` that `git pull`s each morning. Never point a scheduled job at
+   iCloud, and never let a second copy of the code drift (that also happened).
+3. **Each 8am run**: pull code, scrape Petpooja once, load and verify the last three
+   business days into the spine, pull the Sub-Order Wise summary for yesterday, build
+   the dashboard, archive it for the portal, email the team.
+4. **Spine holds full-fidelity Petpooja sales**: order report all 27 columns
+   (101k rows), item report all 32 columns (152k rows), 30 days backfilled. Plus
+   sub-order summary, and one sample day each of daily stock and the SupplyNote
+   invoice-wise report.
+5. **Self-verification** (`workers/petpooja-ingest/sync.py`): a per-day fingerprint
+   makes an unchanged day cost one comparison; only genuine differences are corrected
+   in place, with a field-level change log. Nothing is ever deleted, only voided.
+   Guards refuse to act on a key collision, a truncated pull, or a partial day.
+
+**Pending**
+
+1. **Team accounts for the portal**: only one profile exists (Pranjay). Create each
+   teammate in Supabase Auth, then activate them in `public.profiles`.
+2. **Rotate the spine database password** (it was exposed in a chat session). Update
+   it in the Vercel `SPINE_DATABASE_URL` and in `~/creme-castle-erp/dashboard/auto/.env`.
+3. **Daily stock report automation**: URL and flow are captured in
+   `docs/petpooja-report-portal-map.md`, but it is per outlet (~8 of them) and the
+   underlying data is unreliable, see the warning below. Decide daily vs weekly.
+4. **SupplyNote ingestion** (one way, read only; GRN report is the prize). File upload
+   only, no scraper. `Invoice Wise Sales` already turns out to be a SupplyNote export.
+5. **Portal Phase 2**: browse and filter the data in the app.
+6. **Two year history import** into the spine (Pranjay to supply the files).
+7. **4-computer failover network** for the scrape.
+8. **Build 1a real reconciliation volume** still gated on OMS billing go-live (F13).
+9. Housekeeping: 75 disposable test rows remain in `landing.petpooja_oms_purchases`.
+
+## Warnings, read before trusting the data
+
+- **Petpooja stock is NOT trustworthy yet.** Its own inventory dashboard reports
+  "34% update accuracy: closing stock updated on 8 days this month, 16 days missed",
+  and the stock report showed a negative opening balance. Land it as raw history if
+  you like, but do not build costing or valuation on it. This is exactly why our own
+  logbook matters.
+- **The Sub-Order Wise summary uses Petpooja's calendar day**, not the spine's 04:00
+  business day, because Petpooja aggregates it server side. It will not tie out to the
+  line-level reports across the midnight to 4am window. Use it for channel and outlet
+  comparison, not as the arbiter of a day's revenue.
+- **Customer PII is now stored and downloadable.** Decision of 24 July 2026 reversed
+  the earlier rule: the landing tables and the portal's CSV downloads include customer
+  name, phone and address. Anyone with portal access can export them.
+- **Raw receipts always contained PII.** The immutable files in the `petpooja-raw`
+  bucket are the originals.
+- **Do not put automation in iCloud Drive.** See point 2 above.
