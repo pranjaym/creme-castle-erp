@@ -95,6 +95,44 @@ def scrape_and_append(days):
     return unmapped, {"online_orders": ofile, "order_summary_item": ifile}
 
 
+def load_sub_order_wise():
+    """Pull the Sub-Order Wise sales summary for YESTERDAY and land it in the spine.
+
+    Kept separate from the two line-level reports because this one is PRE-AGGREGATED
+    over whatever range you ask for: a multi-day pull returns one merged set, so it
+    has to be one day at a time. Yesterday is the last complete day.
+
+    Caveat worth knowing: because Petpooja aggregates it server side, its day is
+    Petpooja's own calendar day, not the spine's 04:00 business day. The stored
+    business_date is therefore the report's date filter, and it will not tie out to
+    the line-level reports to the last rupee across the 00:00 to 04:00 window.
+
+    Best effort: never blocks the dashboard."""
+    if not os.environ.get("SPINE_DATABASE_URL"):
+        print("sub-order load skipped (SPINE_DATABASE_URL not set).")
+        return None
+    day = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+    try:
+        sys.path.insert(0, SCRAPER_DIR)
+        import psycopg2
+        import scrape
+        import ingest
+        print(f"\n[spine] sub-order wise for {day} ...")
+        path = scrape.scrape_and_download("sub_order_wise", from_date=day, to_date=day,
+                                          max_retries=1)
+        records, skipped = ingest.REPORTS["sub_order_wise"]["parse"](path)
+        receipt = ingest.store_receipt(path)
+        conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+        try:
+            ingest.load_records("sub_order_wise", records, skipped, conn, receipt)
+        finally:
+            conn.close()
+        return f"sub-order summary loaded for {day} ({len(records)} rows)"
+    except Exception as e:
+        print(f"sub-order load FAILED (dashboard unaffected): {type(e).__name__}: {str(e)[:200]}")
+        return None
+
+
 def sync_spine(files):
     """Feed this morning's already-downloaded reports into the spine and verify the
     last few business days against them (see workers/petpooja-ingest/sync.py).
@@ -271,6 +309,8 @@ def main():
     spine_line, spine_material = (None, [])
     if files and not args.no_spine:
         spine_line, spine_material = sync_spine(files)
+    if not args.no_spine and not args.no_scrape:
+        load_sub_order_wise()
 
     html, focal = build_dashboard()
     archive_dashboard(html, focal)          # push to the portal's archive bucket

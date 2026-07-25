@@ -296,6 +296,12 @@ TITLEBLOCK_CFG = {
     "sub_order_wise": {
         "kind": "xlsx", "marker": "Restaurants", "ncols": 18, "cols": SUB_ORDER_COLS,
         "date": {"mode": "iso"},   # 'Date: 2026-07-22 to 2026-07-22' -> first date
+        # The outlet name appears only on the FIRST row of each outlet's block; its
+        # other channel rows leave it blank. Carry it down so every landed row names
+        # its own outlet instead of depending on row order to be interpreted.
+        # ("Sub Total" and the grand "Total" rows fill column 0 themselves, so they
+        # simply reset the carry and stay self-labelling.)
+        "forward_fill": {"trigger_col": 0, "fill_cols": [0]},
         "table": "landing.petpooja_sub_order_wise",
     },
     "invoice_wise_sales": {

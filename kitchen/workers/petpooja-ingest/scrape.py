@@ -106,6 +106,33 @@ REPORTS = {
         "date_with_time": True,          # from 00:00:00, to 23:59:59
         "max_range_days": 5,             # Petpooja caps this report at a 5-day range
     },
+    "sub_order_wise": {
+        # CONFIRMED on the live portal 25 Jul 2026 (session with Pranjay). Sales summary
+        # per outlet per channel. Lives in the BILLING app, which works across every
+        # outlet: the "Restaurants" filter is left EMPTY and Petpooja reads that as all
+        # of them (verified, one pull returned CC-CHD-*, CC-DL-*, ... together).
+        #
+        # Unlike the other reports this one is PRE-AGGREGATED over the chosen range, so a
+        # multi-day pull returns one merged set and loses per-day detail. It must be
+        # pulled ONE DAY AT A TIME (single_day below).
+        "url": env("PETPOOJA_REPORT_URL_SUB_ORDER_WISE",
+                   "https://billing.petpooja.com/custom_reports/view_report/67"),
+        "strategy": env("PETPOOJA_SUB_ORDER_WISE_STRATEGY", "search_then_excel"),
+        "needs_outlet": False,
+        "outlet_label": None,
+        "prefix": "suborder",
+        # Plain text date inputs: verified live that NO DateTimePicker or flatpickr is
+        # bound, so the direct-set path in _set_date_range applies and the value sticks.
+        "start_sel": "input.start_fromdate",
+        "end_sel": "input.end_todate",
+        "search_sel": "input.re_final_search",
+        "table_sel": "#re_pivot_table_1",
+        # A DataTables client-side HTML5 export: it builds the file from the rendered
+        # table, so there is no queued job and no stale-link trap. The table renders every
+        # row on one page ("Showing 1 to 87 of 87 entries"), so the export is complete.
+        "excel_sel": "button.buttons-excel",
+        "single_day": True,
+    },
 }
 
 
@@ -313,6 +340,22 @@ def _download(page, spec, dest_dir, from_date=None, to_date=None, server_type=No
         page.wait_for_timeout(1500)
         with page.expect_download(timeout=180000) as di:
             page.locator("a:has-text('Download')").first.click()
+    elif strategy == "search_then_excel":
+        # Sub-Order Wise: set the dates, press Search, wait for the pivot table to
+        # render, then press the DataTables Excel button. Confirmed live 25 Jul 2026.
+        if from_date and to_date:
+            _set_date_range(page, from_date, to_date, spec)
+        page.click(spec["search_sel"])
+        # Wait for rows to actually appear: the click is ajax, and exporting an empty
+        # table would silently produce a header-only file.
+        page.wait_for_selector(f"{spec['table_sel']} tbody tr", timeout=SEL_TIMEOUT)
+        page.wait_for_timeout(2000)
+        rows = page.locator(f"{spec['table_sel']} tbody tr").count()
+        if rows == 0:
+            raise RuntimeError("sub-order report returned no rows; refusing to export")
+        print(f"search returned {rows} table rows.")
+        with page.expect_download(timeout=180000) as di:
+            page.click(spec["excel_sel"])
     elif strategy == "generate_then_fetch":
         # The online report does not stream a download: Export generates a file on S3
         # and the browser GETs a pre-signed URL that returns 503/404 until the object
