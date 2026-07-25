@@ -308,16 +308,21 @@ def sync_day(cur, report, spec, business_date, source_recs, run_id, partial=Fals
             "natural_key, change_type, column_name, old_value, new_value, is_material) values %s",
             changes, page_size=1000)
 
+    # last_changed_at must mean "the day's data actually moved", so it is stamped
+    # ONLY when something was inserted, corrected or voided. A day that is merely
+    # re-verified and found identical keeps its old stamp: otherwise every morning
+    # would look like a change and the health view would be worthless.
+    changed = bool(inserted or corrected or voided)
     cur.execute(
         "insert into landing.spine_day_fingerprints "
         "(report_key, business_date, row_count, checksum, last_changed_at) "
-        "values (%s,%s,%s,%s, case when %s then null else now() end) "
+        "values (%s,%s,%s,%s, case when %s then now() else null end) "
         "on conflict (report_key, business_date) do update set "
         "row_count=excluded.row_count, checksum=excluded.checksum, "
         "last_verified_at=now(), verify_count=landing.spine_day_fingerprints.verify_count+1, "
-        "last_changed_at=case when %s then landing.spine_day_fingerprints.last_changed_at "
-        "else now() end",
-        (report, business_date, len(src), checksum, first_load, first_load))
+        "last_changed_at=case when %s then now() "
+        "else landing.spine_day_fingerprints.last_changed_at end",
+        (report, business_date, len(src), checksum, changed and not first_load, changed))
 
     if first_load:
         verdict = "first_load"
