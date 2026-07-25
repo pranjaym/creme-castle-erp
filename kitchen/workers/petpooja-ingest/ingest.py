@@ -262,6 +262,179 @@ REPORTS = {
 }
 
 
+# ---------- Generic title-block reports (25 Jul 2026) ----------
+# Several Petpooja/SupplyNote exports put a title block above the real header row,
+# and some carry the date (and location) only in that title. This one parser lands
+# them verbatim: find the header row by a marker, take the first N columns, stamp a
+# business_date (from a row column or the title), optionally prepend a location.
+
+SUB_ORDER_COLS = [
+    "restaurants", "order_type", "sub_order_type", "total_no_of_bills", "my_amount",
+    "total_discount", "net_sales", "delivery_charge", "container_charge", "service_charge",
+    "additional_charge", "total_tax", "round_off", "waived_off", "total_sales",
+    "online_tax_calculated", "gst_paid_by_merchant", "gst_paid_by_ecommerce",
+]
+INVOICE_WISE_COLS = [
+    "s_no", "location", "inv_date", "seller_invoice_no", "invoice_no", "challan_no",
+    "from_location", "pickup_gstin", "pickup_pincode", "deliver_gstin", "buyer_billing_name",
+    "buyer_billing_state", "buyer_billing_address", "buyer_billing_gstin",
+    "buyer_billing_pincode", "buyer_name", "buyer_gstin", "item_name", "hsn_code", "sku_code",
+    "brand", "mrp", "category", "price", "so_qty", "gr_qty", "uom", "discount_pct",
+    "discount_amt", "subtotal", "tax", "cess", "tax_amt", "cess_amt", "sgst_tax",
+    "sgst_tax_amount", "cgst_tax", "cgst_tax_amount", "igst_tax", "igst_tax_amount",
+    "additional_charges", "delivery_charges", "total",
+]
+DAILY_STOCK_ROW_COLS = [
+    "raw_material", "category", "sub_category", "hsn_code", "sap_code", "unit", "opening_a",
+    "purchase_sales_return_b", "excess_c", "total_stock", "consumed_d", "wastage_e",
+    "normal_loss_f", "sales_transfer_purchase_g", "shortage_h", "production_i",
+    "total_consumed", "closing_stock", "closing_summary", "difference",
+    "reconciliation_price", "reconciliation_amount",
+]
+
+TITLEBLOCK_CFG = {
+    "sub_order_wise": {
+        "kind": "xlsx", "marker": "Restaurants", "ncols": 18, "cols": SUB_ORDER_COLS,
+        "date": {"mode": "iso"},   # 'Date: 2026-07-22 to 2026-07-22' -> first date
+        "table": "landing.petpooja_sub_order_wise",
+    },
+    "invoice_wise_sales": {
+        "kind": "xlsx", "marker": "S.No.", "ncols": 43, "cols": INVOICE_WISE_COLS,
+        "date": {"mode": "row", "col_index": 2, "fmt": "dmy"},  # per-row Date dd/mm/yyyy
+        # Each invoice is a header row (s_no + date + buyer, cols 0..16) followed by
+        # item lines that leave those blank. Carry the header down onto each item row
+        # (fill cols 0..16 from the last header), and keep only rows that have an item.
+        "forward_fill": {"trigger_col": 0, "fill_cols": list(range(0, 17)), "require_col": 17},
+        "table": "landing.petpooja_invoice_wise_sales",
+    },
+    "daily_stock": {
+        "kind": "xls_html", "marker": "Raw Material", "ncols": 22,
+        "cols": ["report_location"] + DAILY_STOCK_ROW_COLS, "prepend_location": True,
+        "date": {"mode": "dmy_text"},  # 'Daily Report [22 Jul 2026]'
+        "location": {"regex": r"Restaurant Name:\s*\|\s*([^|]+)"},
+        "table": "landing.petpooja_daily_stock",
+    },
+}
+
+
+def _load_raw(path, kind):
+    import pandas as pd
+    if kind == "csv":
+        return pd.read_csv(path, header=None, dtype=str, on_bad_lines="skip")
+    if kind == "xlsx":
+        return pd.read_excel(path, header=None, dtype=str)
+    if kind == "xls_html":
+        try:
+            return pd.read_excel(path, header=None, dtype=str)
+        except Exception:
+            return pd.read_html(path)[0]
+    raise ValueError(f"unknown file kind {kind}")
+
+
+def _find_header_row(raw, marker):
+    for i in range(min(20, len(raw))):
+        v = raw.iloc[i, 0]
+        if v is not None and str(v).strip() == marker:
+            return i
+    return None
+
+
+def _title_text(raw, rows=4, cols=3):
+    parts = []
+    for i in range(min(rows, len(raw))):
+        for j in range(min(cols, raw.shape[1])):
+            v = raw.iloc[i, j]
+            if v is not None and str(v).strip() and str(v) != "nan":
+                parts.append(str(v).strip())
+    return " | ".join(parts)
+
+
+def _to_date(s, mode):
+    import re, datetime as dt
+    if s is None:
+        return None
+    s = str(s).strip()
+    if mode == "iso":
+        m = re.search(r"\d{4}-\d{2}-\d{2}", s)
+        try:
+            return dt.date.fromisoformat(m.group(0)) if m else None
+        except ValueError:
+            return None
+    if mode == "dmy_text":
+        m = re.search(r"\d{1,2}\s+[A-Za-z]{3}\s+\d{4}", s)
+        try:
+            return dt.datetime.strptime(m.group(0), "%d %b %Y").date() if m else None
+        except ValueError:
+            return None
+    if mode == "dmy":
+        m = re.search(r"\d{1,2}/\d{1,2}/\d{4}", s)
+        try:
+            return dt.datetime.strptime(m.group(0), "%d/%m/%Y").date() if m else None
+        except ValueError:
+            return None
+    return None
+
+
+def parse_titleblock(path, cfg):
+    """Land a title-block report verbatim. Returns (records, skipped)."""
+    import re
+    raw = _load_raw(path, cfg["kind"])
+    h = _find_header_row(raw, cfg["marker"])
+    if h is None:
+        raise ValueError(f"header marker {cfg['marker']!r} not found in {path}")
+    title = _title_text(raw)
+    title_bd = _to_date(title, cfg["date"]["mode"]) if cfg["date"]["mode"] in ("iso", "dmy_text") else None
+    location = None
+    if cfg.get("location"):
+        m = re.search(cfg["location"]["regex"], title)
+        location = m.group(1).strip() if m else None
+
+    ncols = cfg["ncols"]
+    ff = cfg.get("forward_fill")
+    context = None
+    records, skipped = [], 0
+    for _, row in raw.iloc[h + 1:, :ncols].iterrows():
+        cells = [(None if (v is None or str(v) == "nan") else str(v).strip())
+                 for v in list(row)[:ncols]]
+        if all(c is None or c == "" for c in cells):
+            continue
+        if ff:
+            # A new header row (trigger column filled) resets the carried context.
+            if cells[ff["trigger_col"]]:
+                context = {i: cells[i] for i in ff["fill_cols"]}
+            if context:
+                for i in ff["fill_cols"]:
+                    if not cells[i]:
+                        cells[i] = context[i]
+            # Keep only rows that carry the detail column (item lines), drop headers.
+            rc = ff.get("require_col")
+            if rc is not None and not cells[rc]:
+                continue
+        if cfg["date"]["mode"] == "row":
+            bd = _to_date(cells[cfg["date"]["col_index"]], cfg["date"]["fmt"])
+        else:
+            bd = title_bd
+        if bd is None:
+            skipped += 1
+            continue
+        values = ([location] + cells) if cfg.get("prepend_location") else cells
+        records.append({"business_date": bd, "values": values,
+                        "row_hash": row_hash([bd] + values)})
+    return records, skipped
+
+
+for _key, _cfg in TITLEBLOCK_CFG.items():
+    REPORTS[_key] = {
+        "parse": (lambda p, c=_cfg: parse_titleblock(p, c)),
+        "table": _cfg["table"],
+        "cols": _cfg["cols"],
+        "report_key": _key,
+        "key_col": _cfg["cols"][1] if len(_cfg["cols"]) > 1 else _cfg["cols"][0],
+        "source_col": _cfg["cols"][0],
+        "pii_cols": [],
+    }
+
+
 def strip_pii(records, spec):
     """Null the report's known customer-PII columns, then recompute the row hash so
     the stored content and its idempotency key agree. Privacy-preserving default."""
