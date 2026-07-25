@@ -1,16 +1,18 @@
 // The report exports. Each report reads one public view (over the private landing
 // tables) through the Supabase REST client, the SAME connection the portal already
-// uses for login and dashboards. No direct database connection, so none of the
-// host / DNS / SSL / password-in-URL problems apply. Customer name and phone are
-// never exposed (the views do not include them).
+// uses for login and dashboards. The CSV reproduces the raw Petpooja report
+// verbatim: `columns` are the database column names (used to query and to pull each
+// value), `headers` are the exact template header names written to the CSV, in the
+// same order. Decision 24 Jul 2026: full columns, customer PII included.
 import 'server-only';
 import { spine } from '@/lib/supabase/service';
 
 export interface ReportDef {
   key: string;         // url token
   label: string;       // shown in the picker
-  view: string;        // public view name (migration 041)
-  columns: string[];   // columns to emit, in order (no PII)
+  view: string;        // public view name (migration 050)
+  columns: string[];   // db column names, in template order
+  headers: string[];   // raw report header names, 1:1 with columns
   filenameStem: string;
 }
 
@@ -20,8 +22,20 @@ export const REPORTS: Record<string, ReportDef> = {
     label: 'Order report (Petpooja online orders)',
     view: 'v_report_online_orders',
     columns: [
-      'business_date', 'order_ts', 'aggregator_order_no', 'pos_invoice_no',
-      'order_from', 'outlet_name', 'order_type', 'status', 'my_amount', 'total',
+      'order_date', 'invoice_date', 'aggregator_order_no', 'pos_invoice_no', 'order_from',
+      'outlet_name', 'outlet_display_name', 'petpooja_identifier', 'order_type',
+      'customer_name', 'customer_phone', 'payment_type', 'delivery_status', 'status',
+      'my_amount', 'aggregator_discount', 'outlet_discount', 'delivery_charges',
+      'container_charges', 'additional_charge', 'total', 'order_acceptance_time',
+      'order_delivery_time', 'cancelled_by', 'reason', 'tip', 'complimentary',
+    ],
+    headers: [
+      'Date', 'Invoice Date', 'Aggregator Order No.', 'PoS Invoice No.', 'Order From',
+      'Outlet Name', 'Outlet Display Name', 'Petpooja Identifier', 'Order Type',
+      'Customer Name', 'Customer Phone', 'Payment Type', 'Delivery Status', 'Status',
+      'My amount', 'Aggregator Discount', 'Outlet Discount', 'Delivery Charges',
+      'Container Charges', 'Additional Charge', 'Total', 'Order Acceptance Time',
+      'Order Delivery Time', 'Cancelled By', 'Reason', 'Tip', 'Complimentary',
     ],
     filenameStem: 'cc_order_report',
   },
@@ -30,17 +44,27 @@ export const REPORTS: Record<string, ReportDef> = {
     label: 'Item report (Petpooja order summary item)',
     view: 'v_report_order_summary_item',
     columns: [
-      'business_date', 'restaurant_name', 'invoice_no', 'order_ts', 'payment_type',
-      'order_type', 'status', 'area', 'virtual_brand_name', 'my_amount', 'total_tax',
-      'discount', 'delivery_charge', 'container_charge', 'total', 'item_name',
-      'category_name', 'sap_code', 'item_price', 'item_quantity', 'item_total',
+      'restaurant_name', 'invoice_no', 'order_ts', 'payment_type', 'order_type', 'status',
+      'area', 'virtual_brand_name', 'brand_grouping', 'assign_to', 'customer_phone',
+      'customer_name', 'customer_address', 'persons', 'order_cancel_reason', 'my_amount',
+      'total_tax', 'discount', 'delivery_charge', 'container_charge', 'service_charge',
+      'additional_charge', 'deduction_charge', 'waived_off', 'round_off', 'total',
+      'item_name', 'category_name', 'sap_code', 'item_price', 'item_quantity', 'item_total',
+    ],
+    headers: [
+      'restaurant_name', 'invoice_no', 'date', 'payment_type', 'order_type', 'status',
+      'area', 'virtual_brand_name', 'brand_grouping', 'assign_to', 'customer_phone',
+      'customer_name', 'customer_address', 'persons', 'order_cancel_reason', 'my_amount',
+      'total_tax', 'discount', 'delivery_charge', 'container_charge', 'service_charge',
+      'additional_charge', 'deduction_charge', 'waived_off', 'round_off', 'total',
+      'item_name', 'category_name', 'sap_code', 'item_price', 'item_quantity', 'item_total',
     ],
     filenameStem: 'cc_item_report',
   },
 };
 
-// A generous but bounded window for Phase 1 downloads. The 2-year bulk history is
-// a separate importer/exporter task, not this on-demand button.
+// A generous but bounded window for a single download. The 2-year bulk history is a
+// separate importer/exporter task, not this on-demand button.
 export const MAX_RANGE_DAYS = 92;
 const PAGE = 1000; // REST page size; we loop until a short page.
 
@@ -67,8 +91,8 @@ function csvCell(v: unknown): string {
 
 // Fetch the report for [from, to] (inclusive, by business_date). Pages through the
 // REST API and THROWS on any error, so the caller returns a clean message instead
-// of a half-written file. Rows come back ordered (business_date, id) so the file
-// is stable and re-downloadable identically.
+// of a half-written file. Rows come back ordered (business_date, id) so the file is
+// stable and re-downloadable identically.
 export async function fetchReportRows(def: ReportDef, from: string, to: string): Promise<unknown[][]> {
   const client = spine();
   const rows: unknown[][] = [];
@@ -92,11 +116,11 @@ export async function fetchReportRows(def: ReportDef, from: string, to: string):
   return rows;
 }
 
-// Turn already-fetched rows into a CSV stream. No I/O happens here, so this stream
-// cannot fail midway: the download is complete or it never started.
+// Turn already-fetched rows into a CSV stream, with the raw report header names.
+// No I/O happens here, so this stream cannot fail midway.
 export function rowsToCsvStream(def: ReportDef, rows: unknown[][]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
-  const header = def.columns.join(',') + '\n';
+  const header = def.headers.map(csvCell).join(',') + '\n';
   return new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(encoder.encode(header));

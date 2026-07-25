@@ -103,30 +103,59 @@ PURCHASE_COL_MAP = {
 }
 PURCHASE_COLS = list(PURCHASE_COL_MAP.values())
 
+# Full order_summary_item column set (32), matching the raw CSV headers ('date' is
+# stored as order_ts). Decision 24 Jul 2026: keep every column, PII included, so the
+# spine reproduces the report verbatim. Must stay in the same order as the table and
+# the parse_item_report value list below (migration 050).
 ITEM_COLS = [
     "restaurant_name", "invoice_no", "order_ts", "payment_type", "order_type", "status",
-    "area", "virtual_brand_name", "customer_phone", "customer_name", "my_amount",
-    "total_tax", "discount", "delivery_charge", "container_charge", "total", "item_name",
-    "category_name", "sap_code", "item_price", "item_quantity", "item_total",
+    "area", "virtual_brand_name", "brand_grouping", "assign_to", "customer_phone",
+    "customer_name", "customer_address", "persons", "order_cancel_reason", "my_amount",
+    "total_tax", "discount", "delivery_charge", "container_charge", "service_charge",
+    "additional_charge", "deduction_charge", "waived_off", "round_off", "total",
+    "item_name", "category_name", "sap_code", "item_price", "item_quantity", "item_total",
 ]
 
 # Online Order Report (online_orders_report_all): Zomato/Swiggy order-level, xlsx.
-# Confirmed against the live portal 23 Jul 2026. Feeds the console sales side (Build 2),
-# not Build 1a. business_date uses the 04:00 IST rule on the order timestamp (Date),
-# matching Rishabh's "Final Date". Columns verified on the real sample.
+# FULL 27-column capture (24 Jul 2026): every column from the raw report, so the
+# spine holds the delivery/packaging charges, discounts, times, and status the
+# earlier 9-column version dropped. business_date uses the 04:00 IST rule on 'Date'.
 ONLINE_COL_MAP = {
-    "Date": "order_ts",
+    "Date": "order_date",
+    "Invoice Date": "invoice_date",
     "Aggregator Order No.": "aggregator_order_no",
     "PoS Invoice No.": "pos_invoice_no",
     "Order From": "order_from",
     "Outlet Name": "outlet_name",
+    "Outlet Display Name": "outlet_display_name",
+    "Petpooja Identifier": "petpooja_identifier",
     "Order Type": "order_type",
+    "Customer Name": "customer_name",
+    "Customer Phone": "customer_phone",
+    "Payment Type": "payment_type",
+    "Delivery Status": "delivery_status",
     "Status": "status",
     "My amount": "my_amount",
+    "Aggregator Discount": "aggregator_discount",
+    "Outlet Discount": "outlet_discount",
+    "Delivery Charges": "delivery_charges",
+    "Container Charges": "container_charges",
+    "Additional Charge": "additional_charge",
     "Total": "total",
+    "Order Acceptance Time": "order_acceptance_time",
+    "Order Delivery Time": "order_delivery_time",
+    "Cancelled By": "cancelled_by",
+    "Reason": "reason",
+    "Tip": "tip",
+    "Complimentary": "complimentary",
 }
-ONLINE_COLS = ["order_ts", "aggregator_order_no", "pos_invoice_no", "order_from",
-               "outlet_name", "order_type", "status", "my_amount", "total"]
+ONLINE_COLS = ["order_date", "invoice_date", "aggregator_order_no", "pos_invoice_no",
+               "order_from", "outlet_name", "outlet_display_name", "petpooja_identifier",
+               "order_type", "customer_name", "customer_phone", "payment_type",
+               "delivery_status", "status", "my_amount", "aggregator_discount",
+               "outlet_discount", "delivery_charges", "container_charges",
+               "additional_charge", "total", "order_acceptance_time",
+               "order_delivery_time", "cancelled_by", "reason", "tip", "complimentary"]
 
 
 def parse_oms_purchase(path):
@@ -170,9 +199,12 @@ def parse_item_report(path):
         vals = [
             r.get("restaurant_name"), r.get("invoice_no"), ts, r.get("payment_type"),
             r.get("order_type"), r.get("status"), r.get("area"), r.get("virtual_brand_name"),
-            r.get("customer_phone"), r.get("customer_name"), r.get("my_amount"),
-            r.get("total_tax"), r.get("discount"), r.get("delivery_charge"),
-            r.get("container_charge"), r.get("total"), r.get("item_name"),
+            r.get("brand_grouping"), r.get("assign_to"), r.get("customer_phone"),
+            r.get("customer_name"), r.get("customer_address"), r.get("persons"),
+            r.get("order_cancel_reason"), r.get("my_amount"), r.get("total_tax"),
+            r.get("discount"), r.get("delivery_charge"), r.get("container_charge"),
+            r.get("service_charge"), r.get("additional_charge"), r.get("deduction_charge"),
+            r.get("waived_off"), r.get("round_off"), r.get("total"), r.get("item_name"),
             r.get("category_name"), r.get("sap_code"), r.get("item_price"),
             r.get("item_quantity"), r.get("item_total"),
         ]
@@ -189,7 +221,7 @@ def parse_online_orders(path):
     for _, row in df.iterrows():
         rec = {internal: (None if pd.isna(row.get(src)) else str(row.get(src)).strip())
                for src, internal in ONLINE_COL_MAP.items() if src in df.columns}
-        bd = business_day(rec.get("order_ts")) if rec.get("order_ts") else None
+        bd = business_day(rec.get("order_date")) if rec.get("order_date") else None
         if bd is None:
             skipped += 1
             continue
@@ -215,7 +247,8 @@ REPORTS = {
         "report_key": "order_summary_item",
         "key_col": "invoice_no",
         "source_col": "restaurant_name",
-        "pii_cols": ["customer_phone", "customer_name"],  # nulled unless --keep-pii
+        # Decision 24 Jul 2026: keep all columns, PII included. Nothing stripped.
+        "pii_cols": [],
     },
     "online_orders": {
         "parse": parse_online_orders,

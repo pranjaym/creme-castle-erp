@@ -57,6 +57,36 @@ a backfill for existing auth users. Additive and safe on the live DB.
 - The 2-year bulk history importer (its own task; needs the source files first).
 - Any write path (the portal never writes to the spine).
 
+## Update 24 July 2026: full-fidelity Petpooja sales capture + PII decision
+
+Reviewing a real download, the order report was thin: the spine's order landing
+table had captured only 9 of the raw report's 27 columns, dropping the delivery
+charge, container (packaging) charge, discounts, times, and more. The item table
+had 22 of 32. Decision: the spine must hold the reports VERBATIM so the portal
+reproduces them and the tool is the single source of truth.
+
+- **DECISION (reverses the earlier PII rule):** store ALL columns, INCLUDING customer
+  name, phone, and address, and include them in downloads. Pranjay chose this
+  explicitly (24 Jul 2026). The earlier rule that stripped customer PII from the
+  query-able landing tables no longer applies. Raw receipts already held this PII.
+- **Built same day:**
+  - `kitchen/migrations/050_full_petpooja_sales.sql`: rebuilds the two sales landing
+    tables with every column (order 27, item 32); the previous partial tables are
+    renamed `*_pre050` and kept (no rows deleted). Recreates the portal report views
+    over all columns.
+  - `kitchen/workers/petpooja-ingest/ingest.py`: `ONLINE_COL_MAP`/`ONLINE_COLS` now
+    27 columns, `ITEM_COLS` and the item parser now 32; PII no longer stripped.
+    Verified against the two real template files (order 3757 rows, item 5726 rows,
+    0 skipped, every column landing correctly).
+  - `kitchen/workers/petpooja-ingest/backfill.py`: re-loads the last N days of both
+    reports in Petpooja's export-size windows (order 5-day, item 7-day), idempotent.
+  - Portal `lib/reports.ts` + download route: the CSV now reproduces each raw report
+    header-for-header (all 27 / 32 columns).
+- **To make it live:** apply migration 050 to the spine, `git push` (portal redeploys),
+  then on the Mac run `python3 backfill.py --days 30` to refill the tables with the
+  full columns. The daily "last two days" catch-up is the same tool with `--days 2`
+  (wiring it into the 8am run is the remaining step, part of open item 2).
+
 ## What is Pranjay's to run (outward actions, live secrets)
 
 Apply the migration, create the Vercel project + env vars, create the

@@ -6,6 +6,9 @@ import {
   REPORTS, MAX_RANGE_DAYS, isValidDate, daysBetween, fetchReportRows, rowsToCsvStream,
 } from '@/lib/reports';
 
+// Large item exports page through many REST calls; give them room (Vercel Pro).
+export const maxDuration = 300;
+
 export async function GET(req: Request) {
   await requireUser();
   const url = new URL(req.url);
