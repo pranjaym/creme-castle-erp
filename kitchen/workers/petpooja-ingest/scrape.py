@@ -38,10 +38,24 @@ import sys
 import tempfile
 import time
 
-SESSION_FILE = os.path.join(
-    os.environ.get("PETPOOJA_DOWNLOAD_DIR", tempfile.gettempdir()),
-    "petpooja_session.json",
-)
+# Creme Castle uses MORE THAN ONE Petpooja login: the sales reports live under one
+# account, the inventory reports (stock, material transfer) under another. Each
+# account keeps its OWN saved session, so each needs its OTP login exactly ONCE
+# (`python3 scrape.py bootstrap <account>`), after which both run unattended. Every
+# report declares the account it belongs to; "primary" is the default.
+DEFAULT_ACCOUNT = os.environ.get("PETPOOJA_ACCOUNT", "primary")
+
+
+def session_file(account=None):
+    """Local path of one account's saved session. Kept per account so bootstrapping
+    the inventory login can never overwrite the sales login."""
+    acct = account or DEFAULT_ACCOUNT
+    return os.path.join(
+        os.environ.get("PETPOOJA_DOWNLOAD_DIR", tempfile.gettempdir()),
+        f"petpooja_session_{acct}.json",
+    )
+
+
 NAV_TIMEOUT = 60000
 SEL_TIMEOUT = 60000
 
@@ -138,47 +152,55 @@ REPORTS = {
 
 # --------------------------- Supabase session store ---------------------------
 
-def _session_object_url():
+def _session_object_url(account=None):
+    """Storage path of one account's session. The original single-account object was
+    named petpooja_session.json; "primary" keeps that exact name so the login already
+    saved (and running daily) is not invalidated by this change."""
+    acct = account or DEFAULT_ACCOUNT
     base = env("SPINE_SUPABASE_URL", required=True)
     bucket = env("PETPOOJA_SESSION_BUCKET", "petpooja-session")
-    return f"{base}/storage/v1/object/{bucket}/petpooja_session.json"
+    name = "petpooja_session.json" if acct == "primary" else f"petpooja_session_{acct}.json"
+    return f"{base}/storage/v1/object/{bucket}/{name}"
 
 
-def pull_session():
-    """Best effort: fetch a saved session from Supabase Storage to SESSION_FILE."""
+def pull_session(account=None):
+    """Best effort: fetch one account's saved session from Supabase Storage."""
     import requests
+    acct = account or DEFAULT_ACCOUNT
     key = env("SPINE_SUPABASE_SERVICE_ROLE_KEY")
     if not key or not os.environ.get("SPINE_SUPABASE_URL"):
         return False
     try:
-        r = requests.get(_session_object_url(),
+        r = requests.get(_session_object_url(acct),
                          headers={"Authorization": f"Bearer {key}", "apikey": key},
                          timeout=30)
     except Exception as e:
         print(f"session pull skipped: {e}")
         return False
     if r.status_code == 200 and r.content:
-        with open(SESSION_FILE, "wb") as f:
+        with open(session_file(acct), "wb") as f:
             f.write(r.content)
-        print("session pulled from Supabase Storage.")
+        print(f"session pulled from Supabase Storage (account '{acct}').")
         return True
     return False
 
 
-def push_session():
-    """Upload the freshly-saved session so the cloud runner reuses it."""
+def push_session(account=None):
+    """Upload one account's freshly-saved session so later runs reuse it."""
     import requests
+    acct = account or DEFAULT_ACCOUNT
     key = env("SPINE_SUPABASE_SERVICE_ROLE_KEY")
-    if not key or not os.path.exists(SESSION_FILE):
+    path = session_file(acct)
+    if not key or not os.path.exists(path):
         return False
-    with open(SESSION_FILE, "rb") as f:
+    with open(path, "rb") as f:
         blob = f.read()
-    r = requests.post(_session_object_url(), data=blob, headers={
+    r = requests.post(_session_object_url(acct), data=blob, headers={
         "Authorization": f"Bearer {key}", "apikey": key,
         "Content-Type": "application/json", "x-upsert": "true",
     }, timeout=30)
     if r.ok:
-        print("session pushed to Supabase Storage.")
+        print(f"session pushed to Supabase Storage (account '{acct}').")
         return True
     print(f"session push failed: {r.status_code} {r.text[:120]}")
     return False
@@ -190,10 +212,11 @@ def _is_headless():
     return env("PETPOOJA_HEADLESS", "1") not in ("0", "false", "False", "")
 
 
-def _open_context(browser):
+def _open_context(browser, account=None):
     kw = {"accept_downloads": True}
-    if os.path.exists(SESSION_FILE):
-        kw["storage_state"] = SESSION_FILE
+    path = session_file(account)
+    if os.path.exists(path):
+        kw["storage_state"] = path
     ctx = browser.new_context(**kw)
     ctx.set_default_timeout(SEL_TIMEOUT)
     ctx.set_default_navigation_timeout(NAV_TIMEOUT)
@@ -208,17 +231,18 @@ def _login_form_visible(page):
         return False
 
 
-def perform_login(page, context):
+def perform_login(page, context, account=None):
     """Fill username + password, then wait for the human to answer the OTP. On a
-    headless cloud runner there is no human, so a login prompt there means the saved
-    session expired: fail loudly and tell the operator to re-run bootstrap."""
+    headless runner there is no human, so a login prompt there means that account's
+    saved session expired: fail loudly and name the account to re-bootstrap."""
+    acct = account or DEFAULT_ACCOUNT
     user = env("PETPOOJA_USERNAME", required=True)
     pw = env("PETPOOJA_PASSWORD", required=True)
     if _is_headless():
         raise RuntimeError(
-            "Petpooja asked for login on a headless runner: the saved session has "
-            "expired. Re-run `python3 scrape.py bootstrap` from a laptop to refresh "
-            "the OTP session (it re-pushes to Supabase Storage), then redeploy.")
+            f"Petpooja asked for login on a headless runner: the saved session for "
+            f"account '{acct}' has expired. Run `python3 scrape.py bootstrap {acct}` "
+            f"from the Mac and log in by hand to refresh it.")
     page.goto(portal(), wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
     page.fill("[name='UserEmail'], #UserEmail", user)
     page.locator(".ps-btn.sm-btn.primary-btn.w-100.mt-3").first.click()
@@ -227,8 +251,8 @@ def perform_login(page, context):
     page.fill("[name='UserLoginDetail'], #UserLoginDetail", pw)
     page.locator(".ps-btn.sm-btn.primary-btn.w-100.mt-3").last.click()
     input("Enter the OTP in the browser, finish login, then press ENTER here...")
-    context.storage_state(path=SESSION_FILE)
-    push_session()
+    context.storage_state(path=session_file(acct))
+    push_session(acct)
 
 
 def _select_outlet(page, label):
@@ -400,18 +424,19 @@ def _fetch_once(report, from_date=None, to_date=None, server_type=None):
     if report not in REPORTS:
         raise ValueError(f"no scrape recipe for report '{report}'")
     spec = REPORTS[report]
+    acct = spec.get("account", DEFAULT_ACCOUNT)
     dest = env("PETPOOJA_DOWNLOAD_DIR", tempfile.gettempdir())
     os.makedirs(dest, exist_ok=True)
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=_is_headless())
-        context = _open_context(browser)
+        context = _open_context(browser, acct)
         try:
             page = context.new_page()
             page.on("dialog", lambda d: d.accept())
             page.goto(spec["url"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
             if _login_form_visible(page):
-                perform_login(page, context)
+                perform_login(page, context, acct)
                 page.goto(spec["url"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
             if spec["needs_outlet"] and spec["outlet_label"]:
                 _select_outlet(page, spec["outlet_label"])
@@ -434,7 +459,8 @@ def scrape_and_download(report="oms_purchase", max_retries=2, days_back=0,
     if days_back and not from_date:
         from_date = (dt.date.today() - dt.timedelta(days=days_back)).strftime("%Y-%m-%d")
         to_date = dt.date.today().strftime("%Y-%m-%d")
-    pull_session()
+    acct = REPORTS.get(report, {}).get("account", DEFAULT_ACCOUNT)
+    pull_session(acct)
     last = None
     for attempt in range(1, max_retries + 2):
         try:
@@ -458,18 +484,26 @@ def _looks_logged_in(page):
         return False
 
 
-def bootstrap(timeout_s=480, poll_s=3):
-    """One-time, headed, run from a laptop. Opens Petpooja; the USER logs in BY HAND
-    (username, password, OTP) in the window. Nothing is auto-filled and no Petpooja
-    password is ever read from the environment or seen by the agent. When login is
-    detected, the session is saved and pushed to Supabase Storage for the cloud runner
-    to reuse. Polls instead of waiting on a keypress, so it can run unattended-by-stdin."""
+def bootstrap(account=None, timeout_s=480, poll_s=3):
+    """One-time per ACCOUNT, headed, run from the Mac. Opens Petpooja; the USER logs in
+    BY HAND (username, password, OTP) in the window. Nothing is auto-filled and no
+    Petpooja password is ever read from the environment or seen by the agent. When login
+    is detected the session is saved under that account's name and pushed to Supabase
+    Storage, so later headless runs reuse it and never see an OTP again.
+
+    Creme Castle has two logins: `bootstrap('primary')` for the sales reports and
+    `bootstrap('inventory')` for the stock and material-transfer reports. Sessions are
+    stored separately, so doing one never disturbs the other.
+
+    Polls instead of waiting on a keypress, so it can run unattended-by-stdin."""
     import time as _t
+    acct = account or DEFAULT_ACCOUNT
+    print(f"bootstrapping Petpooja account '{acct}'")
     os.environ["PETPOOJA_HEADLESS"] = "0"
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
-        context = _open_context(browser)
+        context = _open_context(browser, acct)
         page = context.new_page()
         page.goto(portal(), wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
         if _looks_logged_in(page):
@@ -486,15 +520,16 @@ def bootstrap(timeout_s=480, poll_s=3):
                 browser.close()
                 raise SystemExit("login not detected within the time limit; re-run to retry.")
             print("login detected.")
-        context.storage_state(path=SESSION_FILE)
-        push_session()
+        context.storage_state(path=session_file(acct))
+        push_session(acct)
         browser.close()
-    print("bootstrap complete: session saved and pushed to Supabase Storage.")
+    print(f"bootstrap complete: session for account '{acct}' saved and pushed.")
 
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "bootstrap":
-        bootstrap()
+        # `python3 scrape.py bootstrap [account]`  (account defaults to "primary")
+        bootstrap(sys.argv[2] if len(sys.argv) > 2 else None)
     else:
         report = sys.argv[1] if len(sys.argv) > 1 else "oms_purchase"
         print(scrape_and_download(report))
