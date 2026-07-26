@@ -147,6 +147,43 @@ REPORTS = {
         "excel_sel": "button.buttons-excel",
         "single_day": True,
     },
+    "daily_stock": {
+        # Opening - Closing Stock Report. CONFIRMED live 26 Jul 2026.
+        #
+        # Lives in the INVENTORY app (inventory.petpooja.com), a different application
+        # from billing, and it is HARD SCOPED TO ONE OUTLET: opening any inventory URL
+        # while the session is on "All Outlets" silently redirects to the billing
+        # dashboard. So the session must be pointed at a specific outlet first, using
+        # Petpooja's own change_restaurant(<id>) (see _switch_outlet_id).
+        #
+        # It needs NO separate Petpooja login: verified headless that the existing saved
+        # session reaches it once the outlet is scoped. The earlier redirect was scoping,
+        # not permissions.
+        # /inventories/daily_report/ (nav label "Stock Summary"), NOT
+        # /inventories/daily_stock_report_new/. Both exist and look similar, but the
+        # latter is the thin "Stock Report" (opening, closing, avg price only). This one
+        # is the full daily reconciliation the samples came from: Opening (A), Purchase
+        # (B), Excess (C), Consumed (D), Wastage (E), Normal Loss (F), Transfer (G),
+        # Shortage (H), Production (I), Closing Stock, Closing Summary, Difference.
+        "url": env("PETPOOJA_REPORT_URL_DAILY_STOCK",
+                   "https://inventory.petpooja.com/inventories/daily_report/"),
+        "strategy": env("PETPOOJA_DAILY_STOCK_STRATEGY", "search_then_export_all"),
+        "needs_outlet": False,          # scoped by numeric id, not by label
+        "needs_outlet_id": True,
+        "outlet_label": None,
+        "prefix": "dailystock",
+        # These ARE jQuery DateTimePicker widgets (verified: jQuery(...).data() carries
+        # 'DateTimePicker') and they display as "26 Jul 2026", so a raw value set would
+        # revert. _set_date_range already prefers the widget API with a moment.
+        "start_sel": "#RawMaterialFromDate",
+        "end_sel": "#RawMaterialToDate",
+        "search_sel": "button#search",
+        # The Export dropdown offers "Export Current Page" and "Export All". Only the
+        # latter is safe: the table paginates at 50 ("Showing 1 to 50 of 134 records").
+        "export_all_js": "export_csv('https://inventory.petpooja.com/inventories/"
+                         "daily_report_export_csv/0/all', 1)",
+        "single_day": True,
+    },
 }
 
 
@@ -253,6 +290,23 @@ def perform_login(page, context, account=None):
     input("Enter the OTP in the browser, finish login, then press ENTER here...")
     context.storage_state(path=session_file(acct))
     push_session(acct)
+
+
+def _switch_outlet_id(page, rest_id):
+    """Point the session at ONE Petpooja outlet using the portal's own switcher.
+
+    Needed for the inventory app, which redirects to the billing dashboard unless a
+    specific outlet is scoped. change_restaurant() posts and then reloads the page, so
+    the navigation must be awaited: without that the switch appears to do nothing
+    (it silently did not take effect during development)."""
+    page.goto("https://billing.petpooja.com/users/dashboard",
+              wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+    if not page.evaluate("typeof change_restaurant === 'function'"):
+        raise RuntimeError("outlet switcher not available on the billing dashboard")
+    with page.expect_navigation(timeout=NAV_TIMEOUT):
+        page.evaluate(f"change_restaurant({int(rest_id)})")
+    page.wait_for_timeout(2500)
+    print(f"session scoped to outlet id {rest_id}.")
 
 
 def _select_outlet(page, label):
@@ -380,6 +434,17 @@ def _download(page, spec, dest_dir, from_date=None, to_date=None, server_type=No
         print(f"search returned {rows} table rows.")
         with page.expect_download(timeout=180000) as di:
             page.click(spec["excel_sel"])
+    elif strategy == "search_then_export_all":
+        # Inventory stock report: set the dates, Search, then use the Export dropdown's
+        # "Export All" (never "Export Current Page": the table paginates at 50 rows).
+        if from_date and to_date:
+            _set_date_range(page, from_date, to_date, spec)
+        page.click(spec["search_sel"])
+        page.wait_for_timeout(4000)
+        rows = page.locator("table tbody tr").count()
+        print(f"stock report shows {rows} table rows.")
+        with page.expect_download(timeout=180000) as di:
+            page.evaluate(spec["export_all_js"])
     elif strategy == "generate_then_fetch":
         # The online report does not stream a download: Export generates a file on S3
         # and the browser GETs a pre-signed URL that returns 503/404 until the object
@@ -420,7 +485,7 @@ def _download(page, spec, dest_dir, from_date=None, to_date=None, server_type=No
     return path
 
 
-def _fetch_once(report, from_date=None, to_date=None, server_type=None):
+def _fetch_once(report, from_date=None, to_date=None, server_type=None, outlet_id=None):
     if report not in REPORTS:
         raise ValueError(f"no scrape recipe for report '{report}'")
     spec = REPORTS[report]
@@ -438,6 +503,16 @@ def _fetch_once(report, from_date=None, to_date=None, server_type=None):
             if _login_form_visible(page):
                 perform_login(page, context, acct)
                 page.goto(spec["url"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+            if spec.get("needs_outlet_id"):
+                if not outlet_id:
+                    raise ValueError(f"report '{report}' needs an outlet_id")
+                _switch_outlet_id(page, outlet_id)
+                page.goto(spec["url"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+                page.wait_for_timeout(2000)
+                if "inventory.petpooja.com" not in page.url:
+                    raise RuntimeError(
+                        f"inventory report redirected to {page.url}: the outlet scope "
+                        f"did not stick for id {outlet_id}")
             if spec["needs_outlet"] and spec["outlet_label"]:
                 _select_outlet(page, spec["outlet_label"])
                 page.goto(spec["url"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
@@ -451,7 +526,7 @@ def _fetch_once(report, from_date=None, to_date=None, server_type=None):
 
 
 def scrape_and_download(report="oms_purchase", max_retries=2, days_back=0,
-                        from_date=None, to_date=None, server_type=None):
+                        from_date=None, to_date=None, server_type=None, outlet_id=None):
     """Entry point used by ingest.py --scrape. Pulls any saved session first, then
     downloads with retry. Returns the local file path for the loader. Give an explicit
     from_date/to_date window (YYYY-MM-DD), or days_back for a window ending today.
@@ -467,7 +542,7 @@ def scrape_and_download(report="oms_purchase", max_retries=2, days_back=0,
             print(f"scrape {report} [{from_date or 'default'}..{to_date or 'default'}]: "
                   f"attempt {attempt}/{max_retries + 1}")
             return _fetch_once(report, from_date=from_date, to_date=to_date,
-                               server_type=server_type)
+                               server_type=server_type, outlet_id=outlet_id)
         except Exception as e:
             last = e
             print(f"attempt {attempt} failed: {str(e)[:160]}")
