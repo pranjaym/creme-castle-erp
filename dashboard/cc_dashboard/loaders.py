@@ -75,6 +75,22 @@ def outlet_to_city(name):
     return CITY_MAP.get(parts[1], "Unknown") if len(parts) >= 2 else "Unknown"
 
 
+# THE ONE BUSINESS-DAY RULE: 04:00 IST to 03:59 IST next day. Same rule as the SQL
+# business_day() in kitchen/migrations/000_foundation.sql and kitchen/lib/business-day.mjs,
+# so the dashboard, the spine and the ERP portal all mean the same thing by "27 July".
+# Timestamps in the Petpooja reports are already IST local, so no zone shift is needed.
+BUSINESS_DAY_CUTOFF_HOUR = 4
+
+
+def business_day(ts_series):
+    """The business day (a date) for a series of IST sale timestamps. A sale at
+    01:30 belongs to the previous day, which is how the outlets and the aggregators
+    account for a night. Orders used to be stamped with the plain calendar date here
+    while items were stamped with a 07:00 rule, so one dashboard row mixed two
+    different 24-hour windows (fixed 29 Jul 2026)."""
+    return (ts_series - pd.Timedelta(hours=BUSINESS_DAY_CUTOFF_HOUR)).dt.date
+
+
 def load_orders():
     # Automation path: read the running order history parquet if CC_ORDERS_PARQUET is
     # set (raw order columns). Otherwise the original manual path (newest .xlsx upload).
@@ -89,7 +105,7 @@ def load_orders():
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     df = df.dropna(subset=["Date"])
     df = df[df["Outlet Name"].astype(str).str.startswith("CC-")]
-    df["dt"] = df["Date"].dt.date
+    df["dt"] = business_day(df["Date"])
     df["platform"] = df["Order From"].replace({"Toing by Swiggy": "Swiggy"})
     df["city"] = df["Outlet Name"].apply(outlet_to_city)
     df["hour"] = df["Date"].dt.hour

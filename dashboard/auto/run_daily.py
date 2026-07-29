@@ -67,23 +67,65 @@ def _load_env_file():
             os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
+def scrape_orders_today(scrape):
+    """Pull TODAY's online orders as a second, separate export. Returns a path or None.
+
+    Why this exists: the main order pull runs with Petpooja's server_type=2 ("Get old
+    records"), whose history stops at the previous midnight. So an 8am run sees no
+    order after 23:59, and the business day it is reporting on (04:00 to 03:59 next
+    day) is short its own 00:00 to 03:59 tail. Measured on 29 Jul 2026: business day
+    27 held 3,473 order rows ending 23:59:53 at 07:30, and only reached its true 3,797
+    rows ending 01:59:46 when the NEXT morning's run swept the rows up, a full day
+    late. server_type=1 is the "latest/current day" scope, which is where those rows
+    sit until midnight rolls them into the history. The item report never had this
+    problem: it honours a real date range and already carries the tail.
+
+    NO DATE RANGE IS SET, and that is deliberate, not an oversight. Tested live on
+    29 Jul 2026: asking this report for today's date makes the DateTimePicker clamp
+    silently back to yesterday (the log read "date range set: 2026-07-29 to
+    2026-07-29 (start widget:28 Jul 2026...)") and the export then returned 28 July,
+    which is the one thing we do not need. Left alone, the "latest/current" scope
+    returns today by itself: 371 rows, 00:00:05 to 08:45:27, including all 316 rows
+    of the overnight tail. Do not "improve" this by adding the dates back.
+
+    Best effort by design. The tail still self-heals a day later through the normal
+    pull, so a failure here costs freshness, never data, and must not stop the email.
+    scrape_and_download raises SystemExit (not Exception) when it gives up, hence the
+    two-class except."""
+    try:
+        return scrape.scrape_and_download("online_orders", server_type="1", max_retries=0)
+    except (Exception, SystemExit) as e:
+        print(f"today's order pull FAILED, so the focal day's 00:00 to 03:59 tail will "
+              f"arrive tomorrow instead: {type(e).__name__}: {str(e)[:160]}")
+        return None
+
+
 def scrape_and_append(days):
     """Pull the last `days` days of both reports, enrich items, append to history.
-    Returns (unmapped_item_names, downloaded_files). The file paths are kept so the
-    spine sync can reuse the SAME downloads: Petpooja is slow and rate limited, so
-    it must be scraped once per morning, not twice."""
+    Returns (unmapped_item_names, downloaded_files) where downloaded_files is a list
+    of (report, path) pairs: the order report is pulled TWICE under two different
+    Petpooja scopes (see scrape_orders_today), so a dict keyed by report would lose
+    one of them. The paths are kept so the spine sync can reuse the SAME downloads:
+    Petpooja is slow and rate limited, so it must be scraped once per morning."""
     sys.path.insert(0, SCRAPER_DIR)
     import scrape
     today = dt.date.today()
     frm = (today - dt.timedelta(days=days)).strftime("%Y-%m-%d")
     to = today.strftime("%Y-%m-%d")
 
-    print(f"\n[1/2] scraping order report {frm}..{to} ...")
+    print(f"\n[1/3] scraping order report {frm}..{to} ...")
     ofile = scrape.scrape_and_download("online_orders", from_date=frm, to_date=to, max_retries=1)
     orders_raw = pd.read_excel(ofile)
     hist.append_orders(orders_raw)
+    files = [("online_orders", ofile)]
 
-    print(f"\n[2/2] scraping item report {frm}..{to} ...")
+    print(f"\n[2/3] scraping today's orders for the overnight tail ...")
+    tfile = scrape_orders_today(scrape)
+    if tfile:
+        hist.append_orders(pd.read_excel(tfile))
+        files.append(("online_orders", tfile))
+
+    print(f"\n[3/3] scraping item report {frm}..{to} ...")
     ifile = scrape.scrape_and_download("order_summary_item", from_date=frm, to_date=to, max_retries=1)
     items_raw = pd.read_csv(ifile)
     enriched, unmapped = enrich.enrich(items_raw)
@@ -92,7 +134,8 @@ def scrape_and_append(days):
         enriched["Alias Name"] = enriched["Alias Name"].fillna(enriched["item_name"])
         enriched["Alias Category"] = enriched["Alias Category"].fillna("Unmapped")
     hist.append_items(enriched)
-    return unmapped, {"online_orders": ofile, "order_summary_item": ifile}
+    files.append(("order_summary_item", ifile))
+    return unmapped, files
 
 
 def load_sub_order_wise():
@@ -151,7 +194,7 @@ def sync_spine(files):
         conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
         try:
             results = []
-            for report, path in files.items():
+            for report, path in files:
                 print(f"\n[spine] verifying {report} ...")
                 results += spine_sync.sync_file(conn, report, path)
             line, material = spine_sync.summarise(results)
@@ -293,7 +336,7 @@ def main():
     if cloud:
         hist.pull_history()
 
-    unmapped, files = [], {}
+    unmapped, files = [], []
     if not args.no_scrape:
         unmapped, files = scrape_and_append(args.days)
         if unmapped and not args.allow_unmapped:

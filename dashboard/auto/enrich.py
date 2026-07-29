@@ -9,10 +9,14 @@ What it does, in order (per Pranjay, 23 Jul 2026):
      Toing by Swiggy counts as Swiggy; everything else (D2C/website) is dropped.
   2. Add the glossary layer: item_name -> Alias Name + Alias Category (streamlines
      categories), plus City / Store Type / Location Code from the outlet glossaries.
-  3. Compute the 7:00 business-day columns: a sale before 07:00 belongs to the
-     PREVIOUS day and its Hour is shown as +24 (01:00 -> Hour 25). Actial Date and
-     Week follow that boundary. (NB: the dashboard's day is 07:00, NOT the spine's
-     04:00 rule; the two tools use different conventions on purpose.)
+  3. Compute the business-day columns on THE ONE RULE, 04:00 IST to 03:59 IST next
+     day: a sale before 04:00 belongs to the PREVIOUS day and its Hour is shown as
+     +24 (01:00 -> Hour 25). Actial Date and Week follow that boundary. This is the
+     same rule as the SQL business_day() in kitchen/migrations/000_foundation.sql
+     and kitchen/lib/business-day.mjs. (Changed from an 07:00 boundary on 29 Jul
+     2026 so the dashboard, the spine and the ERP portal share one definition. It
+     is a no-op on the numbers: across 1 Apr to 27 Jul the 03:00 to 07:00 window
+     holds 1 order out of 333,905 and 0 item lines, because the outlets are shut.)
   4. Report any item_name missing from the glossary so a human can add the mapping
      before the dashboard is built (never guess an alias).
 
@@ -33,6 +37,10 @@ AREA_MAP = {
     "Toing by Swiggy": "Swiggy",
 }
 KEEP_PLATFORMS = {"Zomato", "Swiggy"}
+
+# THE ONE BUSINESS-DAY RULE: 04:00 IST to 03:59 IST next day. Kept identical to
+# cc_dashboard/loaders.py, the SQL business_day() and kitchen/lib/business-day.mjs.
+BUSINESS_DAY_CUTOFF_HOUR = 4
 
 
 def load_glossary():
@@ -81,9 +89,11 @@ def enrich(raw_df, glossary=None):
     df["area"] = df["area"].replace(AREA_MAP)
     df = df[df["area"].isin(KEEP_PLATFORMS)]
 
-    df["Hour"] = df["_ts"].apply(lambda t: t.hour + 24 if t.hour < 7 else t.hour)
+    df["Hour"] = df["_ts"].apply(
+        lambda t: t.hour + 24 if t.hour < BUSINESS_DAY_CUTOFF_HOUR else t.hour)
     df["Actial Date"] = df["_ts"].apply(
-        lambda t: (t - timedelta(days=1)).date() if t.hour < 7 else t.date())
+        lambda t: (t - timedelta(days=1)).date()
+        if t.hour < BUSINESS_DAY_CUTOFF_HOUR else t.date())
     df["Week"] = df["Actial Date"].apply(lambda d: d.isocalendar()[1])
 
     key = df["item_name"].astype(str).str.strip()
