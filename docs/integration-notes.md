@@ -289,7 +289,9 @@ Per the same-day write-back rule, these should be reflected in the source docs o
 
    Verified end to end before shipping: business day 28 goes from 3,312 delivered orders / Rs 14,68,787 ending `23:58:58` to 3,621 / Rs 15,83,470 ending `01:59:48`. Dark-outlet detection now runs on the real 7am to 2am night rather than a calendar day (19 signals to 16, all four criticals surviving). Commit `4f43780`. The 28 July dashboard in the portal archive was rebuilt and replaced the same day.
 
-7. **(29 July 2026, owed.)** The ERP portal's reports page tells the user "Customer names and phone numbers are never included", which contradicts the decision of 24 July 2026 and the actual column list in `portal/lib/reports.ts` (both `customer_name` and `customer_phone` are exported). The copy is stale and should be corrected to say the opposite, since people are downloading PII on the strength of a promise that it is absent.
+7. **(29 July 2026, DONE the same day.)** The ERP portal's reports page told the user "Customer names and phone numbers are never included", which contradicted the decision of 24 July 2026 and the actual column list in `portal/lib/reports.ts` (the order report exports `customer_name` and `customer_phone`, the item report adds `customer_address`). People were downloading personal data on the strength of a promise that it was absent. Replaced with an explicit warning, styled `.hint.warn` rather than the same muted grey as ordinary help text. Commit `ae77ecb`. Keep that warning in step with the columns in `lib/reports.ts` if the exports ever change.
+
+   Also on 29 July, the portal's archived dashboards for 24 to 28 July were rebuilt with the corrected 04:00 rule and re-uploaded, so every day in the `dashboard-html` bucket is now on one definition. The versions already sitting in people's inboxes were built the old way and will not tie out to the archive.
 
 ## 7. Flag register (everything not fully verified)
 
