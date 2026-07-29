@@ -18,9 +18,19 @@ export default async function ReportsPage() {
     <main>
       <TopBar user={user} />
       <h1 className="page">Download reports</h1>
+      {/* This used to promise that customer names and phone numbers were never included.
+          That stopped being true with the decision of 24 July 2026 (see lib/reports.ts:
+          the order report exports customer_name and customer_phone, the item report adds
+          customer_address). People were downloading personal data on the strength of a
+          promise that it was absent, so the copy now says the opposite. Keep this warning
+          in step with the columns in lib/reports.ts. */}
       <p className="hint">
-        Clean CSV, straight from the spine. Customer names and phone numbers are never included.
-        One download covers up to {MAX_RANGE_DAYS} days.
+        Clean CSV, straight from the spine. One download covers up to {MAX_RANGE_DAYS} days.
+      </p>
+      <p className="hint warn">
+        The order and item reports contain customer personal data: names, phone numbers and,
+        on the item report, delivery addresses. Treat the file as confidential and do not
+        share it outside the company.
       </p>
 
       <form action="/reports/download" method="get" className="card" style={{ maxWidth: 520 }}>
