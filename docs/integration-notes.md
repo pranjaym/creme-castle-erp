@@ -293,6 +293,22 @@ Per the same-day write-back rule, these should be reflected in the source docs o
 
    Also on 29 July, the portal's archived dashboards for 24 to 28 July were rebuilt with the corrected 04:00 rule and re-uploaded, so every day in the `dashboard-html` bucket is now on one definition. The versions already sitting in people's inboxes were built the old way and will not tie out to the archive.
 
+8. **(30 July 2026, corrects a stated guarantee about the 8am scheduler. DONE the same day.)** Pranjay reported that the 8am dashboard email did not arrive. It had not been sent: the run failed and reported success.
+
+   **What happened.** The lid was shut at 07:45:54 (pmset: "Clamshell Sleep"), and at 07:58:43 the Mac entered a sleep block scheduled for 3584 seconds. So the Mac was asleep at 08:00 and launchd deferred the job. launchd grants a missed `StartCalendarInterval` exactly **one** catch-up firing, on the next wake of **any** kind, and it spent that firing at 08:58:27 (07:58:43 plus 3584s, a maintenance dark wake, lid still shut, on battery). Wi-Fi was not associated: `git` failed with `ssh: connect to host github.com port 22: Undefined error: 0`, Supabase failed with `Failed to resolve 'naocaekyszvmnfgcaufw.supabase.co' ([Errno 8] nodename nor servname provided)`, and the Playwright scrape failed twice with `net::ERR_INTERNET_DISCONNECTED`. The run died in seconds with exit 1.
+
+   **Why nothing retried.** The plist carried a single 08:00 slot and no `KeepAlive`, so once that one firing was spent the interval was serviced for the day. `run.log` proves it: between the 08:58 failure and a manual run at 13:44 there is not one further entry, despite fully networked wakes at 11:12:52, 11:32:20 and later. Reconnecting the laptop did **not** trigger a retry.
+
+   **Why it was silent.** The old `run_dashboard.sh` ended with `echo "----- exit $? -----"`, so the script's own exit status was the `echo`'s, always 0. `launchctl list` reported status 0 for a failed morning. There was no email and no failure signal either, so the only symptom was an absence.
+
+   **Corrects an earlier statement.** Pranjay had been told that if the Mac were asleep at 8am the job would run "when you next connect to the internet". That was wrong in a way that mattered: launchd retries once, at the next wake, connected or not, and since a closed-lid Mac dark-wakes every few minutes the catch-up firing will nearly always land on a wake with no network. The failure mode was reliable, not rare; 26 to 29 July only worked because the Mac happened to be awake at 08:00:01 to 08:00:05 on each of those mornings.
+
+   **Fixed** in `dashboard/auto/run_dashboard.sh` plus `in.cremecastle.dashboard.plist`, with four defences (success stamp, single-run lock, network gate, honest exit code plus a once-a-day failure alert to the owner) and eight retry slots from 08:00 to 14:00. Full rationale in `dashboard/auto/README.md`, section "8am automation". New file `dashboard/auto/alert_failure.py`. Each defence was tested: the no-network path defers with exit 75 without writing the stamp; a live lock holder, a recent pid-less lock and a stale pid-less lock all behave correctly; a failing run propagates exit 1 and leaves the stamp unwritten so later slots retry.
+
+   **Note on the recovery.** The 2026-07-29 dashboard was rebuilt and emailed at 13:47, about six hours late. Then a faulty test harness (a misplaced `&` that backgrounded a compound command, so the lock's pid file was never written) drove a second full run at 14:00, and all three recipients received a duplicate 2026-07-29 dashboard at about 14:02. No data harm: the spine reported 7 days confirmed unchanged and 0 new sub-order rows. That accident is what prompted defence 2's stricter rule, where a pid-less lock is reclaimed only when over 30 minutes old and the slot otherwise stands down.
+
+   **This whole class of failure disappears on the cloud server** described in `dashboard/auto/README.md`. An always-on host never sleeps, so there is no deferral, no dark wake and no single catch-up firing to lose. The defences above make a laptop schedule survivable; they do not make it correct. Treat the move as the real fix. See F14.
+
 ## 7. Flag register (everything not fully verified)
 
 | Flag | What is unresolved | Blocks |
@@ -308,6 +324,7 @@ Per the same-day write-back rule, these should be reflected in the source docs o
 | F9 | OMS read at a commit with uncommitted working-tree changes; live DB not queried (no creds, correctly) | Minor: re-verify on a clean commit before Build 1a code |
 | P-A..P-D | Petpooja and SupplyNote admin answers pending | Ingestion wiring, punch mechanism |
 | F13 | Vendor-OMS D2C punch data does not exist until OMS billing go-live; the Material Purchase Report parser is verified structurally but not against real punches. Real 1a recon volume starts at go-live. | Build 1a real reconciliation (not the code, the data) |
+| F14 | The 8am dashboard runs on a **laptop** via launchd, so delivery depends on the Mac being awake and online. Hardened 30 July 2026 (stamp, lock, network gate, honest exit code, failure alert, eight slots to 14:00), which makes a missed 08:00 recoverable but not eliminated: a Mac that is shut all day, or off, still delivers nothing, and the mitigation is now eight scheduler slots deep rather than a property of the design. The real fix is the always-on cloud server. | Nothing today; the daily email's reliability ceiling until the run moves off the laptop |
 
 ## 8. What is ready, and what to decide next
 

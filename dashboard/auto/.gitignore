@@ -3,3 +3,8 @@ history/
 cc_daily.html
 __pycache__/
 *.pyc
+# Per-machine scheduler state, never shared between checkouts: which morning last
+# succeeded, which morning last alerted, and the single-run lock.
+.last_success
+.last_alert
+.run.lock/
