@@ -52,8 +52,16 @@ DASH_EMAIL_RECIPIENTS=a@x.com,b@y.com
 What actually runs today: a macOS launchd agent on Pranjay's Mac, not a cloud cron.
 `~/Library/LaunchAgents/in.cremecastle.dashboard.plist` calls `run_dashboard.sh`, which
 waits for the network, git-pulls, runs `run_daily.py --allow-unmapped`, and emails the
-result. The intended end state is still the always-on cloud server described below, and
-moving there removes every problem in this section at a stroke.
+result.
+
+A cloud server is NOT the exit path, and a section of this README used to say it was.
+Petpooja blocks datacenter IPs: confirmed by running the scraper from Google Cloud Run
+(Mumbai) and an Oracle Cloud VM, both failing identically while the same saved login
+worked from a residential connection at the same moment (bot detection serves
+datacenter IPs a stripped page with no export controls). See "The single most important
+operational finding" in `HANDOFF.md`. The real end state is an always-on machine on a
+trusted office or home connection (per HANDOFF: a small network of trusted
+office/home machines), or Petpooja API/report access so scraping stops being needed.
 
 The checkout must be on the LOCAL disk (`~/creme-castle-erp`). macOS refuses to let a
 launchd agent execute anything under `~/Library/Mobile Documents` (iCloud Drive): it
@@ -102,17 +110,27 @@ Manual re-run after a failure:
 bash ~/creme-castle-erp/dashboard/auto/run_dashboard.sh --force
 ```
 
-### Target state: cloud server
-Run on the same always-on cloud server as the Petpooja ingestion (it shares the scraper
-and the saved session). Schedule once per morning, after enough of the prior day is in:
+### Target state: an always-on machine on a trusted IP
+
+An earlier version of this section prescribed a cloud server. That was tried and does
+not work: Petpooja blocks datacenter IPs (see the note at the top of this section, and
+`HANDOFF.md`). The `deploy/` folder and its `DEPLOY.md` are the Cloud Run packaging
+from before that finding; the container itself is host-agnostic (state lives in
+Supabase Storage, `DASH_CLOUD=1`), so it remains useful for any future host with a
+trusted IP, but there is no datacenter it can usefully run in.
+
+The target is an always-on machine on an office or home connection (a spare Mac mini
+or small PC that never sleeps), scheduled once per morning:
 ```
-# cron (IST server), 08:00 daily
+# cron (IST, always-on machine on a residential/office IP), 08:00 daily
 0 8 * * *  cd /path/to/auto && python3 run_daily.py --allow-unmapped >> run.log 2>&1
 ```
-The history parquet must live on that server (persistent disk) so comparisons keep their
-full history. An always-on server never sleeps, so the sleep/dark-wake failure mode above
-simply does not exist there; the stamp and lock stay useful, the network gate becomes
-belt and braces.
+With `DASH_CLOUD=1` the history parquet is pulled from and pushed to Supabase Storage
+each run, so the machine needs no precious local state. A machine that never sleeps has
+no deferral and no dark wake, so the failure mode above does not exist there; the stamp
+and lock stay useful, the network gate becomes belt and braces. Alternatively, Petpooja
+API or scheduled-report access (pending admin questions, `petpooja-admin-checklist.md`)
+would remove the scrape, and with it the IP sensitivity, entirely.
 
 ## Validated 23 Jul 2026
 Enrichment reproduces the hand-made file 100% (aliases/category/city/date), 99.98% Hour.

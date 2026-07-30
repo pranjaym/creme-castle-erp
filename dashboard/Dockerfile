@@ -1,7 +1,13 @@
-# Creme Castle daily dashboard — Cloud Run Job container.
-# Build context is this folder (Sales Dashboard V5/). Same Playwright base as the
-# kitchen ingestion, so Petpooja scraping works headless and Petpooja accepts it
-# (Rishabh's pipeline proves Cloud Run is accepted).
+# Creme Castle daily dashboard: container packaging (originally for Cloud Run).
+# Build context is this folder. Same Playwright base as the kitchen ingestion, so the
+# Petpooja scrape runs headless.
+#
+# SUPERSEDED ASSUMPTION: this header used to claim "Rishabh's pipeline proves Cloud Run
+# is accepted". Later testing disproved that: Petpooja blocks datacenter IPs (identical
+# scraper failures from Cloud Run Mumbai AND an Oracle Cloud VM, while a residential
+# connection worked at the same moment with the same session). See HANDOFF.md. Keep this
+# image for a future always-on machine on a trusted office/home IP; do not deploy it to
+# a datacenter expecting the scrape to work.
 #
 # The container carries NO secrets and NO history: secrets come from the Cloud Run
 # Job's environment, the history parquet is pulled from / pushed to Supabase Storage
