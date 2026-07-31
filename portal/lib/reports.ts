@@ -61,6 +61,36 @@ export const REPORTS: Record<string, ReportDef> = {
     ],
     filenameStem: 'cc_item_report',
   },
+  finance: {
+    // The finance cut of the item report: the same per-line rows as `item`, narrowed to
+    // the columns finance works with (money fields, tax, discount, delivery/container
+    // charges, round-off, total, plus item detail) and dropping the operational columns
+    // they do not use (virtual_brand_name, brand_grouping, assign_to, persons,
+    // service_charge, additional_charge, deduction_charge, waived_off, sap_code). It reads
+    // the SAME view as `item`, so it is always in step and needs no separate ingest.
+    // Decision 31 July 2026: reproduce Pranjay's Order_Summary_Item_Report_Fixed.xlsx
+    // shape verbatim (23 columns, this order), customer PII kept, listed on the same
+    // /reports page for all logged-in users. The `date` header maps to order_ts and
+    // streams exactly as the item report does (verbatim from the spine, no reformatting).
+    key: 'finance',
+    label: 'Finance report (item-level: sales, tax, charges)',
+    view: 'v_report_order_summary_item',
+    columns: [
+      'restaurant_name', 'invoice_no', 'order_ts', 'payment_type', 'order_type', 'status',
+      'area', 'customer_phone', 'customer_name', 'customer_address', 'order_cancel_reason',
+      'my_amount', 'total_tax', 'discount', 'delivery_charge', 'container_charge',
+      'round_off', 'total', 'item_name', 'category_name', 'item_price', 'item_quantity',
+      'item_total',
+    ],
+    headers: [
+      'restaurant_name', 'invoice_no', 'date', 'payment_type', 'order_type', 'status',
+      'area', 'customer_phone', 'customer_name', 'customer_address', 'order_cancel_reason',
+      'my_amount', 'total_tax', 'discount', 'delivery_charge', 'container_charge',
+      'round_off', 'total', 'item_name', 'category_name', 'item_price', 'item_quantity',
+      'item_total',
+    ],
+    filenameStem: 'cc_finance_report',
+  },
   sub_order: {
     key: 'sub_order',
     label: 'Sub-Order Wise (sales summary by outlet + channel)',
