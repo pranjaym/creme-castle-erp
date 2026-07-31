@@ -17,11 +17,22 @@
 # wake, lid still shut, Wi-Fi not yet associated). Every network call failed on DNS
 # inside a few seconds, the run died, and because the old version of this script ended
 # in an `echo` its exit status was the echo's, so launchd recorded SUCCESS. No email,
-# no retry, no alert: the only symptom was an absence. Four defences below, in order:
+# no retry, no alert: the only symptom was an absence. Five defences below, in order:
 #   1. a success stamp, so extra retry slots through the morning are free
 #   2. a lock, so overlapping slots cannot double-scrape
 #   3. a network gate, so a dark wake defers instead of burning the day's chance
 #   4. the real exit code plus a failure alert, so a dead morning says so
+#   5. a caffeinate hold, so the Mac cannot fall back asleep mid-run (added 31 July)
+#
+# 31 July 2026 failure, and why defence 5 exists. The 07:58 pmset wake fired but, on
+# battery with the lid shut, produced only a DARK wake: 45 seconds awake, then straight
+# back to sleep, so the 08:00/08:20/08:45 slots were all deferred. At 08:49 a maintenance
+# dark wake finally ran the coalesced job; the network gate waited, Wi-Fi came up, and
+# the scrape SUCCEEDED. Then ~90 seconds in, the Mac did what a dark wake always does
+# next, it returned to sleep, and tore the network down underneath the run: the spine
+# sync died on "No route to host" and the sub-order scrape on ERR_INTERNET_DISCONNECTED.
+# The gate only guards the START of a run; nothing kept the machine awake THROUGH it.
+# Defence 5 takes a power assertion the instant the gate passes, held until the run ends.
 #
 # Paths are resolved relative to this script, so the same file works in any checkout.
 # --allow-unmapped keeps the run alive if a new item lacks a glossary alias (it is
@@ -72,7 +83,7 @@ if ! mkdir "$LOCK" 2>/dev/null; then
   fi
 fi
 echo $$ > "$LOCK/pid"
-trap 'rm -rf "$LOCK"' EXIT
+trap 'rm -rf "$LOCK"; [ -n "$CAFFEINATE_PID" ] && kill "$CAFFEINATE_PID" 2>/dev/null' EXIT
 
 log "===== run at $(date) ====="
 
@@ -109,6 +120,25 @@ until net_up; do
   fi
   sleep "$NET_SLEEP"
 done
+
+# 5. Network is up, so we are committed to a real run. Hold the Mac awake for its whole
+# duration. A scheduled slot usually fires during a DARK wake (lid shut, on battery),
+# which by design lasts only seconds before the machine returns to sleep. On 31 July
+# that return-to-sleep landed ~90s into the run and killed the network mid-scrape. An
+# assertion taken NOW blocks it until this script exits.
+#   -i  prevent idle system sleep (effective on battery, the case that bit us)
+#   -m  prevent disk idle sleep
+#   -s  prevent system sleep (an added guard, effective on AC power)
+#   -w  tie the assertion's life to THIS script's pid, so it always releases, even if
+#       the run is killed; the EXIT trap also kills it belt-and-braces.
+# Placed AFTER the gate on purpose: a genuine no-network morning defers above without
+# ever holding the machine awake, so a closed laptop with no Wi-Fi is not drained by
+# eight slots each caffeinating for nothing. CC_NO_CAFFEINATE disables it for tests.
+if [ -z "$CC_NO_CAFFEINATE" ] && command -v caffeinate >/dev/null 2>&1; then
+  caffeinate -imsw $$ &
+  CAFFEINATE_PID=$!
+  log "caffeinate holding the Mac awake (pid $CAFFEINATE_PID) for the duration of this run"
+fi
 
 # Stay current with whatever has been pushed, so the scheduled run never drifts from
 # the repo. Failure here is not fatal: yesterday's code is better than no run.

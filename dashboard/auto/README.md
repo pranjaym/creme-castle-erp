@@ -82,7 +82,7 @@ Note the shape of this: it is not a rare race. The Mac dark-wakes every few minu
 while the lid is closed, so the catch-up firing will nearly always land on a wake with
 no network. Any morning the lid is shut at 08:00 would have failed the same way.
 
-Four defences, all in `run_dashboard.sh`:
+Five defences, all in `run_dashboard.sh`:
 
 1. **Success stamp** (`.last_success`, gitignored). Holds the date of the last delivered
    morning. Later slots see it and exit in milliseconds, so extra slots cost nothing and
@@ -101,6 +101,33 @@ Four defences, all in `run_dashboard.sh`:
    `launchctl list` stops reporting 0 for a dead morning, and `alert_failure.py` emails
    the owner (first recipient only, not the whole list) once per day with the last 60
    lines of `run.log`. A broken morning now says so instead of being an absence.
+5. **Caffeinate hold** (added 31 July 2026). The instant the network gate passes, the
+   run takes a `caffeinate -imsw $$` power assertion, held until the script exits (via
+   `-w` on its own pid, plus the EXIT trap). This stops macOS returning to sleep
+   mid-run. See the next section for why. `CC_NO_CAFFEINATE` disables it for tests.
+
+### Why defence 5 exists: the 31 July 2026 failure
+
+The 07:58 pmset wake fired, but on **battery with the lid shut** it produced only a
+*dark wake*: awake for 45 seconds, then straight back to sleep, so the 08:00, 08:20 and
+08:45 slots were all deferred. At 08:49 a maintenance dark wake finally ran the coalesced
+job. The network gate waited, Wi-Fi came up, and the scrape **succeeded**. Then about 90
+seconds in, the Mac did what a dark wake always does next: it returned to sleep and tore
+the network down underneath the still-running job (`spine sync FAILED: No route to host`,
+`sub_order_wise: ERR_INTERNET_DISCONNECTED`). The run died partway through, and the
+alert email could not send either because DNS was already gone.
+
+The lesson: the network gate (defence 3) guards only the **start** of a run; nothing kept
+the machine awake **through** it. Defence 5 does. Verified that `caffeinate -imsw`
+registers a live `PreventUserIdleSystemSleep` assertion with `powerd` (the one honored on
+battery) and releases the moment the run ends.
+
+**This is a mitigation, not a cure.** A power assertion holds a dark wake open, but the
+underlying fragility is running a multi-minute networked job on a closed-lid laptop on
+battery, which macOS is built to prevent. The two things that make it genuinely reliable
+are outside the script: keep the Mac **plugged in** overnight (on AC, dark wakes stay
+alive and the network holds), and ultimately move the job to an always-on machine on a
+trusted IP. Tracked as F14.
 
 Slots: 08:00, 08:20, 08:45, 09:15, 10:00, 11:00, 12:30, 14:00. The spread runs to 14:00
 so a laptop that stays shut all morning still delivers.
