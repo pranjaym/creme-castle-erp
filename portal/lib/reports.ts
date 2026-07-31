@@ -14,6 +14,22 @@ export interface ReportDef {
   columns: string[];   // db column names, in template order
   headers: string[];   // raw report header names, 1:1 with columns
   filenameStem: string;
+  // Optional per-column value formatters, keyed by db column name. Applied as rows are
+  // read, before CSV escaping. Used sparingly: most reports stream the spine value
+  // verbatim, so a report with no `format` behaves exactly as before.
+  format?: Record<string, (raw: unknown) => unknown>;
+}
+
+// Petpooja/finance date convention: DD-MM-YYYY HH:MM (no seconds). The spine stores
+// order timestamps as YYYY-MM-DD HH:MM:SS; this reformats to match the finance team's
+// template file. A null/empty or unexpected value is passed through untouched, so a
+// surprise format is never silently blanked.
+function fmtDateDMY(raw: unknown): unknown {
+  if (raw === null || raw === undefined || raw === '') return raw;
+  const m = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!m) return raw;
+  const [, y, mo, d, h, mi] = m;
+  return `${d}-${mo}-${y} ${h}:${mi}`;
 }
 
 export const REPORTS: Record<string, ReportDef> = {
@@ -89,6 +105,9 @@ export const REPORTS: Record<string, ReportDef> = {
       'round_off', 'total', 'item_name', 'category_name', 'item_price', 'item_quantity',
       'item_total',
     ],
+    // The one place the finance report diverges from the raw spine value: its `date`
+    // column is reformatted to DD-MM-YYYY HH:MM to match the finance template file.
+    format: { order_ts: fmtDateDMY },
     filenameStem: 'cc_finance_report',
   },
   sub_order: {
@@ -204,7 +223,12 @@ export async function fetchReportRows(def: ReportDef, from: string, to: string):
     if (error) throw new Error(error.message);
     const batch = (data ?? []) as unknown as Record<string, unknown>[];
     if (batch.length === 0) break;
-    for (const obj of batch) rows.push(def.columns.map((c) => obj[c]));
+    for (const obj of batch) {
+      rows.push(def.columns.map((c) => {
+        const fmt = def.format?.[c];
+        return fmt ? fmt(obj[c]) : obj[c];
+      }));
+    }
     if (batch.length < PAGE) break;
     offset += PAGE;
   }
