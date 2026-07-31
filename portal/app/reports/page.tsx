@@ -28,9 +28,9 @@ export default async function ReportsPage() {
         Clean CSV, straight from the spine. One download covers up to {MAX_RANGE_DAYS} days.
       </p>
       <p className="hint warn">
-        The order, item and finance reports contain customer personal data: names, phone
-        numbers and, on the item and finance reports, delivery addresses. Treat the file as
-        confidential and do not share it outside the company.
+        The order and item reports contain customer personal data: names, phone numbers and,
+        on the item report, delivery addresses. Treat the file as confidential and do not
+        share it outside the company.
       </p>
 
       <form action="/reports/download" method="get" className="card" style={{ maxWidth: 520 }}>
