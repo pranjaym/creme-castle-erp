@@ -50,6 +50,11 @@ sys.path.insert(0, HERE)
 import enrich
 import history_store as hist
 
+# How many days back the sub-order loader checks for holes. Seven covers a long
+# weekend of failed mornings plus slack; the cost of a bigger number is only extra
+# Petpooja scrapes on the (rare) morning something is actually missing.
+SUB_ORDER_LOOKBACK_DAYS = 7
+
 
 def _load_env_file():
     """Load auto/.env (KEY=VALUE lines) into os.environ if present. Keeps the Gmail
@@ -139,41 +144,79 @@ def scrape_and_append(days):
 
 
 def load_sub_order_wise():
-    """Pull the Sub-Order Wise sales summary for YESTERDAY and land it in the spine.
+    """Pull the Sub-Order Wise sales summary and land it in the spine, healing any
+    day the last SUB_ORDER_LOOKBACK_DAYS is missing.
 
     Kept separate from the two line-level reports because this one is PRE-AGGREGATED
     over whatever range you ask for: a multi-day pull returns one merged set, so it
-    has to be one day at a time. Yesterday is the last complete day.
+    has to be one day at a time.
+
+    The lookback exists because of 31 July to 1 August 2026 (F15): this used to pull
+    only yesterday, so a morning whose spine connection failed lost that day's
+    summary permanently (both days had to be backfilled by hand). Now it asks the
+    spine which days in the window have no rows and loads each one, oldest first, so
+    a failed morning heals itself on the next successful run. A day Petpooja
+    genuinely reports as empty stays "missing" and is re-tried until it ages out of
+    the window: a few wasted scrapes, not a correctness problem, since the insert is
+    idempotent on (business_date, row_hash).
 
     Caveat worth knowing: because Petpooja aggregates it server side, its day is
     Petpooja's own calendar day, not the spine's 04:00 business day. The stored
     business_date is therefore the report's date filter, and it will not tie out to
     the line-level reports to the last rupee across the 00:00 to 04:00 window.
 
-    Best effort: never blocks the dashboard."""
+    Best effort: never blocks the dashboard. Returns (summary, error); error is None
+    when every missing day loaded, else a short string for the owner alert."""
     if not os.environ.get("SPINE_DATABASE_URL"):
         print("sub-order load skipped (SPINE_DATABASE_URL not set).")
-        return None
-    day = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+        return None, None
     try:
         sys.path.insert(0, SCRAPER_DIR)
         import psycopg2
         import scrape
         import ingest
-        print(f"\n[spine] sub-order wise for {day} ...")
-        path = scrape.scrape_and_download("sub_order_wise", from_date=day, to_date=day,
-                                          max_retries=1)
-        records, skipped = ingest.REPORTS["sub_order_wise"]["parse"](path)
-        receipt = ingest.store_receipt(path)
+        today = dt.date.today()
+        window = [(today - dt.timedelta(days=i)).isoformat()
+                  for i in range(SUB_ORDER_LOOKBACK_DAYS, 0, -1)]      # oldest first
+        table = ingest.REPORTS["sub_order_wise"]["table"]
         conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
         try:
-            ingest.load_records("sub_order_wise", records, skipped, conn, receipt)
+            with conn.cursor() as cur:
+                cur.execute(f"select distinct business_date from {table} "
+                            f"where business_date >= %s", (window[0],))
+                have = {r[0].isoformat() for r in cur.fetchall()}
+            missing = [d for d in window if d not in have]
+            if not missing:
+                print(f"\n[spine] sub-order wise: all of the last "
+                      f"{SUB_ORDER_LOOKBACK_DAYS} day(s) already present.")
+                return "sub-order summary: nothing missing", None
+            loaded, failed = [], []
+            for day in missing:
+                # scrape_and_download raises SystemExit (not Exception) when it gives
+                # up, hence the two-class except; rollback because load_records only
+                # commits on success and a dead transaction would poison the next day.
+                try:
+                    print(f"\n[spine] sub-order wise for {day} ...")
+                    path = scrape.scrape_and_download("sub_order_wise", from_date=day,
+                                                      to_date=day, max_retries=1)
+                    records, skipped = ingest.REPORTS["sub_order_wise"]["parse"](path)
+                    receipt = ingest.store_receipt(path)
+                    ingest.load_records("sub_order_wise", records, skipped, conn, receipt)
+                    loaded.append(f"{day} ({len(records)} rows)")
+                except (Exception, SystemExit) as e:
+                    conn.rollback()
+                    print(f"sub-order load FAILED for {day} (dashboard unaffected): "
+                          f"{type(e).__name__}: {str(e)[:200]}")
+                    failed.append(f"{day} ({type(e).__name__})")
+            summary = f"sub-order summary loaded: {', '.join(loaded) if loaded else 'none'}"
+            error = ("sub-order load failed for " + ", ".join(failed)) if failed else None
+            return summary, error
         finally:
             conn.close()
-        return f"sub-order summary loaded for {day} ({len(records)} rows)"
     except Exception as e:
-        print(f"sub-order load FAILED (dashboard unaffected): {type(e).__name__}: {str(e)[:200]}")
-        return None
+        err = f"{type(e).__name__}: {str(e)[:200]}"
+        print(f"sub-order load FAILED (dashboard unaffected): {err}")
+        return None, f"sub-order load failed before any day could load ({err})"
 
 
 def sync_spine(files):
@@ -181,12 +224,15 @@ def sync_spine(files):
     last few business days against them (see workers/petpooja-ingest/sync.py).
 
     Best effort by design: the dashboard email is the business-critical output, so a
-    spine problem must never stop it going out. Returns a short human summary plus
-    the days where something MATERIAL changed (status, amounts, charges), which are
-    the only ones worth putting in front of a person."""
+    spine problem must never stop it going out. Returns (line, material, error): a
+    short human summary, the days where something MATERIAL changed (status, amounts,
+    charges), which are the only ones worth putting in front of a person, and an
+    error string (None on success) so main() can raise the owner alert. The error
+    return exists because of 31 July to 2 August 2026 (F15): a spine failure used to
+    be invisible, since the run still exits 0 and the wrapper's alert never fires."""
     if not os.environ.get("SPINE_DATABASE_URL"):
         print("spine sync skipped (SPINE_DATABASE_URL not set).")
-        return None, []
+        return None, [], None
     try:
         sys.path.insert(0, SCRAPER_DIR)
         import psycopg2
@@ -199,12 +245,41 @@ def sync_spine(files):
                 results += spine_sync.sync_file(conn, report, path)
             line, material = spine_sync.summarise(results)
             print(f"spine sync: {line}")
-            return line, material
+            return line, material, None
         finally:
             conn.close()
     except Exception as e:
-        print(f"spine sync FAILED (dashboard unaffected): {type(e).__name__}: {str(e)[:200]}")
-        return f"spine sync failed: {type(e).__name__}", []
+        err = f"{type(e).__name__}: {str(e)[:200]}"
+        print(f"spine sync FAILED (dashboard unaffected): {err}")
+        return f"spine sync failed: {type(e).__name__}", [], err
+
+
+def alert_spine_failure(errors):
+    """Tell the owner the spine did not get today's data even though the dashboard
+    went out. Exists because of 31 July to 2 August 2026 (F15): the spine steps are
+    best effort, so the run exits 0, the wrapper's failure alert never fires, and the
+    ERP portal's downloads silently freeze at the last loaded day. That outage ran
+    unnoticed for two days. Best effort itself: an alert problem must not fail a run
+    that has already delivered."""
+    try:
+        import alert_failure
+        today = dt.date.today().strftime("%d %b %Y (%A)")
+        subject = f"CC dashboard delivered BUT spine load FAILED, {today}"
+        body = (
+            "The dashboard was built and delivered normally, but the spine database "
+            "did not get today's data:\n\n- " + "\n- ".join(errors) + "\n\n"
+            "Until a run succeeds, the ERP portal's report downloads are frozen at "
+            "the last loaded day. Orders and items heal automatically on the next "
+            "successful run (rolling verify window); sub-order summaries heal within "
+            f"a {SUB_ORDER_LOOKBACK_DAYS} day lookback.\n\n"
+            "To retry the spine load by hand WITHOUT re-emailing the dashboard:\n"
+            "  cd ~/creme-castle-erp/dashboard/auto && "
+            "python3 run_daily.py --allow-unmapped --no-email\n"
+        )
+        if alert_failure.send_alert(subject, body):
+            print("spine failure alert emailed to the owner.")
+    except Exception as e:
+        print(f"spine failure alert could not be sent: {type(e).__name__}: {str(e)[:160]}")
 
 
 def build_dashboard():
@@ -348,17 +423,26 @@ def main():
             sys.exit(2)
 
     # Land this morning's reports in the spine and verify the recent days against
-    # them, reusing the downloads above. Never blocks the dashboard.
-    spine_line, spine_material = (None, [])
+    # them, reusing the downloads above. Never blocks the dashboard, but failures
+    # are collected and alerted after delivery (F15).
+    spine_line, spine_material, spine_errors = None, [], []
     if files and not args.no_spine:
-        spine_line, spine_material = sync_spine(files)
+        spine_line, spine_material, err = sync_spine(files)
+        if err:
+            spine_errors.append(f"spine sync: {err}")
     if not args.no_spine and not args.no_scrape:
-        load_sub_order_wise()
+        _, err = load_sub_order_wise()
+        if err:
+            spine_errors.append(err)
 
     html, focal = build_dashboard()
     archive_dashboard(html, focal)          # push to the portal's archive bucket
     if not args.no_email:
         send_email(html, focal, unmapped, spine_line, spine_material)
+    # After the deliverables on purpose: the dashboard and email must never wait on,
+    # or die with, the alert path.
+    if spine_errors:
+        alert_spine_failure(spine_errors)
     if cloud:
         hist.push_history()
     print("\ndone.")

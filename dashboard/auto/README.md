@@ -137,6 +137,35 @@ Manual re-run after a failure:
 bash ~/creme-castle-erp/dashboard/auto/run_dashboard.sh --force
 ```
 
+### The silent spine outage (2 August 2026): pooler, alert, lookback
+
+Three runs (31 July to 2 August) delivered the dashboard normally while their spine
+load failed, so the ERP portal's report downloads silently froze at 31 July ~11:00.
+Nobody was told, because the spine steps are best effort ("dashboard unaffected"):
+the run exits 0, the stamp is written, and defence 4 never fires. Root cause was
+environmental: Supabase's direct DB hostname (`db.<ref>.supabase.co`) is **IPv6
+only** (AAAA record, no A record), and the Mac's network stopped providing IPv6.
+The HTTPS APIs kept working (the project hostname has IPv4 via Cloudflare), which
+is exactly why the failure was invisible from the inbox. Three changes:
+
+1. **Pooler connection.** `SPINE_DATABASE_URL` in `.env` now uses the Supavisor
+   session pooler (`postgres.<ref>@aws-1-ap-south-1.pooler.supabase.com:5432`),
+   which is IPv4 compatible. Never point it back at `db.<ref>.supabase.co` on a
+   machine that roams between networks.
+2. **Spine failure alert.** `run_daily.py` collects spine sync and sub-order load
+   failures and, after the dashboard and email have gone out, mails the owner via
+   `alert_failure.send_alert` (subject "CC dashboard delivered BUT spine load
+   FAILED"). Best effort itself: an alert problem cannot fail a delivered run.
+3. **Sub-order lookback.** The sub-order loader used to pull only yesterday, so a
+   failed morning lost that day permanently (31 July and 1 August were backfilled by
+   hand). It now loads every day missing from the spine in the last
+   `SUB_ORDER_LOOKBACK_DAYS` (7), oldest first, so it heals itself. The insert is
+   idempotent on `(business_date, row_hash)`, so re-loading a day is harmless.
+
+Orders and items always healed themselves (the sync verifies a rolling window);
+the lookback gives the sub-order report the same property. Tracked as F15 in
+`erp-plan/integration-notes.md`.
+
 ### Target state: an always-on machine on a trusted IP
 
 An earlier version of this section prescribed a cloud server. That was tried and does

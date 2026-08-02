@@ -47,10 +47,15 @@ def _tail(path, n=60):
         return f"(could not read {path}: {exc})"
 
 
-def main():
-    _load_env_file()
-    status = sys.argv[1] if len(sys.argv) > 1 else "?"
+def send_alert(subject, body, include_log_tail=True):
+    """Send an operations alert to the owner. Returns True when sent, False when the
+    email env is not configured; SMTP problems raise so the caller can log them.
 
+    Factored out of main() on 2 August 2026 so run_daily.py can alert on a spine
+    load failure (F15) without duplicating the SMTP plumbing or the recipient rule.
+    _load_env_file is setdefault-based, so calling it again from inside a run that
+    already loaded .env changes nothing."""
+    _load_env_file()
     host = os.environ.get("DASH_SMTP_HOST", "smtp.gmail.com")
     port = int(os.environ.get("DASH_SMTP_PORT", "587"))
     sender = os.environ.get("DASH_EMAIL_SENDER")
@@ -62,32 +67,38 @@ def main():
         recips = everyone[:1]
     if not (sender and pw and recips):
         print("alert not sent: DASH_EMAIL_* not configured.")
-        return 1
+        return False
 
-    today = dt.date.today().strftime("%d %b %Y (%A)")
+    if include_log_tail:
+        body += f"\nLast 60 lines of run.log:\n{'-' * 60}\n{_tail(LOG)}"
     msg = EmailMessage()
-    msg["Subject"] = f"CC Dashboard run FAILED, {today} (exit {status})"
+    msg["Subject"] = subject
     msg["From"] = sender
     msg["To"] = ", ".join(recips)
-    msg.set_content(
-        f"The daily dashboard run failed this morning with exit status {status}.\n"
-        f"No dashboard was built and no dashboard email was sent.\n\n"
-        f"The scheduler will retry at the remaining slots today, and this alert is sent\n"
-        f"only once per day, so silence after this means either a retry succeeded or\n"
-        f"nothing further ran.\n\n"
-        f"To retry by hand:\n"
-        f"  bash ~/creme-castle-erp/dashboard/auto/run_dashboard.sh --force\n\n"
-        f"Last 60 lines of run.log:\n"
-        f"{'-' * 60}\n"
-        f"{_tail(LOG)}"
-    )
+    msg.set_content(body)
 
     with smtplib.SMTP(host, port, timeout=60) as s:
         s.starttls()
         s.login(sender, pw)
         s.send_message(msg)
     print(f"failure alert emailed to {', '.join(recips)}")
-    return 0
+    return True
+
+
+def main():
+    status = sys.argv[1] if len(sys.argv) > 1 else "?"
+    today = dt.date.today().strftime("%d %b %Y (%A)")
+    sent = send_alert(
+        f"CC Dashboard run FAILED, {today} (exit {status})",
+        f"The daily dashboard run failed this morning with exit status {status}.\n"
+        f"No dashboard was built and no dashboard email was sent.\n\n"
+        f"The scheduler will retry at the remaining slots today, and this alert is sent\n"
+        f"only once per day, so silence after this means either a retry succeeded or\n"
+        f"nothing further ran.\n\n"
+        f"To retry by hand:\n"
+        f"  bash ~/creme-castle-erp/dashboard/auto/run_dashboard.sh --force\n\n",
+    )
+    return 0 if sent else 1
 
 
 if __name__ == "__main__":
