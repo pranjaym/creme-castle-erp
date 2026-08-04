@@ -291,12 +291,23 @@ def bootstrap(timeout_s=600, poll_s=3):
             print("A browser window is open. Log in to the Zomato partner dashboard "
                   "by hand (phone number, OTP).")
             print(f"Waiting up to {timeout_s // 60} min for login to complete...")
-            waited = 0
+            # The wait is PASSIVE while the user is anywhere in the login flow: an
+            # earlier version re-navigated to the order-history page on every poll,
+            # which reloaded the login screen before the OTP could be typed (found
+            # live, 4 Aug 2026). We only steer the browser back to order history
+            # when the page is clearly OUT of the login flow, the chip is still
+            # absent, and we have not steered in the last 30 seconds.
+            waited, last_nav = 0, 0
             while waited < timeout_s and not _logged_in(page):
                 time.sleep(poll_s)
                 waited += poll_s
                 try:
-                    if "orderHistory" not in page.url:
+                    url = page.url.lower()
+                    in_login_flow = any(k in url for k in ("login", "otp", "auth", "verify"))
+                    on_target = "orderhistory" in url
+                    if (not in_login_flow and not on_target
+                            and waited - last_nav >= 30):
+                        last_nav = waited
                         page.goto(ORDER_HISTORY_URL, wait_until="domcontentloaded",
                                   timeout=NAV_TIMEOUT)
                         page.wait_for_timeout(3000)
