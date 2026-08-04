@@ -170,13 +170,45 @@ def _open_context(browser):
     return ctx
 
 
-def _logged_in(page):
+def _on_order_history(page):
     """The date-range chip (a button whose label starts with an ordinal day, like
-    '30th Jul' or '3rd to 4th Aug') exists only on the authenticated order-history
-    page; the logged-out page redirects to a login/marketing screen without it."""
+    '30th Jul' or '3rd to 4th Aug') renders only on the order-history page once it
+    has data. This is what the SCRAPE needs, and it is the strictest signal."""
     try:
         return page.locator("button", has_text=re.compile(r"^\d{1,2}(st|nd|rd|th)\b")) \
-                   .first.is_visible(timeout=8000)
+                   .first.is_visible(timeout=5000)
+    except Exception:
+        return False
+
+
+def _logged_in(page):
+    """Authenticated anywhere in the partner dashboard, not just on order history.
+
+    The first version required the order-history date chip, so a login that landed
+    on any other partner page (which is what Zomato actually does after a fresh
+    OTP) looked like "not logged in" and the bootstrap sat there until it timed
+    out, with a perfectly good session in the window (4 Aug 2026). Bootstrap needs
+    to recognise the LOGIN, and can navigate to order history itself afterwards."""
+    if _on_order_history(page):
+        return True
+    try:
+        url = page.url.lower()
+        if "/partners/" not in url:
+            return False
+        if any(k in url for k in ("login", "otp", "auth", "verify", "signin")):
+            return False
+        # The left sidebar is on every authenticated partner page; two of its
+        # items together are a far stronger signal than any single word.
+        hits = 0
+        for label in ("Order history", "Reporting", "Outlet info", "Customer complaints"):
+            try:
+                if page.get_by_text(label, exact=True).first.is_visible(timeout=1500):
+                    hits += 1
+            except Exception:
+                pass
+            if hits >= 2:
+                return True
+        return False
     except Exception:
         return False
 
@@ -351,6 +383,18 @@ def bootstrap(timeout_s=600, poll_s=3):
                 browser.close()
                 raise SystemExit("login not detected within the time limit; re-run to retry.")
             print("login detected.")
+        # Land on order history before saving: it is the page every scheduled run
+        # starts from, so any outlet/consent interstitial that would otherwise
+        # surprise the first headless pull is resolved and captured here.
+        if not _on_order_history(page):
+            try:
+                page.goto(ORDER_HISTORY_URL, wait_until="domcontentloaded",
+                          timeout=NAV_TIMEOUT)
+                page.wait_for_timeout(5000)
+                print(f"order history reachable: {_on_order_history(page)}")
+            except Exception as e:
+                print(f"could not confirm order history ({str(e)[:80]}); "
+                      f"saving the session anyway.")
         context.storage_state(path=session_file())
         pushed = push_session()
         browser.close()
