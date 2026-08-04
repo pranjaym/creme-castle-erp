@@ -77,7 +77,14 @@ def pull_window(end, days, include_customer=True):
     start = end - dt.timedelta(days=days - 1)
     errors = []
 
-    path = scrape.scrape_and_download("order_history", start, end)
+    # Two retries, not zero: transport-level failures (an HTTP/2 handshake error
+    # before any page code runs, a dropped Wi-Fi association on a laptop) are
+    # transient and cost one browser launch to recover, whereas giving up wakes
+    # the owner with an alert for something that would have worked on the next
+    # try. Data-lag failures are NOT retried here; ExportNotReady goes straight
+    # up so the slot defers (F16).
+    path = scrape.scrape_and_download("order_history", start, end,
+                                      max_retries=2, retry_wait_s=45)
     records, skipped, dupes = ingest.parse_export(path)
     receipt = ingest.store_receipt(path)
     conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
@@ -89,7 +96,8 @@ def pull_window(end, days, include_customer=True):
             # fail an evening whose order data already landed. ExportNotReady here
             # is just logged: the same orders re-enter tomorrow's window anyway.
             try:
-                cpath = scrape.scrape_and_download("customer_details", start, end)
+                cpath = scrape.scrape_and_download("customer_details", start, end,
+                                                   max_retries=1, retry_wait_s=45)
                 crecords, cskipped, cdupes = ingest.parse_export(cpath)
                 creceipt = ingest.store_receipt(cpath)
                 ingest.load_records(crecords, cskipped, cdupes, conn, creceipt,

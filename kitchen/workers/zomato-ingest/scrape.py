@@ -157,7 +157,21 @@ def have_session():
 
 
 def _is_headless():
-    return env("ZOMATO_HEADLESS", "1") not in ("0", "false", "False", "")
+    """Default HEADED, unlike the Petpooja worker.
+
+    Measured 4 Aug 2026 against the live site: every headless variant (plain, real
+    user agent, --headless=new, --disable-blink-features=AutomationControlled) was
+    refused in under a second with net::ERR_HTTP2_PROTOCOL_ERROR, before any page
+    code ran, while the same session in a headed browser loaded normally. Zomato's
+    edge rejects the headless browser signature. We do not try to disguise it; the
+    job simply runs a real browser window.
+
+    Consequence for scheduling: the 18:00 slots open a visible Chromium window for
+    a few minutes and close it. That needs a logged-in GUI session on the Mac, the
+    same condition the morning dashboard already depends on (F14).
+
+    ZOMATO_HEADLESS=1 forces headless again, for the day their edge stops caring."""
+    return env("ZOMATO_HEADLESS", "0") not in ("0", "false", "False", "")
 
 
 def _open_context(browser):
@@ -170,13 +184,38 @@ def _open_context(browser):
     return ctx
 
 
-def _on_order_history(page):
-    """The date-range chip (a button whose label starts with an ordinal day, like
-    '30th Jul' or '3rd to 4th Aug') renders only on the order-history page once it
-    has data. This is what the SCRAPE needs, and it is the strictest signal."""
+# The date-range chip's label is an ordinal day: '30th Jul', '3rd to 4th Aug'.
+# NOT anchored with ^: Playwright matches has_text against the element's text
+# content, which carries leading whitespace from the JSX, so an anchored pattern
+# silently matched nothing and the page looked permanently "not ready" even when
+# fully loaded and logged in (4 Aug 2026, cost several debugging rounds).
+CHIP_RE = re.compile(r"\d{1,2}(st|nd|rd|th)\s")
+
+
+def _chip(page):
+    """The date-range chip button: the control the scrape drives, and the
+    strictest 'order history is ready' signal."""
+    return page.locator("button", has_text=CHIP_RE).first
+
+
+def _on_order_history(page, timeout_ms=5000):
     try:
-        return page.locator("button", has_text=re.compile(r"^\d{1,2}(st|nd|rd|th)\b")) \
-                   .first.is_visible(timeout=5000)
+        return _chip(page).is_visible(timeout=timeout_ms)
+    except Exception:
+        return False
+
+
+def _wait_for_order_history(page, timeout_ms=60000):
+    """Wait for the chip to render, polling rather than sleeping a fixed amount.
+
+    This page is a React SPA behind an API call: domcontentloaded fires while it is
+    still a skeleton, and on a cold headless context the real controls can take
+    tens of seconds. A fixed 4 to 5 second sleep reported 'not reachable' on a
+    perfectly good session (4 Aug 2026 bootstrap), so every caller now waits on the
+    element itself with a generous budget."""
+    try:
+        _chip(page).wait_for(state="visible", timeout=timeout_ms)
+        return True
     except Exception:
         return False
 
@@ -214,42 +253,123 @@ def _logged_in(page):
 
 
 def _open_picker(page):
-    chip = page.locator("button", has_text=re.compile(r"^\d{1,2}(st|nd|rd|th)\b")).first
-    chip.click()
-    page.wait_for_selector(".rdrMonthPicker select", timeout=SEL_TIMEOUT)
+    """Open the date popover, tolerating a chip click that lands while the page is
+    still settling. Escape can leave the popover in a state where one click only
+    re-focuses it, so a second click is attempted before giving up."""
+    for attempt in (1, 2):
+        try:
+            _chip(page).click()
+            page.wait_for_selector(".rdrMonthPicker select", timeout=10000)
+            return
+        except Exception:
+            if attempt == 2:
+                raise
+            page.wait_for_timeout(1500)
+
+
+def _shown_month(page):
+    """(year, month_index_0_based) currently displayed, read from the picker's own
+    selects, or None if the picker is not open."""
+    st = page.evaluate(
+        """() => {
+            const m = document.querySelector('.rdrMonthPicker select');
+            const y = document.querySelector('.rdrYearPicker select');
+            return (m && y) ? {m: parseInt(m.value, 10), y: parseInt(y.value, 10)} : null;
+        }""")
+    return (st["y"], st["m"]) if st else None
+
+
+def _goto_month(page, year, month0, max_clicks=36):
+    """Bring the calendar to (year, month0) using its own next/previous ARROWS.
+
+    Not the month <select>: Playwright's select_option changes the element's value
+    without React noticing, so the grid keeps showing the old month and a day click
+    lands on the wrong date (that is how 27 Jul to 2 Aug became 2 Jul to 27 Jul,
+    4 Aug 2026).
+
+    Every press is verified to have moved the grid, and a press that does NOT move
+    it is simply retried by the loop rather than treated as fatal: immediately after
+    a day click React is re-rendering and swallows the next click, which is a normal
+    race, not a broken page. The picker also opens on the current month and cannot
+    navigate into the future, so the next arrow is legitimately inert there."""
+    target = (year, month0)
+    for _ in range(max_clicks):
+        here = _shown_month(page)
+        if here is None:
+            raise RuntimeError("date picker is not open")
+        if here == target:
+            return
+        forward = (target[0] * 12 + target[1]) > (here[0] * 12 + here[1])
+        page.click(".rdrNextButton" if forward else ".rdrPprevButton")
+        for _ in range(10):                      # up to 2s for the grid to move
+            page.wait_for_timeout(200)
+            if _shown_month(page) != here:
+                break
+    raise RuntimeError(f"calendar would not reach {target} (stuck at {_shown_month(page)})")
 
 
 def _click_day(page, d):
-    """Click one calendar day: month via the native <select> (value = month-1),
-    then the day cell, skipping the grayed adjacent-month cells."""
-    page.select_option(".rdrMonthPicker select", value=str(d.month - 1))
-    year_opts = page.eval_on_selector_all(".rdrYearPicker select option",
-                                          "els => els.map(e => e.value)")
-    if str(d.year) not in year_opts:
-        raise RuntimeError(f"year {d.year} not offered by the date picker ({year_opts})")
-    page.select_option(".rdrYearPicker select", value=str(d.year))
+    """Put the calendar on the right month, then click that day. Day cells carry no
+    date attribute, so the displayed month MUST be correct before the click."""
+    _goto_month(page, d.year, d.month - 1)
     page.wait_for_timeout(400)
-    cell = page.locator(f"button.rdrDay:not(.rdrDayPassive)",
+    cell = page.locator("button.rdrDay:not(.rdrDayPassive)",
                         has=page.locator(f"span:text-is('{d.day}')")).first
     cell.click()
-    page.wait_for_timeout(400)
+    # Generous settle: the day click re-renders the whole picker, and the next
+    # action (another arrow press) is otherwise swallowed mid-render.
+    page.wait_for_timeout(1500)
 
 
-def _set_range(page, from_date, to_date):
-    """Set the range: first click = range start, second = range end. Verified live:
-    the two readonly inputs inside the picker echo the chosen dates."""
-    _open_picker(page)
-    _click_day(page, from_date)
-    _click_day(page, to_date)
+def _picker_values(page):
+    """The two readonly inputs inside the picker echo the chosen range, e.g.
+    ['Jul 27, 2026', 'Aug 2, 2026']. Returns them parsed, or []."""
     vals = page.eval_on_selector_all(
-        ".rdrDateDisplay input, input[readonly]",
+        ".rdrCalendarWrapper input[readonly], .rdrDateDisplay input, input[readonly]",
         "els => els.map(e => e.value).filter(Boolean)")
-    print(f"date range set to {from_date}..{to_date} (picker shows {vals[:2]})")
-    want = {from_date.strftime("%b %-d, %Y"), to_date.strftime("%b %-d, %Y")}
-    if vals and not want & set(vals):
-        raise RuntimeError(f"picker did not take the range: shows {vals[:2]}, wanted {want}")
+    out = []
+    for v in vals[:2]:
+        try:
+            out.append(dt.datetime.strptime(v.strip(), "%b %d, %Y").date())
+        except ValueError:
+            pass
+    return out
+
+
+def _set_range(page, from_date, to_date, attempts=3):
+    """Set the range and PROVE it took, reading the picker's own inputs back.
+
+    The read-back is exact and mandatory: an unnoticed wrong range would quietly
+    ingest the wrong days, which is worse than a failed pull. react-date-range
+    also normalises a range so start <= end, so a mis-click can look plausible."""
+    last = None
+    for attempt in range(1, attempts + 1):
+        _open_picker(page)
+        _click_day(page, from_date)
+        _click_day(page, to_date)
+        got = _picker_values(page)
+        last = got
+        if got and sorted(got)[0] == from_date and sorted(got)[-1] == to_date:
+            print(f"date range set to {from_date}..{to_date} (picker confirms {got})")
+            break
+        print(f"date range attempt {attempt}/{attempts} landed on {got}, "
+              f"wanted {from_date}..{to_date}; retrying from a clean page")
+        # Reload rather than Escape-and-reopen: a half-set range is sticky, and a
+        # fresh page is the only state we can reason about.
+        page.goto(ORDER_HISTORY_URL, wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+        if not _wait_for_order_history(page):
+            raise RuntimeError("order history did not reload for the range retry")
+    else:
+        raise RuntimeError(
+            f"could not set the date range: picker settled on {last}, "
+            f"wanted {from_date}..{to_date}")
     page.keyboard.press("Escape")
-    page.locator("text=Order History").first.click(timeout=5000)   # close the popover
+    try:
+        # Dismiss the popover by clicking the page heading. Escape alone sometimes
+        # leaves it open, and clicking a random point risks hitting a control.
+        page.get_by_text("Order History", exact=True).last.click(timeout=5000)
+    except Exception:
+        pass
     page.wait_for_timeout(500)
 
 
@@ -257,8 +377,16 @@ def _trigger_export(page, export, dest_dir, prefix):
     """Open Download data -> the chosen export -> Download now, then wait for the
     browser download event. Raises ExportNotReady on the failure toast/timeout."""
     label = EXPORTS[export]
-    page.get_by_text("Download data", exact=True).first.click()
-    page.get_by_text(label, exact=True).first.click(timeout=SEL_TIMEOUT)
+    # .last, never .first: each label sits inside several nested wrapper divs and
+    # get_by_text matches every one of them. .first is the OUTERMOST wrapper, whose
+    # centre is not over the control, so the click silently does nothing and the run
+    # then waits out the full download timeout for a job it never started (4 Aug
+    # 2026: the page sat idle with the range correctly set). .last is the innermost
+    # element, the one a user actually clicks. Verified live end to end.
+    page.get_by_text("Download data", exact=True).last.click()
+    page.wait_for_timeout(1200)
+    page.get_by_text(label, exact=True).last.click(timeout=SEL_TIMEOUT)
+    page.wait_for_timeout(1500)
     print(f"{export}: confirming, then waiting for the file "
           f"(up to {DOWNLOAD_TIMEOUT_MS // 60000} min)...")
     try:
@@ -266,20 +394,36 @@ def _trigger_export(page, export, dest_dir, prefix):
         # fires minutes later when the file is ready, so the click sits INSIDE the
         # expect_download window.
         with page.expect_download(timeout=DOWNLOAD_TIMEOUT_MS) as di:
-            page.get_by_text("Download now", exact=True).first.click(timeout=SEL_TIMEOUT)
+            page.get_by_text("Download now", exact=True).last.click(timeout=SEL_TIMEOUT)
         dl = di.value
     except Exception:
-        failed = False
+        # Distinguish the three ways this ends, instead of calling everything a
+        # timeout: Zomato's own failure toast, a still-running job, or our own
+        # click never landing. A screenshot is kept for the last case.
+        state = []
+        for marker in ("Download failed", "Download in progress", "Download now",
+                       "Something went wrong"):
+            try:
+                if page.get_by_text(marker, exact=False).first.is_visible(timeout=1500):
+                    state.append(marker)
+            except Exception:
+                pass
+        shot = os.path.join(dest_dir, f"{prefix}_failure.png")
         try:
-            failed = page.get_by_text("Download failed", exact=False) \
-                         .first.is_visible(timeout=2000)
+            page.screenshot(path=shot)
         except Exception:
-            pass
-        if failed:
+            shot = "(screenshot failed)"
+        if "Download failed" in state or "Something went wrong" in state:
             raise ExportNotReady(
                 f"{export}: Zomato reported 'Download failed' (data likely not "
                 f"materialised yet for the newest day in the range, F16)")
-        raise ExportNotReady(f"{export}: no file within the timeout")
+        if "Download now" in state:
+            raise ExportNotReady(
+                f"{export}: the confirmation modal was still showing, so the job "
+                f"never started (see {shot})")
+        raise ExportNotReady(
+            f"{export}: no file within the timeout; page showed {state or 'nothing'} "
+            f"(see {shot})")
     path = os.path.join(dest_dir, f"{prefix}_{dl.suggested_filename}")
     dl.save_as(path)
     print(f"downloaded {path}")
@@ -291,16 +435,24 @@ def _fetch_once(export, from_date, to_date):
     os.makedirs(dest, exist_ok=True)
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
+        # No --disable-http2 here: it was tried against the headless rejection and
+        # made things worse (an instant protocol error became a 60s hang). A plain
+        # headed launch is what the site accepts.
         browser = p.chromium.launch(headless=_is_headless())
         context = _open_context(browser)
         try:
             page = context.new_page()
             page.goto(ORDER_HISTORY_URL, wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
-            page.wait_for_timeout(4000)          # the SPA hydrates after domcontentloaded
-            if not _logged_in(page):
+            # Wait for the control we are about to drive, not for a fixed number of
+            # seconds: the SPA is still a skeleton at domcontentloaded.
+            if not _wait_for_order_history(page):
+                if not _logged_in(page):
+                    raise RuntimeError(
+                        "Zomato partner session is missing or expired. Run "
+                        "`python3 scrape.py bootstrap` from the Mac and log in by hand.")
                 raise RuntimeError(
-                    "Zomato partner session is missing or expired. Run "
-                    "`python3 scrape.py bootstrap` from the Mac and log in by hand.")
+                    "logged in, but the order-history date control never rendered "
+                    "within 60s (page slow or its layout changed)")
             _set_range(page, from_date, to_date)
             prefix = f"{export}_{from_date:%Y%m%d}_{to_date:%Y%m%d}"
             path = _trigger_export(page, export, dest, prefix)
