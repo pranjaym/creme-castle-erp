@@ -157,21 +157,36 @@ def have_session():
 
 
 def _is_headless():
-    """Default HEADED, unlike the Petpooja worker.
+    """Headless by default, like the Petpooja worker: no window ever appears.
+    Only viable because the engine is Firefox (see _engine)."""
+    return env("ZOMATO_HEADLESS", "1") not in ("0", "false", "False", "")
 
-    Measured 4 Aug 2026 against the live site: every headless variant (plain, real
-    user agent, --headless=new, --disable-blink-features=AutomationControlled) was
-    refused in under a second with net::ERR_HTTP2_PROTOCOL_ERROR, before any page
-    code ran, while the same session in a headed browser loaded normally. Zomato's
-    edge rejects the headless browser signature. We do not try to disguise it; the
-    job simply runs a real browser window.
 
-    Consequence for scheduling: the 18:00 slots open a visible Chromium window for
-    a few minutes and close it. That needs a logged-in GUI session on the Mac, the
-    same condition the morning dashboard already depends on (F14).
+def _engine(p):
+    """Pick the Playwright engine. FIREFOX by default, and that choice is the whole
+    reason this worker can run invisibly.
 
-    ZOMATO_HEADLESS=1 forces headless again, for the day their edge stops caring."""
-    return env("ZOMATO_HEADLESS", "0") not in ("0", "false", "False", "")
+    Measured against the live site, 4 Aug 2026:
+      chromium headless             net::ERR_HTTP2_PROTOCOL_ERROR in under a second
+      chromium headless + real UA   same
+      chromium --headless=new       same
+      real Google Chrome headless   same
+      chromium headed               works, but the window CANNOT be hidden: macOS
+                                    clamps --window-position back on screen, and
+                                    AppleScript cannot minimise the automation app
+      FIREFOX headless              works; full download flow verified end to end
+      webkit  headless              works too (documented fallback)
+
+    So the refusal is specific to the Chrome-family headless fingerprint, not to
+    automation as such. Nothing here disguises the browser: we simply drive an
+    engine the site serves. The saved session is plain cookies, so it carries
+    across engines without a new login.
+
+    ZOMATO_BROWSER=firefox|webkit|chromium overrides."""
+    name = env("ZOMATO_BROWSER", "firefox")
+    if name not in ("firefox", "webkit", "chromium"):
+        raise ValueError(f"unknown ZOMATO_BROWSER '{name}'")
+    return getattr(p, name)
 
 
 def _open_context(browser):
@@ -430,15 +445,17 @@ def _trigger_export(page, export, dest_dir, prefix):
     return path
 
 
-def _fetch_once(export, from_date, to_date):
+def _fetch_once(exports, from_date, to_date):
+    """Download one or more exports for the window in a SINGLE browser session.
+
+    `exports` is a list; the page is loaded and the date range set once, then each
+    export is triggered in turn. One session per evening rather than one per
+    export: half the browser launches, and no repeated page loads."""
     dest = env("ZOMATO_DOWNLOAD_DIR", tempfile.gettempdir())
     os.makedirs(dest, exist_ok=True)
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
-        # No --disable-http2 here: it was tried against the headless rejection and
-        # made things worse (an instant protocol error became a 60s hang). A plain
-        # headed launch is what the site accepts.
-        browser = p.chromium.launch(headless=_is_headless())
+        browser = _engine(p).launch(headless=_is_headless())
         context = _open_context(browser)
         try:
             page = context.new_page()
@@ -454,12 +471,28 @@ def _fetch_once(export, from_date, to_date):
                     "logged in, but the order-history date control never rendered "
                     "within 60s (page slow or its layout changed)")
             _set_range(page, from_date, to_date)
-            prefix = f"{export}_{from_date:%Y%m%d}_{to_date:%Y%m%d}"
-            path = _trigger_export(page, export, dest, prefix)
+            # Zomato refuses a range over 10 days when more than 10 outlets are
+            # mapped (we have 45). It says so on the page and simply never starts
+            # the export, which would otherwise look like a 12 minute timeout.
+            try:
+                if page.get_by_text("date range exceeding", exact=False) \
+                       .first.is_visible(timeout=3000):
+                    raise RuntimeError(
+                        f"Zomato refused the {(to_date - from_date).days + 1}-day "
+                        f"range: with more than 10 outlets the limit is 10 days. "
+                        f"Ask for a shorter window, or walk it in chunks.")
+            except RuntimeError:
+                raise
+            except Exception:
+                pass
+            out = {}
+            for export in exports:
+                prefix = f"{export}_{from_date:%Y%m%d}_{to_date:%Y%m%d}"
+                out[export] = _trigger_export(page, export, dest, prefix)
             # Persist any refreshed cookies so the session's lifetime keeps sliding.
             context.storage_state(path=session_file())
             push_session()
-            return path
+            return out
         finally:
             try:
                 browser.close()
@@ -467,19 +500,21 @@ def _fetch_once(export, from_date, to_date):
                 pass
 
 
-def scrape_and_download(export, from_date, to_date, max_retries=0, retry_wait_s=60):
-    """Entry point. export in ('order_history', 'customer_details'); dates are
-    datetime.date. Retries only transient errors; ExportNotReady is passed through
-    immediately (the caller owns the wait-hours-and-retry policy, F16)."""
-    if export not in EXPORTS:
-        raise ValueError(f"unknown export '{export}'")
+def scrape_exports(exports, from_date, to_date, max_retries=0, retry_wait_s=60):
+    """Download several exports for one window in ONE browser session.
+
+    Returns {export: path}. Retries only transient errors; ExportNotReady passes
+    straight through (the caller owns the wait-hours-and-retry policy, F16)."""
+    for e in exports:
+        if e not in EXPORTS:
+            raise ValueError(f"unknown export '{e}'")
     pull_session()
     last = None
     for attempt in range(1, max_retries + 2):
         try:
-            print(f"zomato {export} [{from_date}..{to_date}]: "
+            print(f"zomato {'+'.join(exports)} [{from_date}..{to_date}]: "
                   f"attempt {attempt}/{max_retries + 1}")
-            return _fetch_once(export, from_date, to_date)
+            return _fetch_once(exports, from_date, to_date)
         except ExportNotReady:
             raise
         except Exception as e:
@@ -487,6 +522,11 @@ def scrape_and_download(export, from_date, to_date, max_retries=0, retry_wait_s=
             print(f"attempt {attempt} failed: {type(e).__name__}: {str(e)[:160]}")
             time.sleep(retry_wait_s)
     raise SystemExit(f"zomato scrape failed after retries: {last}")
+
+
+def scrape_and_download(export, from_date, to_date, max_retries=0, retry_wait_s=60):
+    """Single-export convenience wrapper, kept for ad hoc runs and backfills."""
+    return scrape_exports([export], from_date, to_date, max_retries, retry_wait_s)[export]
 
 
 def bootstrap(timeout_s=600, poll_s=3):
@@ -498,6 +538,9 @@ def bootstrap(timeout_s=600, poll_s=3):
     pull_session()
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
+        # Bootstrap is the ONE headed step, and it uses Chromium on purpose: the
+        # login screen is a human's browser, and Chromium headed is what a person
+        # recognises. The cookies it saves work in Firefox for the headless runs.
         browser = p.chromium.launch(headless=False)
         context = _open_context(browser)
         page = context.new_page()

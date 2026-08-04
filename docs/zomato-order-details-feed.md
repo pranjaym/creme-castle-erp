@@ -64,9 +64,23 @@ The automated 30 Jul CSV was compared field-by-field against the 30 Jul rows of 
 
 Pranjay's 12:44 "Customer details" download (July range) produced `order_history_20260701_20260731.zip`, same 30 columns, which is why it looked like the order history file. It is actually the SUBSET of orders where Zomato shares the customer's real phone number: 1,158 rows for all of July (vs 2,368 orders on 30 Jul alone), every row with Customer Phone filled, only Delivered and Rejected statuses. So: same schema, filter = has real phone. It needs no separate table; it feeds the same `zomato_order_details` rows, upgrading hashed identity to a real phone for the small slice that has one, and is the bridge from Zomato customers to a future customer master (join on phone with OMS `customer_mobile`).
 
-## 4d. Browser constraints found on the first real automated run (4 Aug 2026)
+## 4d. Browser constraints found on the first real automated runs (4 Aug 2026)
 
-- **Headless is refused.** Four variants (plain, real user agent, `--headless=new`, `--disable-blink-features=AutomationControlled`) were all rejected in under a second with `net::ERR_HTTP2_PROTOCOL_ERROR`, before any page code ran, while the same saved session in a headed browser loaded normally. `--disable-http2` made it worse (an instant error became a 60s hang). We do not attempt to disguise the browser; the worker runs headed by default (`ZOMATO_HEADLESS=1` overrides, for the day their edge stops caring).
+- **The worker runs FIREFOX HEADLESS: no window ever appears.** The refusal is specific to the Chrome-family headless fingerprint, not to automation, so nothing is disguised; we simply drive an engine the site serves. Measured against the live site:
+
+  | engine / mode | result |
+  |---|---|
+  | chromium headless (plain, real UA, `--headless=new`) | `ERR_HTTP2_PROTOCOL_ERROR` in under 1s |
+  | real Google Chrome headless | same |
+  | chromium headed | works, but the window CANNOT be hidden (see below) |
+  | **firefox headless** | **works; full download flow verified** |
+  | webkit headless | works (documented fallback) |
+
+  `--disable-http2` made the Chrome case worse (instant error became a 60s hang). `ZOMATO_BROWSER=firefox|webkit|chromium` overrides.
+- **A visible window could not be hidden on macOS**, which is why the engine change mattered: macOS clamps any `--window-position` back on screen (asking for -3000,-3000 still landed at 221,33), and AppleScript cannot minimise or hide the automation browser (it is not scriptable under its own name). Off-screen and minimise were both dead ends.
+- **The one-time bootstrap login stays headed Chromium**, because that step is a human logging in. Its saved cookies work in Firefox, so no second login is ever needed.
+- **Both exports run in ONE browser session** (page loaded once, range set once), rather than a session per export.
+- **HARD PLATFORM LIMIT: 10 days per export.** With more than 10 outlets mapped (we have 45), Zomato refuses any longer range: the page says "You have selected more than 10 outlets and a date range exceeding 10 days" and the export never starts, which reads exactly like a timeout. A 14-day sweep hit this. Windows are clamped to 10 in code and the scraper now recognises the message and fails fast with the real reason. Anything wider must be walked in chunks. (This also means the 7-month manual export Pranjay supplied is NOT reproducible through this page's normal flow at that size.)
 - **The page is a React SPA behind an API call**: `domcontentloaded` fires while it is still a skeleton, so every wait is on an actual element with a generous budget, never a fixed sleep.
 - **The date picker (react-date-range) must be driven like a user.** Its month `<select>` can be set without React noticing, leaving the grid on the old month while day cells (which carry no date attribute) sit under the wrong dates. Navigation uses the picker's own arrows, verified to move after each press. The picker opens on the current month and cannot go into the future, so the "next" arrow is legitimately inert there.
 - **The chosen range is read back from the picker's own fields and must match exactly**, else the pull fails rather than proceeds. This is the guard against the worst outcome: silently ingesting the wrong days.
@@ -87,9 +101,9 @@ Import traps already known from the historical backfill apply here too: pandas d
 
 **The pull does NOT join the 8 am run for yesterday's data.** Pranjay's call, confirmed by the test: yesterday is not ready in the morning (still failing at 13:30). Design:
 
-- **Primary slot: evening, first attempt 18:00 IST, ONE range export covering the last 7 days ending yesterday** (Order history, plus the Customer details variant for the same range), all outlets in one download (~16k rows; ranges are proven by the 7-month manual export). On failure retry at 20:00 and 22:00. Each slot: bounded poll up to ~10 minutes. If all three fail, alert and stop; the next evening's window covers the gap. The first two weeks of logs double as an availability probe: which slot actually succeeds tells us Zomato's readiness boundary.
+- **Primary slot: evening, first attempt 18:00 IST, covering the last 3 days ending yesterday** (Order history and Customer details, both all-outlets, both in ONE browser session that loads the page and sets the range once). On failure retry at 18:20, 20:00 and 22:00. Each slot: bounded poll up to ~12 minutes per export. If all fail, alert and stop; the next evening's window covers the gap. Every Monday the window widens to 10 days (see below).
 - **Safety net inside the existing 8 am run: same range export ending day-before-yesterday** (data certain to be ready) ONLY if the previous evening's pull did not complete. Keeps the spine's worst-case staleness at D+2 even when evenings fail.
-- **Trailing supersede window: 7 days, and the first real measurement says KEEP it at 7 (4 Aug 2026).** Every pull supersedes changed rows and keeps the superseded values, so each order retains its full revision history. The first production-shape pull (run 138, window 27 Jul to 2 Aug) measured how much each day still moved:
+- **Trailing supersede window: 3 days daily, 10 days every Monday (final, 4 Aug 2026).** Every pull supersedes changed rows and keeps the superseded values, so each order retains its full revision history. Getting to that number took three measurements, and the first two were misleading. First (run 138, window 27 Jul to 2 Aug):
 
   | order date | age (days) | rows changed | % of that day |
   |---|---|---|---|
@@ -117,7 +131,17 @@ Import traps already known from the historical backfill apply here too: pandas d
 
   So the earlier 20% was almost entirely **export-shape noise**, not late mutation: run 138 compared CSV pulls against the xlsx backfill, run 140 compared CSV against CSV and found nothing moving on days 2 to 7. This is the same family of artefact as F19 (KPT), and it is exactly why the daily job pins one export shape.
 
-  **Pranjay's 3-day instinct now looks right, but the window stays at 7 until a week of evening-to-evening pulls says so.** Run 140 sat only ~2 hours after run 138, which is far too short to prove a day never changes again; ratings, complaints and refunds arrive over days. The change log answers this properly after a week of 24-hour-apart pulls, at zero cost in the meantime (a 7-day window is one export either way).
+  **Decided 4 Aug 2026 (Pranjay's call): the daily window is 3 days.** A third measurement settled it. Run 146 re-read 10 days and found 1,023 changes, but every one of them fell on 25 and 26 Jul, the only two days still holding original xlsx-backfill rows. Every day already pulled in the same CSV shape (ages 1 to 8) showed exactly zero changes:
+
+  | order date | age | changed | note |
+  |---|---|---|---|
+  | 25 Jul | 10 | 531 | still xlsx-backfill rows |
+  | 26 Jul | 9 | 492 | still xlsx-backfill rows |
+  | 27 Jul to 3 Aug | 8 down to 1 | **0** | already pulled in CSV shape |
+
+  So export-shape noise accounts for ALL of the apparent late mutation seen so far, and nothing genuine has yet been observed moving after the order day.
+
+  **Two guards remain, because the evidence is still hours-apart, not days-apart.** Ratings, complaints and refunds genuinely do arrive over days, and no pull yet has compared the same day 24 hours apart. So: (a) a **weekly sweep** every Monday widens the window to 10 days (the platform maximum), so a late correction on day 4 or later still reaches the spine and the change log can keep measuring what a 3-day window cannot see; (b) the change log keeps accumulating, and if genuine day-4-plus changes appear the daily window goes back up. `--no-weekly-sweep` disables the sweep; `DAILY_WINDOW_DAYS` sets the daily window.
 - **Always the same export shape.** The F19 comparison showed KPT differing between a range export and a single-day export of the same old day, so the daily job uses one consistent shape (the range export) to keep any per-shape bias constant. KPT acceptance rule once F19 is resolved: a KPT value is trusted when it is identical across two consecutive pulls.
 - Mechanics per pull: Playwright with the persisted Chrome-profile session (login manual, once; the job never touches credentials or OTPs), set single-day range, download, unzip, parse CSV (accept xlsx fallback), keep the raw zip as the immutable receipt, load to spine via the ap-south-1 pooler, dtype=str on IDs, strip 0x14 from phones, never diff on raw "Items in order" string order.
 - F14 realities (laptop awake, AC power) apply to the evening slots exactly as they do to the 8 am run, until the always-on host exists. Evening slots have one advantage: the Mac is more likely to be in active use.
