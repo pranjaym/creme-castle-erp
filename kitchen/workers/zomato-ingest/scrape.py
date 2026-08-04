@@ -58,6 +58,30 @@ class ExportNotReady(Exception):
     retry later, do not treat as a code or session problem."""
 
 
+def _load_env_file():
+    """Load dashboard/auto/.env (the repo's one secrets file) so this module works
+    when run DIRECTLY (`python3 scrape.py bootstrap`), not only when imported by
+    run_evening.py. Without this the bootstrap has no SPINE_SUPABASE_* creds, so
+    the session is never pushed to Storage and the evening runs cannot find it:
+    exactly the 4 Aug 2026 failure where a successful login still left every slot
+    deferring with 'no session bootstrapped yet'. Existing env wins."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    repo = os.path.dirname(os.path.dirname(os.path.dirname(here)))
+    path = os.path.join(repo, "dashboard", "auto", ".env")
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+
+_load_env_file()
+
+
 def env(k, default=None, required=False):
     v = os.environ.get(k, default)
     if required and not v:
@@ -65,9 +89,19 @@ def env(k, default=None, required=False):
     return v
 
 
+# Durable, predictable home for the saved session. NOT the system temp dir: on
+# macOS that is a per-boot, per-context path ($TMPDIR under /var/folders) which
+# differs between a terminal and a launchd agent and is swept periodically, so a
+# session saved by an interactive bootstrap could be invisible to the scheduled
+# run minutes later. Supabase Storage remains the source of truth; this is the
+# local cache.
+SESSION_DIR = os.environ.get(
+    "ZOMATO_SESSION_DIR", os.path.expanduser("~/.creme-castle"))
+
+
 def session_file():
-    return os.path.join(env("ZOMATO_DOWNLOAD_DIR", tempfile.gettempdir()),
-                        "zomato_session.json")
+    os.makedirs(SESSION_DIR, exist_ok=True)
+    return os.path.join(SESSION_DIR, "zomato_session.json")
 
 
 def _session_object_url():
@@ -318,9 +352,19 @@ def bootstrap(timeout_s=600, poll_s=3):
                 raise SystemExit("login not detected within the time limit; re-run to retry.")
             print("login detected.")
         context.storage_state(path=session_file())
-        push_session()
+        pushed = push_session()
         browser.close()
-    print("bootstrap complete: zomato session saved and pushed.")
+    # Say plainly whether the DURABLE copy exists. The local file alone is not
+    # enough for the scheduled runs to be sure of finding it, so a failed push is
+    # reported as a problem to fix, never as success (4 Aug 2026 lesson).
+    print(f"session saved locally: {session_file()}")
+    if pushed:
+        print("bootstrap complete: session saved AND pushed to Supabase Storage. "
+              "The evening pulls can now run headless.")
+    else:
+        print("WARNING: the session was saved locally but NOT pushed to Supabase "
+              "Storage (SPINE_SUPABASE_URL / SPINE_SUPABASE_SERVICE_ROLE_KEY "
+              "missing or rejected). Scheduled runs may not find it.")
 
 
 if __name__ == "__main__":
