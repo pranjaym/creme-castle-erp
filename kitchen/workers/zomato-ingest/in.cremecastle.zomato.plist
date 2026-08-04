@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>in.cremecastle.zomato</string>
+    <!-- LOCAL checkout on purpose: launchd cannot execute from iCloud Drive
+         (same lesson as in.cremecastle.dashboard). -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/Pranjay/creme-castle-erp/kitchen/workers/zomato-ingest/run_zomato.sh</string>
+    </array>
+    <!-- Evening slots, not morning: Zomato has not materialised yesterday's data in
+         the morning (verified 4 Aug 2026: still failing at 13:30 IST; see F16 in
+         erp-plan/integration-notes.md). 18:00 first try, a quick 18:20 retry for
+         transient errors, then 20:00 and 22:00 as the data-lag ladder. The wrapper
+         exits 75 (defer, no stamp, no alert) when Zomato's report job is not ready,
+         so unused later slots stay free; a fully failed evening is covered by the
+         D-2 catch-up inside the 8 am dashboard run. The first two weeks of run.log
+         double as the availability probe that locates Zomato's readiness boundary. -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>18</integer><key>Minute</key><integer>20</integer></dict>
+        <dict><key>Hour</key><integer>20</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Hour</key><integer>22</integer><key>Minute</key><integer>0</integer></dict>
+    </array>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/Pranjay/creme-castle-erp/kitchen/workers/zomato-ingest/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/Pranjay/creme-castle-erp/kitchen/workers/zomato-ingest/launchd.log</string>
+</dict>
+</plist>

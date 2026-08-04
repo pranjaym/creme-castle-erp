@@ -282,6 +282,36 @@ def alert_spine_failure(errors):
         print(f"spine failure alert could not be sent: {type(e).__name__}: {str(e)[:160]}")
 
 
+def zomato_catchup():
+    """If last evening's Zomato pull never succeeded, pull a 7-day window ending
+    DAY-BEFORE-YESTERDAY (whose data is certain to be materialised; yesterday's is
+    not ready in the morning, F16). Keeps the spine's worst-case Zomato staleness
+    at D+2 when evenings fail. See erp-plan/zomato-order-details-feed.md section 6.
+
+    Runs as a SUBPROCESS on purpose: this file imports the Petpooja worker's
+    `scrape`/`ingest` modules by path, and the Zomato worker has modules of the
+    same names, so importing both in one interpreter would collide. Best effort:
+    never blocks or fails the dashboard; run_evening.py sends its own owner alert
+    on a real failure and exits 75 quietly when there is nothing it can do."""
+    zdir = os.path.join(REPO_ROOT, "kitchen", "workers", "zomato-ingest")
+    stamp = os.path.join(zdir, ".last_success")
+    yesterday = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+    try:
+        if os.path.exists(stamp) and open(stamp).read().strip() == yesterday:
+            return
+        if not os.path.isdir(zdir):
+            return
+        import subprocess
+        end = (dt.date.today() - dt.timedelta(days=2)).isoformat()
+        print(f"\n[zomato] last evening's pull missing; D-2 catch-up (window ending {end}) ...")
+        r = subprocess.run([sys.executable, "run_evening.py", "--end", end],
+                           cwd=zdir, timeout=2400)
+        print(f"[zomato] catch-up exit {r.returncode} "
+              f"(0 loaded, 75 deferred quietly, else alerted by run_evening itself)")
+    except Exception as e:
+        print(f"[zomato] catch-up skipped: {type(e).__name__}: {str(e)[:160]}")
+
+
 def build_dashboard():
     """Run the existing dashboard against the history parquet. Returns (html_path,
     focal_date) where focal_date is the day the dashboard is FOR (the last complete
@@ -443,6 +473,10 @@ def main():
     # or die with, the alert path.
     if spine_errors:
         alert_spine_failure(spine_errors)
+    # Zomato D-2 catch-up, also after the deliverables: it exists for the mornings
+    # after a failed evening pull and must never delay or break the dashboard.
+    if not args.no_scrape and not args.no_spine:
+        zomato_catchup()
     if cloud:
         hist.push_history()
     print("\ndone.")
