@@ -25,6 +25,13 @@ __pycache__/
 .venv/
 venv/
 
+# Per-machine scheduler state, never shared between checkouts: which evening last
+# succeeded, which evening last alerted, and the single-run lock. Same rule as
+# dashboard/auto/.gitignore. .last_alert was tracked by mistake until 13 Aug 2026.
+.last_success
+.last_alert
+.run.lock/
+
 # OS
 .DS_Store
 .vercel

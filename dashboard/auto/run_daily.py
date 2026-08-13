@@ -191,10 +191,9 @@ def load_sub_order_wise():
                       f"{SUB_ORDER_LOOKBACK_DAYS} day(s) already present.")
                 return "sub-order summary: nothing missing", None
             loaded, failed = [], []
-            for day in missing:
+            for i, day in enumerate(missing):
                 # scrape_and_download raises SystemExit (not Exception) when it gives
-                # up, hence the two-class except; rollback because load_records only
-                # commits on success and a dead transaction would poison the next day.
+                # up, hence the two-class except.
                 try:
                     print(f"\n[spine] sub-order wise for {day} ...")
                     path = scrape.scrape_and_download("sub_order_wise", from_date=day,
@@ -204,10 +203,35 @@ def load_sub_order_wise():
                     ingest.load_records("sub_order_wise", records, skipped, conn, receipt)
                     loaded.append(f"{day} ({len(records)} rows)")
                 except (Exception, SystemExit) as e:
-                    conn.rollback()
                     print(f"sub-order load FAILED for {day} (dashboard unaffected): "
                           f"{type(e).__name__}: {str(e)[:200]}")
                     failed.append(f"{day} ({type(e).__name__})")
+                    # Roll back because load_records only commits on success and a dead
+                    # transaction would poison the next day. 13 August 2026 (F20): when
+                    # the cause is the network going away mid-run, the connection is
+                    # already dead and the rollback ITSELF raises. Unguarded, that
+                    # escaped this handler into the outer one, which abandoned the
+                    # remaining days, threw away the record of the days that HAD loaded,
+                    # and alerted "failed before any day could load" (false, and it
+                    # points the reader at the wrong recovery command). So: roll back if
+                    # we can, reconnect if we cannot, and only give up if the reconnect
+                    # also fails, in which case say plainly which days were never tried.
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                        try:
+                            conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+                            print("spine connection was dead; reconnected.")
+                        except Exception as ce:
+                            print(f"spine reconnect FAILED, abandoning the remaining "
+                                  f"day(s): {type(ce).__name__}: {str(ce)[:200]}")
+                            failed.extend(f"{d} (not attempted, spine unreachable)"
+                                          for d in missing[i + 1:])
+                            break
             summary = f"sub-order summary loaded: {', '.join(loaded) if loaded else 'none'}"
             error = ("sub-order load failed for " + ", ".join(failed)) if failed else None
             return summary, error
