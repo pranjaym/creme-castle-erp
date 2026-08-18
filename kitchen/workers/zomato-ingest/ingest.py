@@ -35,6 +35,7 @@ import io
 import os
 import re
 import sys
+import time
 import zipfile
 
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
@@ -173,9 +174,37 @@ def parse_export(path):
     return [by_id[o] for o in order], skipped, dupes
 
 
-def store_receipt(path):
-    """Upload the raw export to Storage as an immutable receipt (sha256 named)."""
+def _pin_to_ipv4():
+    """Force outbound HTTP to IPv4.
+
+    F22, 17 Aug 2026: the customer_details receipt upload died with OSError 49
+    (EADDRNOTAVAIL) one second after the order_history upload had succeeded over
+    the same host. This network answers with NAT64 addresses (64:ff9b::/96), so
+    Supabase is reached over IPv6, and the moment the Mac has no usable IPv6
+    source address connect() cannot even start. Supabase Storage sits behind
+    Cloudflare and always publishes A records, so IPv4 is the safe path. Same
+    family of trouble as F15 (direct db host IPv6-only, hence the pooler).
+    Off switch: CC_FORCE_IPV4=0 restores the default dual-stack behaviour.
+    """
+    if os.environ.get("CC_FORCE_IPV4", "1") == "0":
+        return
+    try:
+        import urllib3.util.connection as urllib3_conn
+        urllib3_conn.HAS_IPV6 = False
+    except Exception:
+        pass          # never let a hardening tweak be the thing that fails
+
+
+def store_receipt(path, max_retries=3, retry_wait_s=10):
+    """Upload the raw export to Storage as an immutable receipt (sha256 named).
+
+    Retried and timed out, because this used to be the one network call in the
+    worker with a single attempt and no deadline: the scraper retries twice and
+    the wrapper has a network gate, but a one-second flap here lost a whole
+    export (F22), and with no timeout a stalled upload could hang the slot.
+    """
     import requests
+    _pin_to_ipv4()
     with open(path, "rb") as f:
         blob = f.read()
     sha = hashlib.sha256(blob).hexdigest()
@@ -183,11 +212,24 @@ def store_receipt(path):
     storage_path = f"{dt.date.today()}/{sha}-{os.path.basename(path)}"
     url = f"{env('SPINE_SUPABASE_URL')}/storage/v1/object/{bucket}/{storage_path}"
     key = env("SPINE_SUPABASE_SERVICE_ROLE_KEY")
-    resp = requests.post(url, data=blob, headers={
+    headers = {
         "Authorization": f"Bearer {key}", "apikey": key,
         "Content-Type": "application/octet-stream", "x-upsert": "true",
-    })
-    resp.raise_for_status()
+    }
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.post(url, data=blob, headers=headers, timeout=(10, 180))
+            resp.raise_for_status()
+            break
+        except requests.exceptions.RequestException as e:
+            # A 4xx is a real problem (wrong key, missing bucket) and retrying it
+            # only delays the alert; transport failures and 5xx deserve another go.
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if attempt == max_retries or (status is not None and status < 500):
+                raise
+            print(f"receipt upload attempt {attempt}/{max_retries} failed "
+                  f"({type(e).__name__}: {str(e)[:120]}); retrying in {retry_wait_s}s")
+            time.sleep(retry_wait_s)
     print(f"receipt stored: {sha[:12]}… -> {bucket}/{storage_path}")
     return sha, f"{bucket}/{storage_path}"
 
