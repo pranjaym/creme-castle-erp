@@ -30,11 +30,14 @@ The kitchen spine module. Planning is authoritative in `../erp-plan/` (read
 
 - `migrations/` (schema v2): 000 foundation, 005 locations, 006 skus, 007 par,
   008 uom, 009 config, 010 landing, 020 recon, 030 logbook. `scripts/gen_seed_sql.py`
-  regenerates 005/006/007/008 from `seed_data/`. `ALL.sql` is the re-baseline paste
-  (destructive; pre-first-entry only).
-- **Re-baseline rule:** while no real logbook data exists, changes go via re-baseline
-  (`ALL.sql`). From the sponge team's first real entry, switch permanently to numbered
-  ALTER migrations (`scripts/migrate.mjs`) and never re-baseline again.
+  regenerates 005/006/007/008 from `seed_data/`. Later: 060 zomato, 070 landing RLS,
+  071 core orders, 072 core refresh schedule, 073 outlet mappings, 074 identity layer.
+- **No re-baseline, ever.** Schema changes go through numbered ALTER migrations
+  (`scripts/migrate.mjs`). The old destructive paste has been retired to
+  `migrations/OBSOLETE_DO_NOT_RUN_rebaseline_2026-07-23.sql.txt`: it opens with
+  `drop schema if exists landing cascade` and would destroy every ingested row and
+  the core, identity and mart layers with it. Do not run it, do not resurrect it,
+  and do not follow any older doc that still recommends it.
 - Movement model: three verbs (made, issued with destination, wasted with reason);
   destinations from the location master. Departments and spokes are locations.
 - `lib/recon/match-core.mjs` the reproducible reconciliation core (tested).

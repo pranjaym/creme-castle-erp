@@ -34,11 +34,16 @@ Two green-lit builds live here:
 
 ## Apply and seed
 
-Primary path right now (pilot has no data): paste `migrations/ALL.sql` into the
-spine Supabase SQL editor and Run. It is a **re-baseline**: it wipes the kitchen
-objects and recreates schema v2, then re-seeds. **Do this only before the sponge
-team logs its first real entry.** From that day, schema changes go through numbered
-ALTER migrations via `scripts/migrate.mjs` and this repo never re-baselines again.
+Numbered ALTER migrations, applied with `scripts/migrate.mjs`. That is the only
+path. **The spine is never re-baselined again.**
+
+The old re-baseline paste (`ALL.sql`) is retired. It was renamed on 18 August 2026
+to `migrations/OBSOLETE_DO_NOT_RUN_rebaseline_2026-07-23.sql.txt` and must never be
+run: its first statement is `drop schema if exists landing cascade`, which would
+delete every ingested row (~1.65M Petpooja item rows, 300,000+ Zomato orders) and,
+through the cascade, the core, identity and mart layers built on them. Its original
+"safe now, the pilot has no data" note was written when the whole spine was empty
+and has been false since the first ingest ran.
 
 Migrations in order: 000 foundation, 005 locations, 006 skus, 007 par, 008 uom,
 009 config, 010 landing, 020 recon, 030 logbook. Regenerate the generated seeds:

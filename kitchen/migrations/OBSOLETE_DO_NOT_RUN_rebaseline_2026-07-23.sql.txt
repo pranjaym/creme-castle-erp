@@ -1,11 +1,26 @@
 -- ============================================================
--- Creme Castle Kitchen spine: RE-BASELINE setup (schema v2)
--- Paste into the Supabase SQL editor and Run. It WIPES the spine's kitchen
--- objects and recreates them from scratch, then re-seeds.
+-- OBSOLETE. DO NOT RUN THIS FILE. IT WILL DESTROY THE SPINE.
+-- ============================================================
+-- Kept only as the historical record of the 23 July 2026 schema v2
+-- re-baseline. Renamed from ALL.sql and given a .txt extension on
+-- 18 August 2026 so it cannot be picked up by a *.sql glob or pasted
+-- into the SQL editor by mistake.
 --
--- SAFE NOW: the pilot has no real data. DO NOT run this once the sponge team has
--- logged real entries: from that day, changes go through numbered ALTER
--- migrations only (never re-baseline again).
+-- WHY IT IS NOW DANGEROUS. The first statement below is
+-- "drop schema if exists landing cascade", and landing is where every
+-- ingested row lives: ~1.65 million Petpooja item rows, 300,000 plus
+-- Zomato orders, the sub-order and online-order tables, and through the
+-- cascade the core, identity and mart layers built on top of them.
+-- Running this would delete all of it in one statement.
+--
+-- The old header said "SAFE NOW: the pilot has no real data". That was
+-- written on 23 July 2026, when the whole spine was empty. It has been
+-- false since the first ingest ran and it must not be trusted again.
+-- The condition it described was never only about the logbook.
+--
+-- WHAT TO DO INSTEAD. Schema changes go through numbered ALTER
+-- migrations applied with scripts/migrate.mjs. The spine is never
+-- re-baselined again. See canonical rule 6: no hard deletes, ever.
 -- ============================================================
 
 -- ---------- RESET (drop v1/v2 objects) ----------

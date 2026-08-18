@@ -1,5 +1,8 @@
 # Spine schema v2 proposal (for approval)
 
+> **RETIRED PATH, 18 August 2026.** This document is the historical record of the 23 July 2026 schema v2 decision and is kept for that reason. Its recommendation to re-baseline by re-running `ALL.sql` is **no longer valid and must not be acted on.** That file has been renamed to `kitchen/migrations/OBSOLETE_DO_NOT_RUN_rebaseline_2026-07-23.sql.txt`; it opens with `drop schema if exists landing cascade` and would delete every ingested row and the core, identity and mart layers with it. Schema changes now go through numbered ALTER migrations only.
+
+
 **Home:** `erp-plan/schema-v2-proposal.md`. Reflects `data-findings-2026-07-23.md` points 1 to 4.
 **Status:** APPROVED and BUILT 23 July 2026. Applied via re-baseline (`cremecastle-kitchen/migrations/ALL.sql`). **Date:** 23 July 2026.
 
