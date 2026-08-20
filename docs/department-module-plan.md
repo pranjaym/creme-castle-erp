@@ -166,6 +166,18 @@ Pranjay: "I don't have time to go to them and sit with them. Maybe we can create
 
 **Hole found and closed the same night.** Three July routes were behind login but behind no role check, so a department tablet could open them. `/log`, the superseded combined logbook, was the dangerous one: a second write path into production_log that bypassed departments, requests and receipts. It is deleted. `/buffer` and `/recon` are now management only. `/recon` is unlinked from the home page because this deployment has no OMS credentials. Verified live while signed in as the sponge tablet: /log is 404, everything else bounces back to its own screen.
 
-**Accounts live:** pranjay@cremecastle.in (super admin, existing portal password); sponge.dept@ and liquid.dept@cremecastle.in (department tablets, passwords rotated to random values immediately before deployment and given to Pranjay in chat).
+**Accounts live (20 August 2026):**
+| Person | Email | Role | Sees |
+|---|---|---|---|
+| Pranjay | pranjay@cremecastle.in | super_admin | everything, including Users and the go-live switch |
+| Pawan G | pawan.g@cremecastle.in | tech | everything except Users |
+| Rishabh K | rishabh.k@cremecastle.in | tech | everything except Users |
+| Azeem | azeem@cremecastle.in | exec_chef | everything except Masters (items, departments, users) |
+| Md Asif | md.asif@cremecastle.in | exec_chef | same |
+| Sandeep | sandeep@cremecastle.in | exec_chef | same |
+| Sponge tablet | sponge.dept@cremecastle.in | department | only the Sponge Dept screen |
+| Liquids tablet | liquid.dept@cremecastle.in | department | only the Liquids Dept screen |
+
+Pranjay's mapping, verified live: "admins who help me execute, see everything except users" = `tech`; "senior chefs running the Sponge and Liquid teams, see everything except masters" = `exec_chef`. All passwords are random and were handed over in chat; there is no self-service password change yet, so a reset is done by the super admin on the Users screen.
 
 **Next:** hand the tablet logins to the two teams, let them run real days in trial mode, then use the go-live switch when Pranjay is satisfied. The D2C reconciliation page needs OMS credentials added to this deployment if it is ever wanted here.
