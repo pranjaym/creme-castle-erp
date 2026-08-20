@@ -1,16 +1,13 @@
 /* ===========================================================================
-   Creme Castle Kitchen: visuals aligned to the approved Creme Castle Design
-   System (the M2 bundle, as carried by cremecastle-oms/app/creme-castle.css).
-   Fonts: Magalie (display) + Owners (body), files copied from the OMS bundle.
-   Working palette = the console derivatives: coral, maroon ink, cream page.
+   Creme Castle Kitchen.
+   TEAM SCREENS: plain and readable for the floor (system font, Georgia heads).
+   ADMIN CONSOLE: matched value for value to the OMS finance console
+   (cremecastle-oms/app/finance/*): system font at 14px, Georgia 19px titles,
+   210px maroon sidebar, 28px wordmark, 12.3px tables with 10.5px heads.
+   The OMS console does NOT use the brand display faces, so neither do we.
+   Palette = the shared console derivatives: coral, maroon ink, cream page.
    =========================================================================== */
 
-@font-face { font-family: "Magalie"; src: url("/fonts/Magalie-Regular.otf") format("opentype"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Magalie"; src: url("/fonts/Magalie-SemiBold.otf") format("opentype"); font-weight: 600; font-style: normal; font-display: swap; }
-@font-face { font-family: "Magalie"; src: url("/fonts/Magalie-Bold.otf") format("opentype"); font-weight: 700; font-style: normal; font-display: swap; }
-@font-face { font-family: "Owners"; src: url("/fonts/Owners-Regular.otf") format("opentype"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Owners"; src: url("/fonts/Owners-Medium.otf") format("opentype"); font-weight: 500; font-style: normal; font-display: swap; }
-@font-face { font-family: "Owners"; src: url("/fonts/Owners-Bold.otf") format("opentype"); font-weight: 700; font-style: normal; font-display: swap; }
 
 :root {
   /* console working palette (design bundle derivatives, same as OMS) */
@@ -251,31 +248,30 @@ table.sheet.slim th, table.sheet.slim td { padding: 8px 10px; font-size: 14px; }
 /* ===================== admin console shell (OMS finance pattern) ===================== */
 .adminshell {
   display: flex; min-height: 100dvh; background: var(--page);
-  /* management console only: the Creme Castle brand fonts (M2 bundle) */
-  --font-display: "Magalie", Georgia, "Times New Roman", serif;
-  --font-body: "Owners", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-family: var(--font-body);
+  /* exactly the OMS finance shell: system sans at 14px on the cream page */
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px; color: var(--ink);
 }
 .adminside { width: 210px; flex: none; background: var(--maroon); color: #fff;
   display: flex; flex-direction: column; padding: 18px 12px 14px; }
-.adminside .wordmark { height: 26px; width: auto; display: block; filter: brightness(0) invert(1); opacity: 0.92; }
+.adminside .wordmark { height: 28px; width: auto; display: block; filter: brightness(0) invert(1); opacity: 0.92; }
 .adminside .shellname { font-size: 9.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
   opacity: .6; margin: 8px 2px 18px; }
 .adminside .navgroup { font-size: 9.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
   opacity: .5; margin: 14px 10px 6px; }
-.adminside a.navitem { display: block; padding: 9px 13px; border-radius: 999px; color: rgba(255,255,255,.78);
+.adminside a.navitem { display: block; padding: 8px 13px; border-radius: 999px; color: rgba(255,255,255,.78);
   text-decoration: none; font-weight: 700; font-size: 13px; margin: 1px 0; }
 .adminside a.navitem:hover { background: rgba(255,255,255,.08); color: #fff; }
 .adminside a.navitem.on { background: var(--coral); color: #fff; }
 .adminside .sidefoot { margin-top: auto; padding: 10px 12px 0; font-size: 11.5px; }
 .adminside .sidefoot a { color: rgba(255,255,255,.65); text-decoration: none; }
 .adminmain { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
-.adminhead { padding: 14px 20px 11px; border-bottom: 1px solid var(--line-pink); background: var(--header);
-  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.adminhead .title { font-family: var(--font-display); font-size: 20px; color: var(--maroon); font-weight: 600; }
-.adminhead .blurb { font-size: 12px; color: var(--sec); }
+.adminhead { padding: 14px 18px 10px; border-bottom: 1px solid var(--line-pink); background: var(--header);
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.adminhead .title { font-family: Georgia, "Times New Roman", serif; font-size: 19px; color: var(--maroon); font-weight: 400; }
+.adminhead .blurb { font-size: 11.5px; color: var(--sec); }
 .adminhead .headright { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-.adminbody { padding: 16px 20px 60px; overflow-y: auto; animation: ccFade 220ms var(--ease-out); }
+.adminbody { padding: 12px 18px 40px; overflow-y: auto; animation: ccFade 220ms var(--ease-out); }
 .admincard { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .admincard + .admincard { margin-top: 14px; }
 .eyebrow { font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
@@ -284,7 +280,7 @@ table.sheet.slim th, table.sheet.slim td { padding: 8px 10px; font-size: 14px; }
 .statgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 18px; }
 .statcard { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 13px 15px; }
 .statcard .k { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--sec); }
-.statcard .v { font-family: var(--font-display); font-size: 26px; color: var(--maroon); font-weight: 700; margin-top: 2px; }
+.statcard .v { font-family: Georgia, "Times New Roman", serif; font-size: 24px; font-weight: 400; color: var(--maroon); font-weight: 700; margin-top: 2px; }
 .statcard .s { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
 .livebtn { border: 1.5px solid var(--line); background: var(--card); color: var(--sec);
   border-radius: 999px; padding: 5px 12px; font-weight: 800; font-size: 11px; cursor: pointer; letter-spacing: .05em; }
@@ -321,7 +317,7 @@ table.sheet.slim th, table.sheet.slim td { padding: 8px 10px; font-size: 14px; }
 .door { display: block; flex: 1 1 150px; min-width: 140px; border-radius: 12px; padding: 13px 15px;
   text-decoration: none; border: 1px solid rgba(60,6,24,0.06); color: var(--maroon); background: var(--tint); }
 .door .k { font-size: 11.5px; opacity: .8; font-weight: 600; }
-.door .v { font-family: var(--font-display); font-size: 26px; font-weight: 700; margin-top: 1px; }
+.door .v { font-family: Georgia, "Times New Roman", serif; font-size: 24px; font-weight: 400; margin-top: 1px; }
 .door .s { font-size: 11px; opacity: .68; margin-top: 2px; }
 .door.good { background: #F3F8F1; color: var(--green); }
 .door.warn { background: var(--amber-bg); color: #854F0B; }
@@ -329,7 +325,7 @@ table.sheet.slim th, table.sheet.slim td { padding: 8px 10px; font-size: 14px; }
 a.door:hover { filter: brightness(0.97); }
 .deptblock { margin-bottom: 26px; }
 .deptblock .dephead { display: flex; align-items: baseline; gap: 10px; margin: 0 0 8px 2px; flex-wrap: wrap; }
-.deptblock .dephead .nm { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--maroon); }
+.deptblock .dephead .nm { font-family: Georgia, "Times New Roman", serif; font-size: 17px; font-weight: 400; color: var(--maroon); }
 .deptblock .dephead .dy { font-size: 12px; color: var(--sec); }
 .csvlink { font-size: 12px; font-weight: 700; color: var(--coral-dark); text-decoration: none; border: 1.5px solid var(--line);
   border-radius: 999px; padding: 6px 13px; background: var(--card); }
@@ -359,3 +355,24 @@ a.door:hover { filter: brightness(0.97); }
 .trialbar strong { letter-spacing: .08em; margin-right: 8px; }
 .adminhead .modechip { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
   padding: 4px 10px; border-radius: 999px; background: var(--amber-bg); color: #7A4B0B; border: 1px solid var(--amber-bd); }
+
+/* ---- admin console density, matched to the OMS finance tables ----
+   Scoped to .adminshell so the TEAM screens keep their larger, easier type. */
+.adminshell table.sheet { font-size: 12.3px; }
+.adminshell table.sheet th, .adminshell table.sheet.slim th {
+  font-size: 10.5px; letter-spacing: .05em; padding: 8px 10px;
+  background: #FBF4F5; color: var(--maroon); border-bottom: 1.5px solid #EADDE0; }
+.adminshell table.sheet td, .adminshell table.sheet.slim td {
+  padding: 7px 10px; font-size: 12.3px; border-top: none; border-bottom: 1px solid var(--hairline); }
+.adminshell .sheet .unit, .adminshell .sheet .usual { font-size: 11.5px; }
+.adminshell select, .adminshell input.qtyin, .adminshell input.whoin {
+  font-size: 12.5px; padding: 7px 9px; border: 1px solid #E2CFD4; border-radius: 8px; }
+.adminshell .ghostbtn { font-size: 12px; font-weight: 800; padding: 8px 14px; border-radius: 8px; }
+.adminshell .primary { font-size: 12px; font-weight: 800; padding: 8px 14px; border-radius: 8px; box-shadow: none; }
+.adminshell .csvlink { font-size: 12px; font-weight: 800; padding: 8px 16px; border-radius: 999px;
+  background: #0E6B5C; color: #fff; border: none; }
+.adminshell .csvlink:hover { background: #0B5748; }
+.adminshell .stchip, .adminshell .livebtn { font-size: 10.5px; padding: 3px 10px; }
+.adminshell .eyebrow { font-size: 10.5px; letter-spacing: .05em; }
+.adminshell .hint { font-size: 12px; }
+.adminshell .filterbar label { font-size: 11.5px; }
