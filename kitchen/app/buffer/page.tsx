@@ -2,10 +2,13 @@
 // entries. Par comparison shows once par_stocks is loaded (no schema change).
 import { spine } from '@/lib/supabase/server';
 import { businessDay, istWeekday } from '@/lib/business-day';
+import { requireRoles } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
 export default async function BufferPage() {
+  // management only: department tablets stay on their own screen
+  await requireRoles(['exec_chef', 'tech', 'super_admin']);
   const db = spine();
   const { data: buffer } = await db
     .from('v_frozen_buffer').select('*').order('sort_order');

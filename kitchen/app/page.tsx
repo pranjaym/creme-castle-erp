@@ -42,8 +42,9 @@ export default async function Home() {
       <div className="homegrid">
         <Link className="big-btn" href="/admin">Daily dashboard<small>today per department, ledger, transfers, requests, activity</small></Link>
         <Link className="big-btn" href="/buffer">Frozen buffer<small>current level vs par, per item</small></Link>
-        <Link className="big-btn" href="/recon">D2C reconciliation<small>three buckets, per store, per day</small></Link>
       </div>
+      {/* D2C reconciliation (Build 1a) is not linked here: it needs the OMS
+          credentials, which this deployment does not carry. The code stays. */}
 
       {isMaster && (
         <>

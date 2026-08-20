@@ -3,6 +3,7 @@
 // but cancelled/void) show.
 import { spine } from '@/lib/supabase/server';
 import RunButton from './RunButton';
+import { requireRoles } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,8 @@ const BUCKET_LABEL: Record<string, string> = {
 };
 
 export default async function ReconPage({ searchParams }: { searchParams: Promise<{ d?: string }> }) {
+  // management only: department tablets stay on their own screen
+  await requireRoles(['exec_chef', 'tech', 'super_admin']);
   const sp = await searchParams;
   const db = spine();
   const { data: latest } = await db
