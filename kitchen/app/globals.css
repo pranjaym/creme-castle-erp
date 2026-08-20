@@ -352,3 +352,10 @@ a.door:hover { filter: brightness(0.97); }
   cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .acctag { color: var(--faint); font-size: 12px; }
 .actioncard.plan .ic { background: #FFF3D6; color: #7A5B12; }
+
+/* trial mode banner (module in rehearsal; cleared at go-live) */
+.trialbar { background: var(--amber-bg); border: 1px solid var(--amber-bd); color: #7A4B0B;
+  border-radius: 10px; padding: 9px 14px; margin: 0 0 12px; font-size: 13.5px; }
+.trialbar strong { letter-spacing: .08em; margin-right: 8px; }
+.adminhead .modechip { font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 999px; background: var(--amber-bg); color: #7A4B0B; border: 1px solid var(--amber-bd); }

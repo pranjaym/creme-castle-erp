@@ -176,3 +176,28 @@ export async function setDeptTimes(deptCode: string, dayStart: string, closingBe
   refresh();
   return { ok: true, message: `${deptCode}: day starts ${dayStart}, count by ${closingBefore}` };
 }
+
+/** The clean slate. Flipping trial to live hides every trial row from every
+ *  screen and report in one instant; nothing is deleted (canonical rule 6) and
+ *  the switch is reversible. Super admin only, and audited twice: by the SQL
+ *  function itself and here. */
+export async function setKitchenMode(newMode: 'trial' | 'live', why: string) {
+  const u = await getKitchenUser();
+  if (!u) return { ok: false, message: 'Not signed in.' };
+  if (u.role !== 'super_admin') return { ok: false, message: 'Only a super admin can switch the module mode.' };
+  if (newMode !== 'trial' && newMode !== 'live') return { ok: false, message: 'Unknown mode' };
+  if (!why.trim()) return { ok: false, message: 'Write one line saying why, it goes on the record.' };
+
+  const db = spine();
+  const { error } = await db.rpc('set_kitchen_mode', {
+    new_mode: newMode, actor: u.email, why: why.trim(),
+  });
+  if (error) return { ok: false, message: error.message };
+  revalidatePath('/', 'layout');
+  return {
+    ok: true,
+    message: newMode === 'live'
+      ? 'Now LIVE. Every screen starts empty; the trial entries stay on record but are hidden.'
+      : 'Back in TRIAL mode. Trial entries are visible again.',
+  };
+}

@@ -60,6 +60,7 @@ const istClock = (iso: string) =>
 
 export default function DeptClient(props: {
   account: { email: string; role: string };
+  mode: 'trial' | 'live';
   dept: { code: string; name: string };
   settings: { dayStart: string; closingBefore: string };
   skus: Sku[]; destinations: Dest[]; reasons: Reason[];
@@ -207,6 +208,12 @@ export default function DeptClient(props: {
     if (res.ok) router.refresh();
   }
 
+  const TrialBar = () => (props.mode === 'trial' ? (
+    <div className="trialbar">
+      <strong>TRIAL</strong> practice run: enter real work as usual. Everything here is cleared when the real start begins.
+    </div>
+  ) : null);
+
   const Header = ({ sub }: { sub?: string }) => (
     <div className="topbar">
       <span className="brand">Creme Castle</span>
@@ -286,7 +293,7 @@ export default function DeptClient(props: {
     const activeOutgoing = props.outgoingRequests.filter((r) => r.state === 'open' || r.state === 'partial');
     const doneOutgoing = props.outgoingRequests.filter((r) => r.state === 'fulfilled' || r.state === 'cancelled').slice(0, 6);
     return (
-      <main><Header />
+      <main><TrialBar /><Header />
         <div className="deptmeta">
           Production day <strong>{openChoice ? `${openChoice.weekday} ${props.openDay}` : props.openDay}</strong>
           <span className="metadot">·</span> day starts {props.settings.dayStart.slice(0, 5)}
@@ -416,7 +423,7 @@ export default function DeptClient(props: {
   // ---------- RECEIVE ----------
   if (screen === 'receive') {
     return (
-      <main><Header sub="Receive" />
+      <main><TrialBar /><Header sub="Receive" />
         <Crumb label="Receive / प्राप्त" />
         {props.inbox.length === 0 ? (
           <p className="hint">Nothing waiting. When another department sends you items, they appear here to confirm.</p>
@@ -434,7 +441,7 @@ export default function DeptClient(props: {
   if (screen === 'request') {
     if (props.requestables.length === 0) {
       return (
-        <main><Header sub="Request" />
+        <main><TrialBar /><Header sub="Request" />
           <Crumb label="Request / मांग" />
           <p className="hint">No other department has an item list yet, so there is nothing to request. This changes when the next departments join.</p>
         </main>
@@ -442,7 +449,7 @@ export default function DeptClient(props: {
     }
     if (!askDept) {
       return (
-        <main><Header sub="Request" />
+        <main><TrialBar /><Header sub="Request" />
           <Crumb label="Request / मांग" />
           <h1 className="step">Which department are you asking?</h1>
           <div className="destgrid">
@@ -459,7 +466,7 @@ export default function DeptClient(props: {
     const targetGroups = [...new Set(target.items.map((s) => s.category))]
       .map((c) => ({ cat: c, items: target.items.filter((s) => s.category === c) })).filter((g) => g.items.length);
     return (
-      <main><Header sub="Request" />
+      <main><TrialBar /><Header sub="Request" />
         <Crumb label={`Request → ${target.deptName}`}
           extra={props.requestables.length > 1
             ? <button className="changebtn" onClick={() => { setAskDept(''); setQtyMap({}); }}>change department</button>
@@ -490,7 +497,7 @@ export default function DeptClient(props: {
   if (screen === 'closing') {
     const countedN = Object.values(closingMap).filter((v) => v.split ? v.b.some((x) => x !== '') : v.total !== '').length;
     return (
-      <main><Header sub="Closing count" />
+      <main><TrialBar /><Header sub="Closing count" />
         <Crumb label="Closing / गिनती" extra={
           <button className="changebtn" onClick={() => setBizDate(bizDate === props.dateChoices[0].date ? props.dateChoices[1].date : props.dateChoices[0].date)}>
             change day
@@ -552,7 +559,7 @@ export default function DeptClient(props: {
     const pd = props.planDatas.find((d) => d.planDate === planDate) ?? props.planDatas[0];
     if (!pd) {
       return (
-        <main><Header sub="Plan" />
+        <main><TrialBar /><Header sub="Plan" />
           <Crumb label="Plan / प्लान" />
           <p className="hint">Nothing to plan yet.</p>
         </main>
@@ -563,7 +570,7 @@ export default function DeptClient(props: {
     const filledN = Object.values(planMap).filter((v) => v !== '').length;
     const anyExisting = pd.rows.some((r) => r.existingPlanned != null);
     return (
-      <main><Header sub="Plan" />
+      <main><TrialBar /><Header sub="Plan" />
         <Crumb label="Plan / प्लान" />
         <div className="pickline">
           {props.planDatas.map((d) => (
@@ -615,7 +622,7 @@ export default function DeptClient(props: {
   const meta = ACTION_META[screen];
   if (!bizDate) {
     return (
-      <main><Header sub={meta.label} />
+      <main><TrialBar /><Header sub={meta.label} />
         <Crumb label={`${meta.label} / ${meta.hi}`} />
         <DayPicker
           title="Which production day?"
@@ -628,7 +635,7 @@ export default function DeptClient(props: {
   }
   if (screen === 'issued' && !dest) {
     return (
-      <main><Header sub="Sent" />
+      <main><TrialBar /><Header sub="Sent" />
         <Crumb label="Sent / भेजा" />
         <h1 className="step">Where is it going?</h1>
         <p className="hint">Pick the department or spoke first. The receiver will confirm what arrives.</p>
@@ -645,7 +652,7 @@ export default function DeptClient(props: {
   const destName = props.destinations.find((d) => d.code === dest)?.name;
   const linkedReqIds = [...new Set(Object.values(reqLinks))];
   return (
-    <main><Header sub={meta.label} />
+    <main><TrialBar /><Header sub={meta.label} />
       <Crumb label={screen === 'issued' ? `Sent → ${destName}` : `${meta.label} / ${meta.hi}`}
         extra={screen === 'issued'
           ? <button className="changebtn" onClick={() => { setDest(''); setQtyMap({}); setReqLinks({}); }}>change destination</button>

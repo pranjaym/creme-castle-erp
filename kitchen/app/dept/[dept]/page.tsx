@@ -10,6 +10,7 @@ import { istCalendarDate, ymdAddDays, weekdayForYmd } from '@/lib/business-day';
 import { currentDeptDay } from '@/lib/dept-day.mjs';
 import { requireKitchenUser, mayUseDept } from '@/lib/session';
 import { getPlanData } from './plan-data';
+import { getKitchenMode } from '@/lib/mode';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,7 @@ export default async function DeptPage({ params, searchParams }: {
   if (!mayUseDept(user, deptCode)) redirect(user.deptCode ? `/dept/${user.deptCode}` : '/login');
 
   const db = spine();
+  const mode = await getKitchenMode();
   const { data: deptLoc } = await db.from('locations').select('id, code, name').eq('code', deptCode).single();
   if (!deptLoc) notFound();
   const { data: settings } = await db
@@ -106,7 +108,7 @@ export default async function DeptPage({ params, searchParams }: {
 
   // Recent raw entries so the team sees what has been punched, newest first.
   const { data: entries } = await db
-    .from('production_log')
+    .from('v_production_log_current')
     .select('id, business_date, action, qty, uom, sku_id, to_location_id, reason_code, entered_by, entered_at')
     .eq('from_location_id', deptLoc.id).in('business_date', [today, yesterday])
     .order('entered_at', { ascending: false }).limit(60);
@@ -136,6 +138,7 @@ export default async function DeptPage({ params, searchParams }: {
   return (
     <DeptClient
       account={{ email: user.email, role: user.role }}
+      mode={mode}
       dept={{ code: deptLoc.code, name: deptLoc.name }}
       settings={{
         dayStart: settings?.day_start_time ?? '00:00',

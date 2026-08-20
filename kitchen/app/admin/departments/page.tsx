@@ -2,13 +2,16 @@
 // from its start time to the next start; the physical count happens just
 // before. Changing a time here changes the team screen immediately.
 import DeptTimesClient from './DeptTimesClient';
+import ModeCard from './ModeCard';
 import { spine } from '@/lib/supabase/server';
 import { requireRoles } from '@/lib/session';
+import { getKitchenMode } from '@/lib/mode';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminDepartmentsPage() {
-  await requireRoles(['tech', 'super_admin']);
+  const user = await requireRoles(['tech', 'super_admin']);
+  const mode = await getKitchenMode();
   const db = spine();
   const { data: depts } = await db
     .from('department_settings')
@@ -29,6 +32,9 @@ export default async function AdminDepartmentsPage() {
         <span className="blurb">each department&rsquo;s day runs start to start · the count happens just before the next start</span>
       </div>
       <div className="adminbody">
+        <div className="adminsect">
+          <ModeCard mode={mode} canSwitch={user.role === 'super_admin'} />
+        </div>
         <DeptTimesClient depts={rows} />
         <p className="hint" style={{ marginTop: 14 }}>
           Breads, Cakes and Desserts join here when their closing times and item lists are decided
