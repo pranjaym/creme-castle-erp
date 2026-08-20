@@ -1,7 +1,7 @@
 # Department production module (Build 3a expansion): decisions and open questions
 
 **Home:** `erp-plan/department-module-plan.md`
-**Status:** SPONGES + LIQUIDS BUILT 19 August 2026 (green-lit by Pranjay the same day: "start building"). Live locally in `~/creme-castle-erp/kitchen`, NOT deployed (go-live stance unchanged). The four open questions were all deferred by Pranjay ("build the Sponge and Liquid module and get that right, then we solve for this"); they block only the Breads/Cakes/Desserts screens, not this build.
+**Status:** LIVE IN TRIAL 20 August 2026 at https://cremecastle-kitchen.vercel.app (Pranjay: run the trial on the real thing, then a clean slate before real operations). Built 19 August 2026 (green-lit by Pranjay the same day: "start building"). Code in `~/creme-castle-erp/kitchen`. The four open questions were all deferred by Pranjay ("build the Sponge and Liquid module and get that right, then we solve for this"); they block only the Breads/Cakes/Desserts screens, not this build.
 **Date:** 19 August 2026 (chef conversation 18 August, design and build session 19 August).
 
 ## What this is
@@ -152,3 +152,20 @@ Pranjay's decisions: (1) the department chef's number is final and may vary from
 - Extends `build-plans-1a-3a.md` (Build 3a). The append-only three-verb `production_log` (migration 030) is the foundation; this adds: receiver confirmation on transfers, a closing-count entry type, per-department day config, cutting yields, and the admin backend.
 - Go-live stance unchanged: nothing goes live, not even a pilot, until Pranjay is convinced it is usable.
 - Schema changes go through numbered ALTER migrations only (no re-baseline, ever).
+
+
+## Round 6 (20 August 2026): LIVE IN TRIAL
+
+Pranjay: "I don't have time to go to them and sit with them. Maybe we can create a live version and do the trial, and then whenever the trial is successful, we will do the clean slate, and then they can start properly." This supersedes the earlier stance of no deployment before he was convinced.
+
+**Deployed** to https://cremecastle-kitchen.vercel.app (Vercel, project cremecastle-kitchen). The two public auth settings were added to the production environment; the two service settings were already there since July.
+
+**The clean slate is a switch, not a delete (migration 120).** `spine_modes` holds the kitchen's mode; `data_mode` is stamped on every row of production_log, closing_counts, transfer_receipts, dept_requests and production_plans at insert; every consumer view filters to the current mode. Verified: 50 ledger rows and 12,857 units of buffer read as 0 the instant the mode flips to live, return on revert, and all 39 underlying rows are untouched throughout. Trial rows are therefore kept forever (rule 6) and counted never. The go-live control is in Masters, Departments: super admin only, needs a written reason, audited twice.
+
+**An amber TRIAL band** sits on every team screen and across the admin console, so practice is never mistaken for real. It disappears by itself at go-live.
+
+**Hole found and closed the same night.** Three July routes were behind login but behind no role check, so a department tablet could open them. `/log`, the superseded combined logbook, was the dangerous one: a second write path into production_log that bypassed departments, requests and receipts. It is deleted. `/buffer` and `/recon` are now management only. `/recon` is unlinked from the home page because this deployment has no OMS credentials. Verified live while signed in as the sponge tablet: /log is 404, everything else bounces back to its own screen.
+
+**Accounts live:** pranjay@cremecastle.in (super admin, existing portal password); sponge.dept@ and liquid.dept@cremecastle.in (department tablets, passwords rotated to random values immediately before deployment and given to Pranjay in chat).
+
+**Next:** hand the tablet logins to the two teams, let them run real days in trial mode, then use the go-live switch when Pranjay is satisfied. The D2C reconciliation page needs OMS credentials added to this deployment if it is ever wanted here.
