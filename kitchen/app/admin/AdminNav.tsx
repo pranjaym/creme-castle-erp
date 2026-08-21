@@ -13,7 +13,7 @@ const ITEMS: { href: string; label: string; group: string; exact?: boolean; role
   { href: '/admin', label: 'Today', group: 'Daily', exact: true },
   { href: '/admin/ledger', label: 'Day ledger', group: 'Watch' },
   { href: '/admin/transfers', label: 'Transfers', group: 'Watch' },
-  { href: '/admin/requests', label: 'Requests', group: 'Watch' },
+  { href: '/admin/requests', label: 'Purchase requests', group: 'Watch' },
   { href: '/admin/buffer', label: 'Frozen buffer', group: 'Watch' },
   { href: '/admin/activity', label: 'Activity', group: 'Watch' },
   { href: '/admin/items', label: 'Items', group: 'Masters', roles: ['tech', 'super_admin'] },

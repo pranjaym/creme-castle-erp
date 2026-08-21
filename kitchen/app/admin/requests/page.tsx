@@ -39,8 +39,8 @@ export default async function AdminRequestsPage({ searchParams }: {
   return (
     <>
       <div className="adminhead">
-        <span className="title">Requests</span>
-        <span className="blurb">the pull flow between departments · state is derived from linked sends, never typed</span>
+        <span className="title">Purchase requests</span>
+        <span className="blurb">internal purchase requests between departments · state is derived from the linked transfers, never typed</span>
         <span className="headright"><a className="csvlink" href={`/admin/requests/csv?${qs}`}>Download CSV</a></span>
       </div>
       <div className="adminbody">

@@ -39,11 +39,11 @@ type Screen = 'home' | 'made' | 'issued' | 'wasted' | 'closing' | 'receive' | 'r
 
 const ACTION_META: Record<string, { label: string; hi: string; ic: string; cls: string; desc: string }> = {
   made:    { label: 'Made',    hi: 'बनाया',  ic: '＋', cls: 'made',  desc: 'What the team produced' },
-  issued:  { label: 'Sent',    hi: 'भेजा',   ic: '➜', cls: 'issue', desc: 'To a department or a spoke' },
+  issued:  { label: 'Transfer sales', hi: 'भेजा', ic: '➜', cls: 'issue', desc: 'To a department or a spoke' },
   wasted:  { label: 'Waste',   hi: 'खराब',   ic: '🗑', cls: 'waste', desc: 'Reason-coded loss' },
   closing: { label: 'Closing', hi: 'गिनती',  ic: '☰', cls: 'close', desc: 'End-of-day physical count' },
   receive: { label: 'Receive', hi: 'प्राप्त', ic: '⬇', cls: 'recv',  desc: 'Confirm what arrived' },
-  request: { label: 'Request', hi: 'मांग',   ic: '？', cls: 'req',   desc: 'Ask another department' },
+  request: { label: 'Purchase request', hi: 'मांग', ic: '？', cls: 'req', desc: 'Ask another department' },
   plan:    { label: 'Plan',    hi: 'प्लान',  ic: '📋', cls: 'plan',  desc: 'What to make next' },
 };
 const STATE_META: Record<Req['state'], { label: string; cls: string }> = {
@@ -328,8 +328,8 @@ export default function DeptClient(props: {
         {openIncoming.length > 0 && (
           <div className="inboxbanner asks">
             <span className="ic">？</span>
-            <span><strong>{openIncoming.length} request{openIncoming.length === 1 ? '' : 's'} for you to send</strong><br />
-              <small>Listed below under &ldquo;Requests for you&rdquo;</small></span>
+            <span><strong>{openIncoming.length} purchase request{openIncoming.length === 1 ? '' : 's'} for you to send</strong><br />
+              <small>Listed below under &ldquo;Purchase requests for you&rdquo;</small></span>
           </div>
         )}
 
@@ -347,7 +347,7 @@ export default function DeptClient(props: {
         </div>
 
         {openIncoming.length > 0 && (<>
-          <h2 className="sect">Requests for you</h2>
+          <h2 className="sect">Purchase requests for you</h2>
           <div className="inboxlist">
             {openIncoming.map((r) => (
               <RequestCard key={r.id} req={r} side="maker" busyGlobal={busy}
@@ -408,7 +408,7 @@ export default function DeptClient(props: {
         {hasGaps && <p className="hint">A non-zero gap means the count and the entries disagree: either a miscount or something moved without being logged.</p>}
 
         {(activeOutgoing.length > 0 || doneOutgoing.length > 0) && (<>
-          <h2 className="sect">Your requests</h2>
+          <h2 className="sect">Your purchase requests</h2>
           <div className="inboxlist">
             {activeOutgoing.map((r) => (
               <RequestCard key={r.id} req={r} side="requester" busyGlobal={busy}
@@ -459,16 +459,16 @@ export default function DeptClient(props: {
   if (screen === 'request') {
     if (props.requestables.length === 0) {
       return (
-        <main>{backToConsole()}{trialBar()}{header("Request")}
-          {crumb("Request / मांग")}
+        <main>{backToConsole()}{trialBar()}{header("Purchase request")}
+          {crumb("Purchase request / मांग")}
           <p className="hint">No other department has an item list yet, so there is nothing to request. This changes when the next departments join.</p>
         </main>
       );
     }
     if (!askDept) {
       return (
-        <main>{backToConsole()}{trialBar()}{header("Request")}
-          {crumb("Request / मांग")}
+        <main>{backToConsole()}{trialBar()}{header("Purchase request")}
+          {crumb("Purchase request / मांग")}
           <h1 className="step">Which department are you asking?</h1>
           <div className="destgrid">
             {props.requestables.map((d) => (
@@ -484,8 +484,8 @@ export default function DeptClient(props: {
     const targetGroups = [...new Set(target.items.map((s) => s.category))]
       .map((c) => ({ cat: c, items: target.items.filter((s) => s.category === c) })).filter((g) => g.items.length);
     return (
-      <main>{backToConsole()}{trialBar()}{header("Request")}
-        {crumb(`Request → ${target.deptName}`, props.requestables.length > 1
+      <main>{backToConsole()}{trialBar()}{header("Purchase request")}
+        {crumb(`Purchase request → ${target.deptName}`, props.requestables.length > 1
           ? <button className="changebtn" onClick={() => { setAskDept(''); setQtyMap({}); }}>change department</button>
           : undefined)}
         <p className="hint">
@@ -651,8 +651,8 @@ export default function DeptClient(props: {
   }
   if (screen === 'issued' && !dest) {
     return (
-      <main>{backToConsole()}{trialBar()}{header("Sent")}
-        {crumb("Sent / भेजा")}
+      <main>{backToConsole()}{trialBar()}{header("Transfer sales")}
+        {crumb("Transfer sales / भेजा")}
         <h1 className="step">Where is it going?</h1>
         <p className="hint">Pick the department or spoke first. The receiver will confirm what arrives.</p>
         <div className="destgrid">
@@ -669,7 +669,7 @@ export default function DeptClient(props: {
   const linkedReqIds = [...new Set(Object.values(reqLinks))];
   return (
     <main>{backToConsole()}{trialBar()}{header(meta.label)}
-      {crumb(screen === 'issued' ? `Sent → ${destName}` : `${meta.label} / ${meta.hi}`,
+      {crumb(screen === 'issued' ? `Transfer sales → ${destName}` : `${meta.label} / ${meta.hi}`,
         screen === 'issued'
           ? <button className="changebtn" onClick={() => { setDest(''); setQtyMap({}); setReqLinks({}); }}>change destination</button>
           : undefined)}
@@ -682,7 +682,7 @@ export default function DeptClient(props: {
 
       {screen === 'issued' && (<>
         {linkedReqIds.length > 0 && (
-          <p className="hint reqnote">This send answers request #{linkedReqIds.join(', #')} from {destName}. Saving links the two, and the request closes automatically once the asked quantity is sent.</p>
+          <p className="hint reqnote">This transfer answers purchase request #{linkedReqIds.join(', #')} from {destName}. Saving links the two, and the request closes automatically once the asked quantity is sent.</p>
         )}
         <p className="hint">Quantities sent to <strong>{destName}</strong>. They will see this and confirm what arrived.</p>
         {qtySheet(false)}

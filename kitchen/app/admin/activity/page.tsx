@@ -10,7 +10,7 @@ const AREAS = [
   { key: 'production_log', label: 'Entries (made/sent/waste)' },
   { key: 'transfer_receipts', label: 'Receipts' },
   { key: 'closing_counts', label: 'Closings' },
-  { key: 'dept_requests', label: 'Requests' },
+  { key: 'dept_requests', label: 'Purchase requests' },
   { key: 'admin', label: 'Master edits' },
 ] as const;
 

@@ -92,7 +92,7 @@ export default async function AdminTodayPage() {
               <Link className={`door ${b.openReqN ? 'warn' : 'good'}`} href={`/admin/requests?state=open&maker=${b.code}`}>
                 <div className="k">Asked of them</div>
                 <div className="v">{b.openReqN}</div>
-                <div className="s">{b.openReqN ? 'requests waiting to send ›' : 'no open requests ›'}</div>
+                <div className="s">{b.openReqN ? 'purchase requests waiting ›' : 'no open requests ›'}</div>
               </Link>
               <Link className={`door ${b.wasteQty > 0 ? 'warn' : 'good'}`} href={ledgerHref(b.code, b.openDay)}>
                 <div className="k">Waste today</div>
