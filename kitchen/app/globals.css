@@ -382,3 +382,18 @@ a.door:hover { filter: brightness(0.97); }
   background: var(--maroon); color: #fff; border-radius: 10px; padding: 8px 14px; margin: 0 0 12px; font-size: 12.5px; }
 .backbar a { color: #fff; font-weight: 800; text-decoration: none; }
 .backbar span { opacity: .7; }
+
+/* confirmation after a save, shown on the hub the entry returns to */
+.flashbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--green-bg); border: 1px solid var(--green-bd); color: var(--green);
+  border-radius: 12px; padding: 12px 16px; margin: 14px 0 4px; animation: ccFade 220ms var(--ease-out); }
+.flashbar .tick { font-size: 18px; font-weight: 800; }
+.flashbar .ftext { font-weight: 700; font-size: 15px; }
+.flashbar .fclose { margin-left: auto; border: none; background: none; color: var(--green);
+  font-size: 20px; cursor: pointer; line-height: 1; }
+
+/* the plan screen when a plan is already on record for that day */
+.savedplan { background: #E3EFF7; border: 1px solid #C4DCEB; color: #245A7A; border-radius: 10px;
+  padding: 10px 14px; margin: 0 0 12px; font-size: 13.5px; line-height: 1.5;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.savedplan .changebtn { margin-left: auto; }

@@ -82,7 +82,7 @@ export default function DeptClient(props: {
   const [closingMap, setClosingMap] = useState<Record<string, { total: string; split: boolean; b: [string, string, string, string] }>>({});
   const [planDate, setPlanDate] = useState('');
   const [planMap, setPlanMap] = useState<Record<string, string>>({});
-  const [planCta, setPlanCta] = useState(false);
+  const [flash, setFlash] = useState<{ text: string; next?: 'plan' } | null>(null);
   const [who, setWho] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -106,14 +106,15 @@ export default function DeptClient(props: {
   const openChoice = props.dateChoices.find((c) => c.date === props.openDay);
   const glanceMeta = props.glanceChoices.find((c) => c.date === props.glanceDay);
 
-  function goHome() {
+  function goHome(done?: { text: string; next?: 'plan' }) {
     setScreen('home'); setBizDate(null); setDest(''); setQtyMap({}); setReqLinks({});
     setAskDept(''); setNeededBy(null);
     setWaste([{ skuCode: '', reasonCode: '', qty: '' }]); setClosingMap({}); setMsg(null);
+    setFlash(done ?? null);
     router.refresh();
   }
   function start(s: Screen) {
-    setMsg(null); setQtyMap({}); setDest(''); setReqLinks({});
+    setMsg(null); setFlash(null); setQtyMap({}); setDest(''); setReqLinks({});
     if (s === 'closing') setBizDate(props.openDay);
     else setBizDate(null);
     if (s === 'request') {
@@ -145,8 +146,8 @@ export default function DeptClient(props: {
     if (!rows.length) { setMsg({ ok: false, text: 'Type at least one quantity' }); return; }
     setBusy(true); setMsg(null);
     const res = await logDeptBatch(props.dept.code, rows, enteredBy, bizDate!);
-    setBusy(false); setMsg({ ok: res.ok, text: res.message });
-    if (res.ok) { setQtyMap({}); setReqLinks({}); router.refresh(); }
+    setBusy(false);
+    if (res.ok) goHome({ text: res.message }); else setMsg({ ok: false, text: res.message });
   }
   async function saveWaste() {
     const rows: DeptBatchRow[] = waste.filter((w) => w.skuCode && w.reasonCode && Number(w.qty) > 0)
@@ -154,8 +155,8 @@ export default function DeptClient(props: {
     if (!rows.length) { setMsg({ ok: false, text: 'Add at least one row (item, reason, quantity)' }); return; }
     setBusy(true); setMsg(null);
     const res = await logDeptBatch(props.dept.code, rows, enteredBy, bizDate!);
-    setBusy(false); setMsg({ ok: res.ok, text: res.message });
-    if (res.ok) { setWaste([{ skuCode: '', reasonCode: '', qty: '' }]); router.refresh(); }
+    setBusy(false);
+    if (res.ok) goHome({ text: res.message }); else setMsg({ ok: false, text: res.message });
   }
   async function submitClosing() {
     const rows: ClosingRow[] = Object.entries(closingMap).map(([skuCode, v]) => {
@@ -173,8 +174,8 @@ export default function DeptClient(props: {
     if (!rows.length) { setMsg({ ok: false, text: 'Count at least one item before saving' }); return; }
     setBusy(true); setMsg(null);
     const res = await saveClosing(props.dept.code, bizDate!, rows, enteredBy);
-    setBusy(false); setMsg({ ok: res.ok, text: res.message });
-    if (res.ok) { setClosingMap({}); setPlanCta(true); router.refresh(); }
+    setBusy(false);
+    if (res.ok) goHome({ text: res.message, next: 'plan' }); else setMsg({ ok: false, text: res.message });
   }
   async function submitRequest() {
     const rows: RequestRow[] = Object.entries(qtyMap)
@@ -182,8 +183,8 @@ export default function DeptClient(props: {
     if (!rows.length) { setMsg({ ok: false, text: 'Type at least one quantity' }); return; }
     setBusy(true); setMsg(null);
     const res = await createRequests(props.dept.code, askDept, rows, neededBy, null, enteredBy);
-    setBusy(false); setMsg({ ok: res.ok, text: res.message });
-    if (res.ok) { setQtyMap({}); router.refresh(); }
+    setBusy(false);
+    if (res.ok) goHome({ text: res.message }); else setMsg({ ok: false, text: res.message });
   }
 
   function openPlan(date: string) {
@@ -204,24 +205,24 @@ export default function DeptClient(props: {
     if (!rows.length) { setMsg({ ok: false, text: 'Fill at least one item (blank rows are skipped)' }); return; }
     setBusy(true); setMsg(null);
     const res = await savePlan(props.dept.code, planDate, rows, enteredBy);
-    setBusy(false); setMsg({ ok: res.ok, text: res.message });
-    if (res.ok) router.refresh();
+    setBusy(false);
+    if (res.ok) goHome({ text: res.message }); else setMsg({ ok: false, text: res.message });
   }
 
-  const BackToConsole = () => (props.account.role !== 'department' ? (
+  const backToConsole = () => (props.account.role !== 'department' ? (
     <div className="backbar">
       <a href="/admin">&larr; Kitchen console</a>
       <span>viewing the {props.dept.name} screen as the team sees it</span>
     </div>
   ) : null);
 
-  const TrialBar = () => (props.mode === 'trial' ? (
+  const trialBar = () => (props.mode === 'trial' ? (
     <div className="trialbar">
       <strong>TRIAL</strong> practice run: enter real work as usual. Everything here is cleared when the real start begins.
     </div>
   ) : null);
 
-  const Header = ({ sub }: { sub?: string }) => (
+  const header = (sub?: string) => (
     <div className="topbar">
       <span className="brand">Creme Castle</span>
       <span className="sub">{props.dept.name}{sub ? ` · ${sub}` : ''}</span>
@@ -236,7 +237,7 @@ export default function DeptClient(props: {
     </div>
   );
 
-  const DayPicker = ({ title, hint }: { title: string; hint: string }) => (
+  const dayPicker = (title: string, hint: string) => (
     <>
       <h1 className="step">{title}</h1>
       <p className="hint">{hint}</p>
@@ -255,7 +256,7 @@ export default function DeptClient(props: {
     </>
   );
 
-  function QtySheet({ items, showUsual }: { items?: { cat: string; items: Sku[] }[]; showUsual: boolean }) {
+  const qtySheet = (showUsual: boolean, items?: { cat: string; items: Sku[] }[]) => {
     const groups = items ?? grouped;
     return (
       <div className="entrylist">
@@ -275,16 +276,16 @@ export default function DeptClient(props: {
     );
   }
   const filledCount = Object.values(qtyMap).filter((v) => Number(v) > 0).length;
-  const SaveBar = ({ n, onSave, label }: { n: number; onSave: () => void; label?: string }) => (
+  const saveBar = (n: number, onSave: () => void, label?: string) => (
     <div className="savebar">
       <button className="primary" disabled={busy || n === 0} onClick={onSave}>{busy ? 'Saving…' : (label ?? 'Save all')}</button>
       <span className="count">{n} item{n === 1 ? '' : 's'}</span>
       {msg && <span className={msg.ok ? 'saved-pill' : 'err'}>{msg.text}</span>}
     </div>
   );
-  const Crumb = ({ label, extra }: { label: string; extra?: React.ReactNode }) => (
+  const crumb = (label: string, extra?: React.ReactNode) => (
     <div className="crumb">
-      <button className="changebtn" onClick={goHome}>&larr; Home</button>
+      <button className="changebtn" onClick={() => goHome()}>&larr; Home</button>
       <span className="now">{label}</span>
       {bizDate && chosen && screen !== 'home' && screen !== 'request' && (
         <span className="daytag">{chosen.relative} &middot; {chosen.weekday} {chosen.date}</span>
@@ -300,7 +301,17 @@ export default function DeptClient(props: {
     const activeOutgoing = props.outgoingRequests.filter((r) => r.state === 'open' || r.state === 'partial');
     const doneOutgoing = props.outgoingRequests.filter((r) => r.state === 'fulfilled' || r.state === 'cancelled').slice(0, 6);
     return (
-      <main><BackToConsole /><TrialBar /><Header />
+      <main>{backToConsole()}{trialBar()}{header()}
+        {flash && (
+          <div className="flashbar">
+            <span className="tick">✓</span>
+            <span className="ftext">{flash.text}</span>
+            {flash.next === 'plan' && (
+              <button className="primary" onClick={() => start('plan')}>Now plan the next production →</button>
+            )}
+            <button className="fclose" onClick={() => setFlash(null)} title="dismiss">×</button>
+          </div>
+        )}
         <div className="deptmeta">
           Production day <strong>{openChoice ? `${openChoice.weekday} ${props.openDay}` : props.openDay}</strong>
           <span className="metadot">·</span> day starts {props.settings.dayStart.slice(0, 5)}
@@ -430,8 +441,8 @@ export default function DeptClient(props: {
   // ---------- RECEIVE ----------
   if (screen === 'receive') {
     return (
-      <main><BackToConsole /><TrialBar /><Header sub="Receive" />
-        <Crumb label="Receive / प्राप्त" />
+      <main>{backToConsole()}{trialBar()}{header("Receive")}
+        {crumb("Receive / प्राप्त")}
         {props.inbox.length === 0 ? (
           <p className="hint">Nothing waiting. When another department sends you items, they appear here to confirm.</p>
         ) : (
@@ -448,16 +459,16 @@ export default function DeptClient(props: {
   if (screen === 'request') {
     if (props.requestables.length === 0) {
       return (
-        <main><BackToConsole /><TrialBar /><Header sub="Request" />
-          <Crumb label="Request / मांग" />
+        <main>{backToConsole()}{trialBar()}{header("Request")}
+          {crumb("Request / मांग")}
           <p className="hint">No other department has an item list yet, so there is nothing to request. This changes when the next departments join.</p>
         </main>
       );
     }
     if (!askDept) {
       return (
-        <main><BackToConsole /><TrialBar /><Header sub="Request" />
-          <Crumb label="Request / मांग" />
+        <main>{backToConsole()}{trialBar()}{header("Request")}
+          {crumb("Request / मांग")}
           <h1 className="step">Which department are you asking?</h1>
           <div className="destgrid">
             {props.requestables.map((d) => (
@@ -473,11 +484,10 @@ export default function DeptClient(props: {
     const targetGroups = [...new Set(target.items.map((s) => s.category))]
       .map((c) => ({ cat: c, items: target.items.filter((s) => s.category === c) })).filter((g) => g.items.length);
     return (
-      <main><BackToConsole /><TrialBar /><Header sub="Request" />
-        <Crumb label={`Request → ${target.deptName}`}
-          extra={props.requestables.length > 1
-            ? <button className="changebtn" onClick={() => { setAskDept(''); setQtyMap({}); }}>change department</button>
-            : undefined} />
+      <main>{backToConsole()}{trialBar()}{header("Request")}
+        {crumb(`Request → ${target.deptName}`, props.requestables.length > 1
+          ? <button className="changebtn" onClick={() => { setAskDept(''); setQtyMap({}); }}>change department</button>
+          : undefined)}
         <p className="hint">
           Type what you need against each item. {target.deptName} sees this on their screen and sends against it;
           you confirm on Receive when it arrives. Every request keeps its history: asked, sent, received.
@@ -494,8 +504,8 @@ export default function DeptClient(props: {
               setNeededBy(t.toISOString().slice(0, 10));
             }}>Tomorrow</button>
         </div>
-        <QtySheet items={targetGroups} showUsual />
-        <SaveBar n={filledCount} onSave={submitRequest} label="Send request" />
+        {qtySheet(true, targetGroups)}
+        {saveBar(filledCount, submitRequest, "Send request")}
       </main>
     );
   }
@@ -504,12 +514,11 @@ export default function DeptClient(props: {
   if (screen === 'closing') {
     const countedN = Object.values(closingMap).filter((v) => v.split ? v.b.some((x) => x !== '') : v.total !== '').length;
     return (
-      <main><BackToConsole /><TrialBar /><Header sub="Closing count" />
-        <Crumb label="Closing / गिनती" extra={
+      <main>{backToConsole()}{trialBar()}{header("Closing count")}
+        {crumb('Closing / गिनती',
           <button className="changebtn" onClick={() => setBizDate(bizDate === props.dateChoices[0].date ? props.dateChoices[1].date : props.dateChoices[0].date)}>
             change day
-          </button>
-        } />
+          </button>)}
         <p className="hint">
           Count what is physically left, item by item. Tap <strong>split by age</strong> to count fresh and older stock separately
           (like the paper register&rsquo;s 1/2/3 days old columns). An item you leave blank is simply not counted today; a zero means counted and none left.
@@ -549,14 +558,7 @@ export default function DeptClient(props: {
             </Fragment>
           ))}
         </div>
-        <SaveBar n={countedN} onSave={submitClosing} label="Save closing" />
-        {planCta && msg?.ok && (
-          <p style={{ marginTop: 10 }}>
-            <button className="primary" onClick={() => { setPlanCta(false); start('plan'); }}>
-              Plan the next production →
-            </button>
-          </p>
-        )}
+        {saveBar(countedN, submitClosing, "Save closing")}
       </main>
     );
   }
@@ -566,8 +568,8 @@ export default function DeptClient(props: {
     const pd = props.planDatas.find((d) => d.planDate === planDate) ?? props.planDatas[0];
     if (!pd) {
       return (
-        <main><BackToConsole /><TrialBar /><Header sub="Plan" />
-          <Crumb label="Plan / प्लान" />
+        <main>{backToConsole()}{trialBar()}{header("Plan")}
+          {crumb("Plan / प्लान")}
           <p className="hint">Nothing to plan yet.</p>
         </main>
       );
@@ -577,8 +579,8 @@ export default function DeptClient(props: {
     const filledN = Object.values(planMap).filter((v) => v !== '').length;
     const anyExisting = pd.rows.some((r) => r.existingPlanned != null);
     return (
-      <main><BackToConsole /><TrialBar /><Header sub="Plan" />
-        <Crumb label="Plan / प्लान" />
+      <main>{backToConsole()}{trialBar()}{header("Plan")}
+        {crumb("Plan / प्लान")}
         <div className="pickline">
           {props.planDatas.map((d) => (
             <button key={d.planDate} className={`chipbtn ${planDate === d.planDate ? 'on' : ''}`}
@@ -593,7 +595,17 @@ export default function DeptClient(props: {
             Counting first gives a truer plan.
           </p>
         )}
-        {anyExisting && <p className="hint">A plan already exists for this day. Saving again replaces it (the old one stays on record).</p>}
+        {anyExisting && (
+          <div className="savedplan">
+            <strong>A plan is already saved for this day.</strong> The numbers below are that saved plan, not a
+            leftover. Change any line and save again to replace it, or start over from the suggestion.
+            <button className="changebtn" onClick={() => {
+              const fresh: Record<string, string> = {};
+              for (const r of pd.rows) fresh[r.skuCode] = r.suggested > 0 ? String(r.suggested) : '';
+              setPlanMap(fresh);
+            }}>Reset to suggestion</button>
+          </div>
+        )}
         <p className="hint">
           The suggestion is par minus counted stock plus what other departments asked for.
           <strong> Your number is the plan</strong>: change any line, blank means skip.
@@ -620,7 +632,7 @@ export default function DeptClient(props: {
             </Fragment>
           ))}
         </div>
-        <SaveBar n={filledN} onSave={submitPlan} label="Save plan" />
+        {saveBar(filledN, submitPlan, "Save plan")}
       </main>
     );
   }
@@ -629,21 +641,18 @@ export default function DeptClient(props: {
   const meta = ACTION_META[screen];
   if (!bizDate) {
     return (
-      <main><BackToConsole /><TrialBar /><Header sub={meta.label} />
-        <Crumb label={`${meta.label} / ${meta.hi}`} />
-        <DayPicker
-          title="Which production day?"
-          hint={screen === 'made'
-            ? 'Pick the day these batches belong to. Night production before the day change still belongs to your shift’s day.'
-            : 'Pick the day this entry belongs to.'}
-        />
+      <main>{backToConsole()}{trialBar()}{header(meta.label)}
+        {crumb(`${meta.label} / ${meta.hi}`)}
+        {dayPicker('Which production day?', screen === 'made'
+          ? 'Pick the day these batches belong to. Night production before the day change still belongs to your shift’s day.'
+          : 'Pick the day this entry belongs to.')}
       </main>
     );
   }
   if (screen === 'issued' && !dest) {
     return (
-      <main><BackToConsole /><TrialBar /><Header sub="Sent" />
-        <Crumb label="Sent / भेजा" />
+      <main>{backToConsole()}{trialBar()}{header("Sent")}
+        {crumb("Sent / भेजा")}
         <h1 className="step">Where is it going?</h1>
         <p className="hint">Pick the department or spoke first. The receiver will confirm what arrives.</p>
         <div className="destgrid">
@@ -659,16 +668,16 @@ export default function DeptClient(props: {
   const destName = props.destinations.find((d) => d.code === dest)?.name;
   const linkedReqIds = [...new Set(Object.values(reqLinks))];
   return (
-    <main><BackToConsole /><TrialBar /><Header sub={meta.label} />
-      <Crumb label={screen === 'issued' ? `Sent → ${destName}` : `${meta.label} / ${meta.hi}`}
-        extra={screen === 'issued'
+    <main>{backToConsole()}{trialBar()}{header(meta.label)}
+      {crumb(screen === 'issued' ? `Sent → ${destName}` : `${meta.label} / ${meta.hi}`,
+        screen === 'issued'
           ? <button className="changebtn" onClick={() => { setDest(''); setQtyMap({}); setReqLinks({}); }}>change destination</button>
-          : undefined} />
+          : undefined)}
 
       {screen === 'made' && (<>
         <p className="hint">Quantity made against each item. Blank rows are skipped.</p>
-        <QtySheet showUsual />
-        <SaveBar n={filledCount} onSave={() => saveMovement('made')} />
+        {qtySheet(true)}
+        {saveBar(filledCount, () => saveMovement('made'))}
       </>)}
 
       {screen === 'issued' && (<>
@@ -676,8 +685,8 @@ export default function DeptClient(props: {
           <p className="hint reqnote">This send answers request #{linkedReqIds.join(', #')} from {destName}. Saving links the two, and the request closes automatically once the asked quantity is sent.</p>
         )}
         <p className="hint">Quantities sent to <strong>{destName}</strong>. They will see this and confirm what arrived.</p>
-        <QtySheet showUsual={false} />
-        <SaveBar n={filledCount} onSave={() => saveMovement('issued')} />
+        {qtySheet(false)}
+        {saveBar(filledCount, () => saveMovement('issued'))}
       </>)}
 
       {screen === 'wasted' && (<>
@@ -698,7 +707,7 @@ export default function DeptClient(props: {
           </div>
         ))}
         <button className="ghostbtn" onClick={() => setWaste([...waste, { skuCode: '', reasonCode: '', qty: '' }])}>+ Add row</button>
-        <SaveBar n={waste.filter((w) => w.skuCode && w.reasonCode && Number(w.qty) > 0).length} onSave={saveWaste} />
+        {saveBar(waste.filter((w) => w.skuCode && w.reasonCode && Number(w.qty) > 0).length, saveWaste)}
       </>)}
     </main>
   );
