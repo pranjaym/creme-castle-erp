@@ -181,3 +181,21 @@ Pranjay: "I don't have time to go to them and sit with them. Maybe we can create
 Pranjay's mapping, verified live: "admins who help me execute, see everything except users" = `tech`; "senior chefs running the Sponge and Liquid teams, see everything except masters" = `exec_chef`. All passwords are random and were handed over in chat; there is no self-service password change yet, so a reset is done by the super admin on the Users screen.
 
 **Next:** hand the tablet logins to the two teams, let them run real days in trial mode, then use the go-live switch when Pranjay is satisfied. The D2C reconciliation page needs OMS credentials added to this deployment if it is ever wanted here.
+
+## Round 7 (21 August 2026): the trial team's first feedback, and a naming decision
+
+**Four defects reported by the Sponge and Liquid teams after day one, all fixed:**
+1. **The cursor left the box after one digit**, so every two-digit quantity took two taps. My bug: the screen's helpers (entry sheet, header, save bar) were declared inside the component, so each keystroke created a new component type and React remounted the input, discarding focus. They are plain render functions now. The same bug was also eating the "your name" box. Verified by typing 1, 15, 150 with focus intact.
+2. **"It saves but does not move to the next window."** Every successful save now returns to the department hub with a green confirmation bar naming what was saved.
+3. **The stray "Plan the next production" button** after a closing count moved out from under the save bar and into that confirmation, as the next step rather than an orphan control.
+4. **Reopening Plan looked like stale prefill.** It now states that a plan is already saved for that day, that these are those numbers, and offers one tap to reset to the suggestion.
+
+**Not changed: a reason stays mandatory on Waste.** Waste without a cause is a number nobody can act on: expired, failed batch and spillage lead to three different fixes. Offered to make it one-tap buttons instead of a dropdown if the friction persists.
+
+**Naming decision (Pranjay, 21 August 2026, after seeing the counter-evidence and reaffirming):**
+- `Sent` becomes **Transfer sales**
+- `Request` becomes **Purchase request**
+
+The concern was stated and overruled, and is recorded here so it is not relitigated: SupplyNote already calls an internal inter-location request an **indent** (`#IND-`) and reserves **purchase/PO** for vendor buying, which the planned ordering module will do for real; and this spine holds the company's actual **sales** (Zomato, Swiggy, D2C, 1.65M rows), so the word now carries two meanings and mixed reports will need a footnote. Pranjay's reason: his team reads these words more easily, and the words on the team's buttons are his to choose.
+
+**UI labels only.** The database is untouched: `production_log.action` stays `issued`, the tables stay `dept_requests` and `transfer_receipts`, the views keep their names. The schema is canonical and outlives button wording, so reversing this later costs nothing and rewrites no history.
