@@ -43,10 +43,22 @@ sys.path.insert(0, HERE)
 import ingest
 import scrape
 
-# How many trailing days each evening re-reads. Was 7; cut to 3 on 4 Aug 2026 at
-# Pranjay's direction after the first same-shape comparison showed no changes on
-# days 2 to 7 (the earlier "still 20% moving" was xlsx-vs-CSV export-shape noise).
-DAILY_WINDOW_DAYS = 3
+# How many trailing days each evening re-reads.
+#
+# History: 7 originally; cut to 3 on 4 Aug 2026 when the first same-shape
+# comparison showed zero changes on days 2 to 7 (the earlier "still 20% moving"
+# was xlsx-vs-CSV export-shape noise).
+#
+# RAISED TO 5 on 22 Aug 2026, Pranjay's call. The 4 Aug measurement was wrong,
+# not because the arithmetic was wrong but because every comparison then was
+# hours apart, and ratings move over DAYS. Days-apart evidence since:
+#   6 Aug pull : 51 rows changed on 3 Aug (age 2), 23 on 2 Aug (age 3)
+#   15 Aug pull: 8 rows changed on 10 Aug at AGE 5, six of them brand-new
+#                ratings that did not exist before, including two 2-star
+# Ratings settle over about 3 days but genuinely still land on day 4 and 5, and
+# between Monday sweeps a 3-day window was dropping them. See integration-notes
+# section 13d and flag F25.
+DAILY_WINDOW_DAYS = 5
 
 # PLATFORM LIMIT, discovered live 4 Aug 2026: with more than 10 outlets mapped
 # (we have 45), Zomato refuses any range longer than 10 days. The page renders
