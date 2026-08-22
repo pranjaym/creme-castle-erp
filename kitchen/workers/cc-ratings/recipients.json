@@ -1,0 +1,29 @@
+{
+  "_note": "Two mailings, same email body (the digest), different attachment. Edit here, not in code.",
+  "groups": [
+    {
+      "name": "HTML Daily",
+      "attach": ["dashboard"],
+      "to": [
+        "pawan.g@cremecastle.in",
+        "pranjay@cremecastle.in",
+        "rishabh.k@cremecastle.in",
+        "ajay.rana@cremecastle.in",
+        "gopal.ch@cremecastle.in",
+        "sanjeev.sejwal@cremecastle.in",
+        "am.jaipur@cremecastle.in",
+        "am.chandigarh@cremecastle.in"
+      ]
+    },
+    {
+      "name": "PDF Daily",
+      "attach": ["pdf"],
+      "to": [
+        "md.asif@cremecastle.in",
+        "azeem@cremecastle.in",
+        "veena@cremecastle.in",
+        "veena.mital15@gmail.com"
+      ]
+    }
+  ]
+}

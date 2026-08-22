@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Creme Castle · Daily Ratings &amp; Reviews</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#FAF8F4;--surface:#FFFFFF;--surface-2:#F5F1EA;
+  --border:#E8E0D2;--border-soft:#F0E9DD;
+  --text:#2A2520;--text-muted:#7A6F5F;--text-dim:#B0A48F;
+  --accent:#8B5A2B;--accent-soft:#D4A574;
+  --critical:#C24A3D;--critical-bg:#FBEBE8;
+  --warning:#D89A2C;--warning-bg:#FAF1DC;
+  --positive:#4A8C5C;--positive-bg:#E8F1EA;
+  --watch:#4A6FA5;--watch-bg:#E8EEF7;--neutral:#9E9286;
+  --shadow:0 1px 3px rgba(60,40,20,.05),0 1px 2px rgba(60,40,20,.03);
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px;line-height:1.5;
+  -webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:'Fraunces',Georgia,serif;font-weight:600;margin:0;letter-spacing:-.01em}
+.container{max-width:1440px;margin:0 auto;padding:0 20px 80px}
+
+header{background:rgba(255,255,255,.93);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border);padding:11px 0;margin-bottom:20px;
+  position:sticky;top:0;z-index:100}
+.header-inner{max-width:1440px;margin:0 auto;padding:0 20px;display:flex;
+  align-items:baseline;gap:13px;flex-wrap:wrap}
+.brand{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--accent);font-weight:600}
+.header-inner h1{font-size:18px}
+.header-inner h1 .dow{color:var(--text-dim);font-weight:400}
+.hdr-ctl{display:flex;gap:5px;align-items:center}
+.hdr-ctl label{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--text-muted);font-weight:600}
+.maturity{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:3px 8px;
+  border-radius:4px;font-weight:600;letter-spacing:.03em}
+.maturity.settled{background:var(--positive-bg);color:var(--positive)}
+.maturity.filling{background:var(--warning-bg);color:#8A6A20}
+.nav{margin-left:auto;display:flex;gap:2px;flex-wrap:wrap}
+.nav a{color:var(--text-muted);text-decoration:none;font-size:11.5px;padding:5px 8px;
+  border-radius:6px;transition:all .15s}
+.nav a:hover{color:var(--accent);background:var(--surface-2)}
+
+select,input[type=text],input[type=number]{font-family:inherit;font-size:12px;padding:5px 8px;
+  border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)}
+select:hover,input:hover{border-color:var(--accent-soft)}
+input[type=number]{width:64px}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.seg button{font-family:inherit;font-size:11px;padding:5px 11px;border:none;
+  background:var(--surface-2);color:var(--text-muted);cursor:pointer;
+  border-right:1px solid var(--border)}
+.seg button:last-child{border-right:none}
+.seg button.on{background:var(--accent);color:#fff}
+.chip{font-size:11px;padding:3px 9px;border-radius:12px;border:1px solid var(--border);
+  background:var(--surface-2);color:var(--text-muted);cursor:pointer;user-select:none}
+.chip:hover{border-color:var(--accent-soft)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn{font-family:inherit;font-size:11px;padding:5px 11px;border:1px solid var(--accent);
+  background:var(--surface);color:var(--accent);border-radius:6px;cursor:pointer}
+.btn:hover{background:var(--accent);color:#fff}
+
+section{margin-bottom:28px;scroll-margin-top:64px}
+.section-head{display:flex;align-items:baseline;gap:9px;margin-bottom:11px;flex-wrap:wrap}
+.section-head .num{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
+  letter-spacing:.08em;background:var(--surface-2);color:var(--text-muted);
+  padding:3px 7px;border-radius:4px}
+.section-head .num.alert{background:var(--critical);color:#fff}
+.section-head h2{font-size:18px}
+.section-head .sub{font-size:11.5px;color:var(--text-muted)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:15px 17px;box-shadow:var(--shadow)}
+.chart-title{font-size:13px;font-weight:600;margin-bottom:9px}
+.hint{font-size:11.5px;color:var(--text-muted);margin:0 0 11px;line-height:1.55;max-width:92ch}
+.two-col{display:grid;grid-template-columns:1.3fr 1fr;gap:14px}
+
+/* BRIEFING */
+.briefings{display:grid;gap:9px}
+.briefing{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--neutral);
+  border-radius:8px;padding:12px 15px;display:flex;gap:12px;box-shadow:var(--shadow)}
+.briefing.critical{border-left-color:var(--critical);background:linear-gradient(to right,var(--critical-bg),var(--surface))}
+.briefing.warning{border-left-color:var(--warning);background:linear-gradient(to right,var(--warning-bg),var(--surface))}
+.briefing.positive{border-left-color:var(--positive);background:linear-gradient(to right,var(--positive-bg),var(--surface))}
+.briefing .tag{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.08em;
+  text-transform:uppercase;font-weight:600;padding:3px 7px;border-radius:4px;height:fit-content;
+  white-space:nowrap;background:var(--surface-2);color:var(--text-muted)}
+.briefing.critical .tag{background:var(--critical);color:#fff}
+.briefing.warning .tag{background:var(--warning);color:#fff}
+.briefing.positive .tag{background:var(--positive);color:#fff}
+.briefing .body{min-width:0;font-size:13px;color:var(--text-muted)}
+.briefing .body strong{color:var(--text)}
+.briefing .body .h{display:block;font-weight:600;color:var(--text);margin-bottom:2px;font-size:13.5px}
+.esc-card{background:var(--surface);border:1px solid #E9C6BC;border-radius:6px;padding:9px 12px;margin-top:7px}
+.esc-meta{font-size:11.5px;color:var(--text-muted);margin-bottom:4px}
+.esc-meta strong{color:var(--text)}
+.esc-quote{font-family:'Fraunces',Georgia,serif;font-size:14px;line-height:1.42;color:var(--text)}
+.esc-items{font-size:10.5px;color:var(--accent);margin-top:4px}
+
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:11px}
+.kpi-tile{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:12px 14px;box-shadow:var(--shadow)}
+.kpi-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--text-muted);font-weight:600;margin-bottom:7px}
+.kpi-main{font-size:26px;font-weight:600;font-family:'Fraunces',Georgia,serif;line-height:1}
+.kpi-main.crit{color:var(--critical)} .kpi-main.pos{color:var(--positive)}
+.kpi-main .unit{font-size:13px;color:var(--text-dim);font-weight:400}
+.kpi-split{font-size:11px;color:var(--text-dim);margin-top:4px}
+.kpi-compare{margin-top:8px;display:flex;flex-direction:column;gap:2px}
+.kpi-delta{font-size:10.5px;color:var(--text-muted);display:flex;justify-content:space-between;gap:6px}
+.kpi-delta b,.d{font-family:'IBM Plex Mono',monospace;font-weight:600;padding:0 4px;border-radius:3px;font-size:10px}
+.d.worse,.kpi-delta b.worse{color:var(--critical);background:var(--critical-bg)}
+.d.better,.kpi-delta b.better{color:var(--positive);background:var(--positive-bg)}
+.d.flat,.kpi-delta b.flat{color:var(--text-dim);background:var(--surface-2)}
+.d.none,.kpi-delta b.none{color:var(--text-dim);background:var(--surface-2);font-weight:400}
+
+/* TABLES */
+table{width:100%;border-collapse:collapse;font-size:12px}
+table.data th{text-align:right;padding:6px 8px;font-weight:600;color:var(--text-muted);
+  font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;
+  border-bottom:1px solid var(--border);white-space:nowrap;background:var(--surface-2)}
+table.data th.l{text-align:left}
+table.data th.sortable{cursor:pointer;user-select:none}
+table.data th.sortable:hover{color:var(--accent)}
+th .arrow{font-size:8px;margin-left:2px;color:var(--accent)}
+table.data td{padding:5px 8px;text-align:right;border-bottom:1px solid var(--border-soft);
+  font-variant-numeric:tabular-nums;line-height:1.25}
+table.data td.l{text-align:left}
+table.data tbody tr:hover{background:var(--surface-2)}
+tr.flagged td{background:var(--critical-bg)}
+tr.flagged:hover td{background:#F8DFDA}
+tr.quiet td{background:var(--warning-bg)}
+tr.quiet:hover td{background:#F5E7C6}
+.cellmain{font-weight:600;font-size:12.5px}
+.cellsub{font-size:9.5px;color:var(--text-dim);margin-top:1px;white-space:nowrap}
+.cellsub .d{padding:0 3px;margin-left:2px}
+.tbl-wrap{overflow:auto;border:1px solid var(--border);border-radius:8px;
+  background:var(--surface);max-height:76vh;box-shadow:var(--shadow)}
+.tbl-wrap thead th{position:sticky;top:0;z-index:2}
+.crit{color:var(--critical)} .warn{color:var(--warning)} .ok{color:var(--positive)}
+.dim{color:var(--text-dim)} .muted{color:var(--text-muted)}
+.empty-note{padding:24px;text-align:center;color:var(--text-dim);font-style:italic;font-size:12.5px}
+.pill{font-family:'IBM Plex Mono',monospace;font-size:9px;padding:1px 5px;border-radius:3px;
+  letter-spacing:.03em;white-space:nowrap;font-weight:600}
+.pill.hi{background:var(--critical-bg);color:var(--critical)}
+.pill.lo{background:var(--surface-2);color:var(--text-dim);font-weight:400}
+.pill.mid{background:var(--warning-bg);color:#8A6A20}
+.pill.esc{background:var(--critical);color:#fff}
+.exp{cursor:pointer;user-select:none;color:var(--accent);font-weight:600;
+  font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1;
+  display:inline-block;width:17px;height:17px;text-align:center;
+  border:1px solid var(--border);border-radius:4px;background:var(--surface)}
+.exp:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+tr.drill td{background:var(--surface-2);padding:0}
+.drill-inner{padding:11px 14px}
+
+/* CONTROL BAR */
+.ctlbar{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;padding:11px 14px;
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  margin-bottom:11px;box-shadow:var(--shadow)}
+.fgroup{display:flex;flex-direction:column;gap:5px}
+.flabel{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--text-muted);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:4px;max-width:480px}
+.scope{font-size:11px;color:var(--text-muted);margin:0 0 9px;line-height:1.5}
+
+/* ANATOMY */
+.anat th.grp{text-align:center;border-left:1px solid var(--border)}
+.anat td.gl{border-left:1px solid var(--border-soft)}
+.bar{height:7px;border-radius:2px;background:var(--surface-2);overflow:hidden;min-width:52px}
+.bar i{display:block;height:100%;border-radius:2px}
+.dot{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;vertical-align:-1px}
+
+/* VERBATIMS */
+.v-theme{margin-bottom:18px}
+.v-theme-head{display:flex;align-items:baseline;gap:9px;border-bottom:1px solid var(--border);
+  padding-bottom:5px;margin-bottom:9px}
+.v-theme-head h3{font-size:14px;color:var(--accent)}
+.v-theme-head .count{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim)}
+.v-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:9px}
+.v-card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--border);
+  border-radius:8px;padding:10px 12px;box-shadow:var(--shadow)}
+.v-card.r1{border-left-color:var(--critical)} .v-card.r2{border-left-color:#D0764A}
+.v-card.r3{border-left-color:var(--warning)} .v-card.r4{border-left-color:#8FB39B}
+.v-card.r5{border-left-color:var(--positive)}
+.v-card header{display:flex;gap:7px;align-items:baseline;margin-bottom:5px;flex-wrap:wrap}
+.stars{font-size:11px;letter-spacing:.5px}
+.stars.s1,.stars.s2{color:var(--critical)} .stars.s3{color:var(--warning)}
+.stars.s4,.stars.s5{color:var(--positive)}
+.dimstar{color:#E2DACE}
+.v-outlet{font-weight:600;font-size:12px}
+.v-time{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-dim);margin-left:auto}
+.v-text{font-family:'Fraunces',Georgia,serif;font-size:13.5px;line-height:1.45;margin:0 0 7px}
+.v-foot{font-size:10.5px;color:var(--accent);border-top:1px solid var(--border-soft);padding-top:5px}
+/* compact rating-only strip */
+.silent{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:10px 13px;box-shadow:var(--shadow)}
+.silent .sh{font-size:11.5px;color:var(--text-muted);margin-bottom:8px}
+.silent .sh strong{color:var(--text)}
+.srow{display:flex;flex-wrap:wrap;gap:4px}
+.stag{font-size:10.5px;padding:2px 7px;border-radius:10px;background:var(--surface-2);
+  border:1px solid var(--border-soft);color:var(--text-muted);white-space:nowrap}
+.stag b{font-family:'IBM Plex Mono',monospace;font-weight:600;margin-left:4px}
+.stag.b1,.stag.b2{background:var(--critical-bg);border-color:#EFD5CF;color:var(--critical)}
+.stag.b3{background:var(--warning-bg);border-color:#EFE2C4;color:#8A6A20}
+
+.method{margin-top:32px;border-top:1px solid var(--border);padding-top:17px;
+  font-size:11.5px;color:var(--text-muted);columns:2;column-gap:36px}
+.method h4{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+.method p{margin:0 0 9px;break-inside:avoid}
+.method strong{color:var(--text)}
+@media(max-width:1000px){.two-col{grid-template-columns:1fr}.method{columns:1}}
+*:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+tfoot .totrow td{border-top:2px solid #3A322A;background:#F6F1E7;font-weight:600;padding-top:9px}
+tfoot .totrow .cellsub{font-weight:400}
+</style></head>
+<body>
+
+<header><div class="header-inner">
+  <div><div class="brand">Creme Castle · Ratings &amp; Reviews</div><h1 id="hTitle">—</h1></div>
+  <div class="hdr-ctl"><label for="selDate">Day</label><select id="selDate"></select></div>
+  <span class="maturity" id="matBadge">—</span>
+  <nav class="nav">
+    <a href="#briefing">Briefing</a><a href="#glance">Glance</a><a href="#trend">Trend</a>
+    <a href="#anatomy">Complaints</a><a href="#outlets">Outlets</a><a href="#items">Items</a>
+    <a href="#verbatims">Verbatims</a>
+  </nav>
+</div></header>
+
+<div class="container">
+
+  <section id="briefing">
+    <div class="section-head"><span class="num" id="briefNum">01</span><h2>Daily Briefing</h2></div>
+    <div class="briefings" id="briefBox"></div>
+  </section>
+
+  <section id="glance">
+    <div class="section-head"><span class="num">02</span><h2>Yesterday at a Glance</h2>
+      <span class="sub">vs same weekday last week · vs 7-day average</span></div>
+    <div class="kpi-grid" id="kpiBox"></div>
+  </section>
+
+  <section id="trend">
+    <div class="section-head"><span class="num">03</span><h2>Trend</h2>
+      <span class="sub">last 14 days</span></div>
+    <div class="two-col">
+      <div class="card"><div class="chart-title">Orders, rating &amp; complaint share — 14 days</div>
+        <div style="height:265px;position:relative"><canvas id="cTrend"></canvas></div></div>
+      <div class="card"><div class="chart-title">Rating mix — selected day vs 7-day daily average</div>
+        <div style="height:265px;position:relative"><canvas id="cMix"></canvas></div></div>
+    </div>
+  </section>
+
+  <section id="anatomy">
+    <div class="section-head"><span class="num">04</span><h2>Complaint Anatomy</h2>
+      <span class="sub">1–3★ only, by theme</span></div>
+    <div class="card">
+      <p class="hint">One theme per row across three windows, so a spike is visible against its own history. The share column is that theme's percentage of all 1–3★ in that window — read the shares, not the counts, since the windows differ in length. A theme large yesterday but small over 30 days is an incident; large in both is a standing process failure.</p>
+      <div class="tbl-wrap" style="max-height:none"><table class="data anat" id="tblAnat">
+        <thead><tr>
+          <th class="l" rowspan="2">Theme</th>
+          <th class="grp" colspan="3">Selected day</th>
+          <th class="grp" colspan="3">Last 7 days</th>
+          <th class="grp" colspan="3">Last 30 days</th>
+        </tr><tr>
+          <th class="gl">n</th><th>share</th><th class="l">&nbsp;</th>
+          <th class="gl">n</th><th>share</th><th class="l">&nbsp;</th>
+          <th class="gl">n</th><th>share</th><th class="l">&nbsp;</th>
+        </tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="outlets">
+    <div class="section-head"><span class="num">05</span><h2>Outlet Performance</h2>
+      <span class="sub">selected day, compared against 7-day and 30-day averages</span></div>
+    <div class="ctlbar">
+      <div class="fgroup"><span class="flabel">City</span><div class="chips" id="chipCity"></div></div>
+      <div class="fgroup"><span class="flabel">Window</span>
+        <div class="seg" id="segOWin">
+          <button data-v="1" class="on">Selected day</button>
+          <button data-v="7">Last 7 days</button><button data-v="30">Last 30 days</button></div></div>
+      <div class="fgroup"><span class="flabel">Red · avg rating below</span>
+        <input type="number" id="thRate" value="4.2" step="0.1" min="1" max="5"></div>
+      <div class="fgroup"><span class="flabel">Yellow · rated % below</span>
+        <input type="number" id="thPct" value="5" step="0.5" min="0" max="50"></div>
+      <div class="fgroup"><span class="flabel">&nbsp;</span>
+        <button class="btn" id="btnOCsv">Export CSV</button></div>
+    </div>
+    <p class="scope" id="oScope"></p>
+    <div class="tbl-wrap"><table class="data" id="tblOutlet">
+      <thead><tr>
+        <th class="l sortable" data-k="o">Outlet</th>
+        <th class="sortable" data-k="ordersPD">Orders</th>
+        <th class="sortable" data-k="ratedPD">Rated</th>
+        <th class="sortable" data-k="ratedPct">Rated %</th>
+        <th class="sortable" data-k="avg">Avg ★</th>
+        <th class="sortable" data-k="bad">Bad 1–3★</th>
+        <th class="sortable" data-k="good">Good 4–5★</th>
+        <th class="l">Flag</th>
+      </tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section id="items">
+    <div class="section-head"><span class="num">06</span><h2>Item Ratings</h2>
+      <span class="sub">every rated item — expand to read the reviews</span></div>
+    <div class="ctlbar">
+      <div class="fgroup"><span class="flabel">Window</span>
+        <div class="seg" id="segIWin">
+          <button data-v="1">Selected day</button><button data-v="7" class="on">7 days</button>
+          <button data-v="14">14 days</button><button data-v="30">30 days</button></div></div>
+      <div class="fgroup"><span class="flabel">Category</span><div class="chips" id="chipCat"></div></div>
+      <div class="fgroup"><span class="flabel">City</span><div class="chips" id="chipCityI"></div></div>
+      <div class="fgroup"><span class="flabel">Min ratings</span>
+        <input type="number" id="minR" value="1" min="1" step="1"></div>
+      <div class="fgroup"><span class="flabel">Search</span>
+        <input type="text" id="iSearch" placeholder="Tiramisu…"></div>
+      <div class="fgroup"><span class="flabel">&nbsp;</span>
+        <button class="btn" id="btnIReset">Reset</button>
+        <button class="btn" id="btnICsv">Export CSV</button></div>
+    </div>
+    <p class="scope" id="iScope"></p>
+    <div class="tbl-wrap"><table class="data" id="tblItem">
+      <thead><tr>
+        <th class="l sortable" data-k="k">Item</th>
+        <th class="l sortable" data-k="cat">Category</th>
+        <th class="sortable" data-k="n">Ratings</th>
+        <th class="sortable" data-k="avg">Avg ★</th>
+        <th class="sortable" data-k="bad">Bad 1–3★</th>
+        <th class="sortable" data-k="good">Good 4–5★</th>
+        <th class="sortable" data-k="withText">Reviews</th>
+        <th></th>
+      </tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section id="verbatims">
+    <div class="section-head"><span class="num">07</span><h2>What They Actually Said</h2>
+      <span class="sub">grouped by what went wrong, not by outlet</span></div>
+    <div class="ctlbar">
+      <div class="fgroup"><span class="flabel">Window</span>
+        <div class="seg" id="segVWin">
+          <button data-v="1" class="on">Selected day</button>
+          <button data-v="7">Last 7 days</button><button data-v="14">Last 14 days</button></div></div>
+      <div class="fgroup"><span class="flabel">Rating</span>
+        <div class="seg" id="segStar">
+          <button data-v="bad3" class="on">1–3★</button><button data-v="1">1★</button>
+          <button data-v="2">2★</button><button data-v="3">3★</button>
+          <button data-v="good">4–5★</button></div></div>
+      <div class="fgroup"><span class="flabel">Theme</span><div class="chips" id="chipTheme"></div></div>
+      <div class="fgroup"><span class="flabel">Outlet</span><select id="selVOutlet"></select></div>
+      <div class="fgroup"><span class="flabel">Search text</span>
+        <input type="text" id="vSearch" placeholder="stale, packaging, hair…"></div>
+      <div class="fgroup"><span class="flabel">&nbsp;</span><button class="btn" id="btnVReset">Reset</button></div>
+    </div>
+    <p class="scope" id="vScope"></p>
+    <div id="vWall"></div>
+  </section>
+
+  <div class="method">
+    <h4>How to read this</h4>
+    <p><strong>Ratings arrive over about three days.</strong> Unhappy customers rate within hours, happy ones take up to three days: at one day old roughly 88% of eventual 1★ are in but only 70% of 5★. So a fresh day always reads worse than it will finish. The badge in the header compares the day's rated % against <strong>the same weekday over the last four weeks, using only days old enough to have settled</strong>, and tells you whether to trust the percentages yet. Counts are real either way.</p>
+    <p><strong>Rated % is a store manager metric, not just sample size.</strong> Zomato shows the customer's number while the order is live, so managers call and ask for a rating. Swiggy does not expose the number, which is why Zomato is the platform where the rating is winnable. Across 45 days rated % ranges from <strong>5.2% to 13.4%</strong> between our own stores, and outlets that collect more ratings score better (correlation +0.61 with average rating, −0.59 with bad share). Two consequences: an outlet's average is <strong>not comparable</strong> to another's unless you look at rated % beside it, and the stores in the bottom half have room to lift their score by calling more, without changing a single recipe.</p>
+    <p><strong>Bad is 1–3★, good is 4–5★.</strong> 3★ sits with bad deliberately: on this platform it is a soft complaint from someone who will not bother complaining twice.</p>
+    <p><strong>Item attribution is by presence, not blame.</strong> An item is credited with a rating if it was in the order. On multi-item orders every item carries the rating, so an item's average is a co-occurrence signal — corroborate across outlets before acting.</p>
+    <p><strong>Never put Zomato and Swiggy on one axis.</strong> Zomato ratings are partly solicited by manager calls; Swiggy's are unprompted because no number is shared. The two are measuring different things.</p>
+    <p><strong>Escalation has two tiers.</strong> <strong>Act today</strong> is a physical contaminant, an illness report, or an expiry or allergen failure: about one every two days, rare enough to be worth interrupting someone for. <strong>Quality alert</strong> is spoilage and staleness, which runs closer to one a day and belongs with central production rather than in an emergency box. Both ignore star count.</p>
+  </div>
+</div>
+
+<script>
+const DAILY=__DAILY__, RATED=__RATED__, CAT=__CAT__, OUTLETS=__OUTLETS__;
+const THEME_ORDER=__THEMES__, META=__META__;
+
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const C={crit:'#C24A3D',warn:'#D89A2C',pos:'#4A8C5C',accent:'#8B5A2B',neutral:'#9E9286',border:'#E8E0D2'};
+const THEME_COLOR={};
+['#7A2A20','#C24A3D','#D0764A','#D89A2C','#B08A3E','#8B5A2B','#4A6FA5','#9E7B5A','#C9BEB0']
+  .forEach((c,i)=>{if(THEME_ORDER[i])THEME_COLOR[THEME_ORDER[i]]=c;});
+const fmtD=d=>new Date(d+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+const fmtFull=d=>new Date(d+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
+const dow=d=>new Date(d+'T00:00:00').toLocaleDateString('en-GB',{weekday:'long'});
+const shift=(d,n)=>{const x=new Date(d+'T00:00:00');x.setDate(x.getDate()+n);return x.toISOString().slice(0,10);};
+const n0=v=>v.toLocaleString('en-IN');
+function starStr(n){let s='';for(let i=0;i<5;i++)s+=i<n?'★':'<span class="dimstar">★</span>';return s;}
+
+/* ---- indexes ---- */
+const DATES=[...new Set(DAILY.map(r=>r[0]))].sort();
+const CITIES=[...new Set(Object.values(OUTLETS))].sort();
+const CATS=[...new Set(Object.values(CAT))].sort();
+const byDate={}; DAILY.forEach(r=>{(byDate[r[0]]=byDate[r[0]]||[]).push(r);});
+const ratedByDate={}; RATED.forEach(r=>{(ratedByDate[r.d]=ratedByDate[r.d]||[]).push(r);});
+function dnum(s){return Date.parse(s+'T00:00:00Z')/86400000;}
+function daysApart(a,b){return dnum(b)-dnum(a);}
+function daysBetween(end,n){const a=[],st=shift(end,-(n-1));
+  for(const d of DATES) if(d>=st&&d<=end) a.push(d); return a;}
+function dailyIn(days){let o=[];days.forEach(d=>{if(byDate[d])o=o.concat(byDate[d]);});return o;}
+function ratedIn(days){let o=[];days.forEach(d=>{if(ratedByDate[d])o=o.concat(ratedByDate[d]);});return o;}
+
+/* roll a set of DAILY rows into a metric block */
+function roll(rows){
+  let o=0,od=0,s=[0,0,0,0,0,0];
+  rows.forEach(r=>{o+=r[2];od+=r[3];for(let i=1;i<=5;i++)s[i]+=r[3+i];});
+  const rated=s[1]+s[2]+s[3]+s[4]+s[5];
+  const bad=s[1]+s[2]+s[3], good=s[4]+s[5], b12=s[1]+s[2];
+  const sum=s[1]+2*s[2]+3*s[3]+4*s[4]+5*s[5];
+  return {orders:o,delivered:od,rated,stars:s,bad,good,b12,three:s[3],
+    ratedPct:od?rated/od*100:0, avg:rated?sum/rated:0,
+    badPct:rated?bad/rated*100:0, goodPct:rated?good/rated*100:0,
+    b12Pct:rated?b12/rated*100:0, threePct:rated?s[3]/rated*100:0};
+}
+
+/* ---- state ---- */
+const S={date:DATES[DATES.length-1],
+  oCity:new Set(),oWin:1,thRate:4.2,thPct:5,oSort:{k:'ratedPD',dir:-1},
+  iWin:7,iCat:new Set(),iCity:new Set(),iMin:1,iSearch:'',iSort:{k:'n',dir:-1},iOpen:new Set(),
+  vWin:1,vStar:'bad3',vTheme:new Set(),vOutlet:'',vSearch:''};
+
+function outletsInScope(set){
+  return Object.keys(OUTLETS).filter(o=>!set.size||set.has(OUTLETS[o]));
+}
+function delta(now,ref,{invert=false,pp=false,dec=1,lab=''}={}){
+  if(ref==null||!isFinite(ref)||ref===0&&now===0)return '<span class="d none">'+(lab?lab+' —':'—')+'</span>';
+  const d=now-ref, eps=pp?0.15:(dec===0?0.5:0.02);
+  if(Math.abs(d)<eps)return '<span class="d flat">'+(lab?lab+' ':'')+'flat</span>';
+  const worse=invert?d>0:d<0;
+  return '<span class="d '+(worse?'worse':'better')+'">'+(lab?lab+' ':'')
+    +(d>0?'▲':'▼')+Math.abs(d).toFixed(dec)+(pp?'pp':'')+'</span>';
+}
+
+/* ---------- header / maturity ---------- */
+function renderHeader(){
+  $('#hTitle').innerHTML=fmtFull(S.date)+' <span class="dow">· '+dow(S.date)+'</span>';
+  const d=roll(byDate[S.date]||[]);
+  /* Reference = the SAME WEEKDAY over the last 4 weeks, counting only days that
+     are themselves settled. The old version sampled the days either side, which
+     are still filling in too, so it compared one incomplete day against others. */
+  const newest=DATES[DATES.length-1];
+  const ref=[];
+  for(let k=1;k<=4;k++){const x=shift(S.date,-7*k);
+    if(byDate[x]&&daysApart(x,newest)>=4){const v=roll(byDate[x]).ratedPct; if(v>0) ref.push(v);}}
+  ref.sort((a,b)=>a-b);
+  const med=ref.length?ref[Math.floor(ref.length/2)]:null;
+  const b=$('#matBadge');
+  if(med&&d.ratedPct<med*0.85){
+    b.className='maturity filling';
+    b.textContent='still filling in · '+d.ratedPct.toFixed(1)+'% rated vs '+med.toFixed(1)+'% norm';
+    b.title='Ratings arrive over about 3 days and 1★ land first, so this day reads worse than it will settle. Norm = the same weekday over the last 4 weeks, settled days only.';
+  } else {
+    b.className='maturity settled';
+    b.textContent='settled · '+d.ratedPct.toFixed(1)+'% rated';
+    b.title='Rated share is in line with the same weekday over the last 4 weeks.';
+  }
+}
+
+/* ---------- 01 briefing ---------- */
+function renderBriefing(){
+  const day=ratedByDate[S.date]||[], out=[];
+  const escs=day.filter(r=>r.e);
+  if(escs.length){
+    out.push({k:'critical',tag:'Act today',
+      h:escs.length+' escalation'+(escs.length>1?'s':'')+' — respond before the next service window',
+      b:'Hygiene, foreign-object, expiry or allergen language. Star count is irrelevant; these are compliance events.',
+      x:escs.slice(0,8).map(r=>'<div class="esc-card"><div class="esc-meta"><span class="crit">'+r.r
+        +'★</span> &nbsp;<strong>'+esc(r.o)+'</strong> · '+esc(OUTLETS[r.o]||'')+' · '+esc(r.t)
+        +' · <span class="dim">#'+esc(r.id)+'</span></div><div class="esc-quote">“'+esc(r.v)
+        +'”</div><div class="esc-items">'+esc(r.i.join(' · '))+'</div></div>').join('')
+        +(escs.length>8?'<div class="esc-meta" style="margin-top:6px">+ '+(escs.length-8)+' more — filter section 07 to Hygiene.</div>':'')});
+  } else {
+    out.push({k:'positive',tag:'Clear',h:'No escalations',
+      b:'Nothing matched hygiene, foreign-object, expiry or allergen language.'});
+  }
+  // outlets
+  const byO={}; day.filter(r=>r.r<=3).forEach(r=>{(byO[r.o]=byO[r.o]||[]).push(r);});
+  const multi=Object.entries(byO).filter(([,v])=>v.length>=3).sort((a,b)=>b[1].length-a[1].length);
+  if(multi.length){
+    out.push({k:'warning',tag:'Outlets',
+      h:multi.length+' outlet'+(multi.length>1?'s':'')+' took three or more 1–3★',
+      b:multi.slice(0,10).map(([o,v])=>{
+        const dd=roll((byDate[S.date]||[]).filter(x=>x[1]===o));
+        return '<strong>'+esc(o)+'</strong> '+v.length+' of '+dd.rated+' rated';}).join(' · ')
+        +'. Cross-check against the 30-day column in section 05 before treating any of these as a pattern.'});
+  } else {
+    out.push({k:'positive',tag:'Outlets',h:'No outlet took three or more 1–3★',
+      b:'Complaints are spread thin across the network rather than concentrated in one store.'});
+  }
+  // items — single-item orders only, so attribution is clean
+  const byI={}; day.filter(r=>r.r<=3&&r.i.length===1).forEach(r=>{(byI[r.i[0]]=byI[r.i[0]]||[]).push(r);});
+  const mi=Object.entries(byI).filter(([,v])=>v.length>=2).sort((a,b)=>b[1].length-a[1].length);
+  if(mi.length){
+    out.push({k:'warning',tag:'Items',h:'Repeat item signal with clean attribution',
+      b:mi.slice(0,8).map(([i,v])=>'<strong>'+esc(i)+'</strong> — '+v.length+' hits across '
+        +new Set(v.map(r=>r.o)).size+' outlet(s)').join('; ')
+        +'. These came from single-item orders, so blame is pinnable. Across several outlets it is the recipe or the batch; at one outlet it is that store.'});
+  } else {
+    out.push({k:'positive',tag:'Items',h:'No item drew two or more 1–3★ on a single-item order',
+      b:'Nothing today points at a specific SKU with clean attribution.'});
+  }
+  $('#briefBox').innerHTML=out.map(o=>'<div class="briefing '+o.k+'"><span class="tag">'+esc(o.tag)
+    +'</span><div class="body"><span class="h">'+o.h+'</span>'+o.b+(o.x||'')+'</div></div>').join('');
+  $('#briefNum').className='num'+(escs.length?' alert':'');
+}
+
+/* ---------- 02 glance ---------- */
+function kpiTile(label,main,cls,split,cmps){
+  return '<div class="kpi-tile"><div class="kpi-label">'+label+'</div>'
+    +'<div class="kpi-main '+(cls||'')+'">'+main+'</div>'
+    +(split?'<div class="kpi-split">'+split+'</div>':'')
+    +'<div class="kpi-compare">'+cmps.map(c=>'<div class="kpi-delta"><span>'+c[0]+'</span>'+c[1]+'</div>').join('')
+    +'</div></div>';
+}
+function renderGlance(){
+  const d=roll(byDate[S.date]||[]);
+  const dowRows=byDate[shift(S.date,-7)];
+  const w=dowRows?roll(dowRows):null;
+  const prevDays=daysBetween(shift(S.date,-1),7);
+  const p=prevDays.length?roll(dailyIn(prevDays)):null;
+  const pn=prevDays.length||1;
+  const cmp=(nowV,dowV,avgV,opt)=>[['same day last week',delta(nowV,dowV,opt)],
+                                    ['7-day average',delta(nowV,avgV,opt)]];
+  $('#kpiBox').innerHTML=
+    kpiTile('Orders',n0(d.orders),'',null,
+      cmp(d.orders,w?w.orders:null,p?p.orders/pn:null,{dec:0}))
+   +kpiTile('Ratings <span class="dim">(% of orders)</span>',n0(d.rated)+'<span class="unit"> · '
+      +d.ratedPct.toFixed(1)+'%</span>','',null,
+      cmp(d.ratedPct,w?w.ratedPct:null,p?p.ratedPct:null,{pp:true}))
+   +kpiTile('Average rating',d.avg.toFixed(2),d.avg<S.thRate?'crit':'',null,
+      cmp(d.avg,w?w.avg:null,p?p.avg:null,{dec:2}))
+   +kpiTile('4–5★ <span class="dim">(% of rated)</span>',d.goodPct.toFixed(1)+'<span class="unit">%</span>','pos',
+      n0(d.good)+' of '+n0(d.rated),
+      cmp(d.goodPct,w?w.goodPct:null,p?p.goodPct:null,{pp:true}))
+   +kpiTile('3★ <span class="dim">(% of rated)</span>',d.threePct.toFixed(1)+'<span class="unit">%</span>','',
+      n0(d.three)+' of '+n0(d.rated),
+      cmp(d.threePct,w?w.threePct:null,p?p.threePct:null,{pp:true,invert:true}))
+   +kpiTile('1–2★ <span class="dim">(% of rated)</span>',d.b12Pct.toFixed(1)+'<span class="unit">%</span>','crit',
+      n0(d.b12)+' of '+n0(d.rated),
+      cmp(d.b12Pct,w?w.b12Pct:null,p?p.b12Pct:null,{pp:true,invert:true}));
+}
+
+/* ---------- 03 charts ---------- */
+let chTrend,chMix;
+Chart.defaults.font.family="'IBM Plex Sans',sans-serif";
+Chart.defaults.font.size=10.5; Chart.defaults.color='#7A6F5F';
+function renderCharts(){
+  const days=daysBetween(S.date,14);
+  const m=days.map(d=>roll(byDate[d]||[]));
+  if(chTrend)chTrend.destroy();
+  chTrend=new Chart($('#cTrend'),{data:{labels:days.map(fmtD),datasets:[
+    {type:'bar',label:'Orders',data:m.map(x=>x.orders),backgroundColor:'#EFE7DA',
+     yAxisID:'y1',borderRadius:2,barPercentage:.7,order:3},
+    {type:'line',label:'Avg ★',data:m.map(x=>+x.avg.toFixed(2)),borderColor:C.pos,
+     backgroundColor:'rgba(74,140,92,.07)',fill:true,tension:.3,pointRadius:2.5,
+     pointBackgroundColor:C.pos,yAxisID:'y',order:1},
+    {type:'line',label:'1–3★ share of rated',data:m.map(x=>+x.badPct.toFixed(1)),
+     borderColor:C.crit,borderDash:[4,3],borderWidth:1.6,tension:.3,pointRadius:2,
+     yAxisID:'y2',order:2}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}},
+      scales:{y:{position:'left',min:3.5,max:5,grid:{color:C.border},
+                 title:{display:true,text:'avg ★',font:{size:9}}},
+              y1:{position:'right',beginAtZero:true,grid:{display:false},ticks:{precision:0}},
+              y2:{display:false,beginAtZero:true},x:{grid:{display:false}}}}});
+  const d=roll(byDate[S.date]||[]);
+  const prevDays=daysBetween(shift(S.date,-1),7);
+  const p=prevDays.length?roll(dailyIn(prevDays)):null, pn=prevDays.length||1;
+  if(chMix)chMix.destroy();
+  chMix=new Chart($('#cMix'),{type:'bar',data:{labels:['1★','2★','3★','4★','5★'],datasets:[
+    {label:fmtD(S.date),data:[1,2,3,4,5].map(i=>d.stars[i]),
+     backgroundColor:[C.crit,'#D0764A',C.warn,'#8FB39B',C.pos],borderRadius:2,barPercentage:.62},
+    {label:'7-day daily average',type:'line',data:[1,2,3,4,5].map(i=>p?+(p.stars[i]/pn).toFixed(1):0),
+     borderColor:C.neutral,borderDash:[4,3],borderWidth:1.6,pointRadius:3,
+     pointBackgroundColor:C.neutral,tension:.25}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}},
+      scales:{y:{beginAtZero:true,grid:{color:C.border},ticks:{precision:0}},x:{grid:{display:false}}}}});
+}
+
+/* ---------- 04 anatomy ---------- */
+function themeCounts(days){
+  const rows=ratedIn(days).filter(r=>r.r<=3), t={};
+  rows.forEach(r=>{t[r.th]=(t[r.th]||0)+1;});
+  return {t,tot:rows.length};
+}
+function renderAnatomy(){
+  const W=[themeCounts([S.date]),themeCounts(daysBetween(S.date,7)),themeCounts(daysBetween(S.date,30))];
+  const mx=W.map(w=>Math.max(1,...Object.values(w.t)));
+  const keys=THEME_ORDER.filter(k=>W.some(w=>w.t[k]));
+  $('#tblAnat tbody').innerHTML=keys.length?keys.map(k=>{
+    const col=THEME_COLOR[k]||C.neutral;
+    let h='<tr><td class="l"><span class="dot" style="background:'+col+'"></span>'+esc(k)+'</td>';
+    W.forEach((w,i)=>{const n=w.t[k]||0, sh=w.tot?n/w.tot*100:0;
+      h+='<td class="gl'+(n?'':' dim')+'">'+n+'</td><td class="'+(n?'':'dim')+'">'+sh.toFixed(0)
+        +'%</td><td class="l"><div class="bar"><i style="width:'+(n/mx[i]*100)+'%;background:'+col+'"></i></div></td>';});
+    return h+'</tr>';}).join('')
+    +'<tr style="font-weight:600"><td class="l muted">All 1–3★</td>'
+      +W.map(w=>'<td class="gl">'+w.tot+'</td><td class="dim">100%</td><td></td>').join('')+'</tr>'
+    :'<tr><td colspan="10" class="empty-note">No 1–3★ in these windows.</td></tr>';
+}
+
+function setFoot(sel,html){const tb=$(sel);let f=tb.querySelector('tfoot');
+  if(!f){f=document.createElement('tfoot');tb.appendChild(f);}f.innerHTML=html;}
+
+/* ---------- 05 outlets ---------- */
+function outletData(){
+  const scope=new Set(outletsInScope(S.oCity));
+  const cur=daysBetween(S.date,S.oWin), w7=daysBetween(S.date,7), w30=daysBetween(S.date,30);
+  const pick=(days,o)=>dailyIn(days).filter(r=>r[1]===o);
+  return [...scope].map(o=>{
+    const c=roll(pick(cur,o)), a=roll(pick(w7,o)), b=roll(pick(w30,o));
+    const n7=w7.length||1, n30=w30.length||1, nc=cur.length||1;
+    return {o,city:OUTLETS[o],orders:c.orders,delivered:c.delivered,rated:c.rated,ratedPct:c.ratedPct,
+      avg:c.avg,bad:c.bad,good:c.good,badPct:c.badPct,goodPct:c.goodPct,
+      ordersPD:c.orders/nc, ordersPD7:a.orders/n7, ordersPD30:b.orders/n30,
+      ratedPD:c.rated/nc, ratedPD7:a.rated/n7, ratedPD30:b.rated/n30,
+      pct7:a.ratedPct,pct30:b.ratedPct, avg7:a.avg,avg30:b.avg,
+      badPct7:a.badPct,badPct30:b.badPct, goodPct7:a.goodPct,goodPct30:b.goodPct};
+  }).filter(x=>x.orders>0);
+}
+function renderOutlets(){
+  let arr=outletData();
+  const k=S.oSort.k,dir=S.oSort.dir;
+  arr.sort((a,b)=>{const x=a[k],y=b[k];
+    return (typeof x==='string'?x.localeCompare(y):(x||0)-(y||0))*dir;});
+  const lowRate=arr.filter(x=>x.rated>0&&x.avg<S.thRate).length;
+  const quiet=arr.filter(x=>!(x.rated>0&&x.avg<S.thRate)&&x.ratedPct<S.thPct).length;
+  const winTxt=S.oWin===1?fmtFull(S.date):('last '+S.oWin+' days to '+fmtD(S.date));
+  $('#oScope').innerHTML='<strong>'+arr.length+'</strong> outlet'+(arr.length===1?'':'s')+' · window <strong>'
+    +winTxt+'</strong>'+(S.oCity.size?' · cities <strong>'+[...S.oCity].join(', ')+'</strong>':' · all cities')
+    +' · <strong class="crit">'+lowRate+'</strong> red (avg &lt; '+S.thRate+'), <strong class="warn">'
+    +quiet+'</strong> yellow (rated % &lt; '+S.thPct+'%, too little feedback to judge). '
+    +'Switch the window to compare a day against its 7- and 30-day run rate. Click any header to sort.';
+  const pd=S.oWin>1?' <span class="dim">/day</span>':'';
+  $('#tblOutlet tbody').innerHTML=arr.length?arr.map(x=>{
+    const red=x.rated>0&&x.avg<S.thRate;
+    const yellow=!red&&x.ratedPct<S.thPct;
+    return '<tr class="'+(red?'flagged':yellow?'quiet':'')+'">'
+      +'<td class="l"><strong>'+esc(x.o)+'</strong><div class="cellsub">'+esc(x.city)+'</div></td>'
+      +'<td class="cellmain">'+n0(Math.round(x.ordersPD))+pd+'</td>'
+      +'<td class="cellmain">'+(S.oWin>1?x.ratedPD.toFixed(1):n0(x.rated))+pd+'</td>'
+      +'<td class="cellmain '+(x.ratedPct<S.thPct?'warn':'')+'">'+x.ratedPct.toFixed(1)+'%</td>'
+      +'<td class="cellmain '+(x.avg&&x.avg<S.thRate?'crit':'')+'">'+(x.avg?x.avg.toFixed(2):'—')+'</td>'
+      +'<td class="'+(x.bad?'crit':'dim')+'"><span class="cellmain">'+x.bad
+        +'</span> <span class="dim">'+x.badPct.toFixed(0)+'%</span></td>'
+      +'<td class="ok"><span class="cellmain">'+x.good+'</span> <span class="dim">'
+        +x.goodPct.toFixed(0)+'%</span></td>'
+      +'<td class="l">'+(red?('<span class="pill hi">low rating</span>'
+          +(x.ratedPct<S.thPct?' <span class="pill lo">on thin feedback</span>':''))
+        :yellow?'<span class="pill mid">too quiet to judge</span>':'')+'</td></tr>';
+  }).join('')
+  :'<tr><td colspan="8" class="empty-note">No outlets match.</td></tr>';
+  const T=arr.reduce((a,x)=>{a.o+=x.ordersPD;a.rd+=x.ratedPD;a.rt+=x.rated;a.or+=x.orders;
+    a.b+=x.bad;a.g+=x.good;a.s+=(x.avg||0)*x.rated;a.dl+=x.delivered;return a;},{o:0,rd:0,rt:0,or:0,b:0,g:0,s:0,dl:0});
+  const tAvg=T.rt?T.s/T.rt:0, tPct=T.dl?T.rt/T.dl*100:0;
+  setFoot('#tblOutlet','<tr class="totrow"><td class="l"><strong>TOTAL</strong>'
+    +'<div class="cellsub">'+arr.length+' outlets</div></td>'
+    +'<td class="cellmain">'+n0(Math.round(T.o))+pd+'</td>'
+    +'<td class="cellmain">'+(S.oWin>1?T.rd.toFixed(1):n0(T.rt))+pd+'</td>'
+    +'<td class="cellmain">'+tPct.toFixed(1)+'%</td>'
+    +'<td class="cellmain">'+(tAvg?tAvg.toFixed(2):'—')+'</td>'
+    +'<td><span class="cellmain">'+T.b+'</span> <span class="dim">'
+      +(T.rt?(T.b/T.rt*100).toFixed(0):0)+'%</span></td>'
+    +'<td><span class="cellmain">'+T.g+'</span> <span class="dim">'
+      +(T.rt?(T.g/T.rt*100).toFixed(0):0)+'%</span></td><td></td></tr>');
+}
+
+/* ---------- 06 items ---------- */
+function itemData(){
+  const days=daysBetween(S.date,S.iWin);
+  const scope=S.iCity.size?new Set(outletsInScope(S.iCity)):null;
+  const rows=ratedIn(days).filter(r=>!scope||scope.has(r.o));
+  const m={};
+  rows.forEach(r=>r.i.forEach(it=>{
+    const x=m[it]=m[it]||{k:it,cat:CAT[it]||'Desserts',n:0,sum:0,bad:0,good:0,
+      withText:0,esc:0,outs:new Set(),rows:[]};
+    x.n++;x.sum+=r.r;x.outs.add(r.o);x.rows.push(r);
+    if(r.r<=3)x.bad++;else x.good++;
+    if(r.v)x.withText++; if(r.e)x.esc++;}));
+  let arr=Object.values(m).map(x=>Object.assign(x,{avg:x.sum/x.n,
+    badPct:x.bad/x.n*100,goodPct:x.good/x.n*100,nOut:x.outs.size}));
+  if(S.iCat.size)arr=arr.filter(x=>S.iCat.has(x.cat));
+  if(S.iMin>1)arr=arr.filter(x=>x.n>=S.iMin);
+  if(S.iSearch)arr=arr.filter(x=>x.k.toLowerCase().includes(S.iSearch));
+  return arr;
+}
+function silentStrip(rows){
+  const byStar={};rows.forEach(r=>{(byStar[r.r]=byStar[r.r]||[]).push(r);});
+  const parts=[5,4,3,2,1].filter(s=>byStar[s]).map(s=>{
+    const outs={};byStar[s].forEach(r=>outs[r.o]=(outs[r.o]||0)+1);
+    const top=Object.entries(outs).sort((a,b)=>b[1]-a[1]).slice(0,6)
+      .map(([o,c])=>esc(o)+(c>1?' ×'+c:'')).join(', ');
+    return '<span class="stag'+(s<=3?' b'+s:'')+'">'+s+'★<b>'+byStar[s].length+'</b></span>'
+      +'<span class="stag" style="background:transparent;border:none;color:var(--text-dim)">'+top
+      +(Object.keys(outs).length>6?' +'+(Object.keys(outs).length-6)+' more':'')+'</span>';});
+  return '<div class="silent"><div class="sh"><strong>'+rows.length
+    +'</strong> rating'+(rows.length===1?'':'s')+' with no review text — star and outlet only</div>'
+    +'<div class="srow">'+parts.join('')+'</div></div>';
+}
+function renderItems(){
+  let arr=itemData();
+  const k=S.iSort.k,dir=S.iSort.dir;
+  arr.sort((a,b)=>{const x=a[k],y=b[k];
+    return (typeof x==='string'?x.localeCompare(y):(x||0)-(y||0))*dir;});
+  const tot=arr.reduce((s,x)=>s+x.n,0), txt=arr.reduce((s,x)=>s+x.withText,0);
+  $('#iScope').innerHTML='<strong>'+arr.length+'</strong> rated item'+(arr.length===1?'':'s')
+    +' · window <strong>last '+S.iWin+' day'+(S.iWin===1?'':'s')+' to '+fmtD(S.date)+'</strong>'
+    +(S.iCat.size?' · categories <strong>'+[...S.iCat].join(', ')+'</strong>':'')
+    +(S.iCity.size?' · cities <strong>'+[...S.iCity].join(', ')+'</strong>':'')
+    +' · '+n0(tot)+' item-ratings, '+n0(txt)+' carry review text. '
+    +'An item is credited with the rating of any order it appeared in, so multi-item orders spread the signal — press + to read what was actually written.';
+  {const T=arr.reduce((a,x)=>{a.n+=x.n;a.b+=x.bad;a.g+=x.good;a.t+=x.withText;a.s+=x.avg*x.n;return a;},
+    {n:0,b:0,g:0,t:0,s:0});
+   setFoot('#tblItem','<tr class="totrow"><td class="l"><strong>TOTAL</strong>'
+    +'<div class="cellsub">'+arr.length+' items</div></td><td></td>'
+    +'<td class="cellmain">'+n0(T.n)+'</td>'
+    +'<td class="cellmain">'+(T.n?(T.s/T.n).toFixed(2):'—')+'</td>'
+    +'<td><span class="cellmain">'+T.b+'</span> <span class="dim">'+(T.n?(T.b/T.n*100).toFixed(0):0)+'%</span></td>'
+    +'<td><span class="cellmain">'+T.g+'</span> <span class="dim">'+(T.n?(T.g/T.n*100).toFixed(0):0)+'%</span></td>'
+    +'<td>'+T.t+'</td><td></td></tr>');}
+  $('#tblItem tbody').innerHTML=arr.length?arr.map((x,ix)=>{
+    const open=S.iOpen.has(x.k);
+    let h='<tr><td class="l"><strong>'+esc(x.k)+'</strong>'
+      +(x.esc?' <span class="pill esc">esc</span>':'')
+      +'<div class="cellsub">'+x.nOut+' outlet'+(x.nOut===1?'':'s')+'</div></td>'
+      +'<td class="l dim">'+esc(x.cat)+'</td>'
+      +'<td class="cellmain">'+x.n+'</td>'
+      +'<td class="cellmain '+(x.avg<S.thRate?'crit':'')+'">'+x.avg.toFixed(2)+'</td>'
+      +'<td class="'+(x.bad?'crit':'dim')+'"><span class="cellmain">'+x.bad
+        +'</span> <span class="dim">'+x.badPct.toFixed(0)+'%</span></td>'
+      +'<td class="ok"><span class="cellmain">'+x.good+'</span> <span class="dim">'
+        +x.goodPct.toFixed(0)+'%</span></td>'
+      +'<td class="'+(x.withText?'':'dim')+'">'+x.withText+'</td>'
+      +'<td class="l"><span class="exp" data-k="'+esc(x.k)+'">'+(open?'−':'+')+'</span></td></tr>';
+    if(open){
+      const withText=x.rows.filter(r=>r.v).sort((a,b)=>(b.e-a.e)||(a.r-b.r)||b.d.localeCompare(a.d));
+      const silent=x.rows.filter(r=>!r.v);
+      h+='<tr class="drill"><td colspan="8"><div class="drill-inner">'
+        +(withText.length?'<div class="v-cards" style="margin-bottom:10px">'
+          +withText.map(r=>vcard(r)).join('')+'</div>'
+          :'<p class="empty-note" style="padding:8px">No review text for this item in the window.</p>')
+        +(silent.length?silentStrip(silent):'')+'</div></td></tr>';
+    }
+    return h;}).join('')
+  :'<tr><td colspan="8" class="empty-note">No items match these filters.</td></tr>';
+  $$('#tblItem .exp').forEach(e=>e.onclick=()=>{
+    const kk=e.dataset.k; S.iOpen.has(kk)?S.iOpen.delete(kk):S.iOpen.add(kk); renderItems();});
+}
+
+/* ---------- 07 verbatims ---------- */
+function vcard(r){
+  return '<article class="v-card r'+r.r+'"><header><span class="stars s'+r.r+'">'+starStr(r.r)
+    +'</span><span class="v-outlet">'+esc(r.o)+'</span>'
+    +(r.e?'<span class="pill esc">esc</span>':'')
+    +'<span class="v-time">'+esc(fmtD(r.d))+' '+esc(r.t)+'</span></header>'
+    +'<p class="v-text">“'+esc(r.v)+'”</p>'
+    +'<div class="v-foot">'+esc(r.i.join(' · '))+'</div></article>';
+}
+function renderVerbatims(){
+  const days=daysBetween(S.date,S.vWin);
+  let rows=ratedIn(days);
+  if(S.vStar==='bad3')rows=rows.filter(r=>r.r<=3);
+  else if(S.vStar==='good')rows=rows.filter(r=>r.r>=4);
+  else rows=rows.filter(r=>r.r===+S.vStar);
+  if(S.vTheme.size)rows=rows.filter(r=>S.vTheme.has(r.th));
+  if(S.vOutlet)rows=rows.filter(r=>r.o===S.vOutlet);
+  if(S.vSearch){const q=S.vSearch;
+    rows=rows.filter(r=>(r.v||'').toLowerCase().includes(q)||r.i.join(' ').toLowerCase().includes(q));}
+  const withText=rows.filter(r=>r.v), silent=rows.filter(r=>!r.v);
+  $('#vScope').innerHTML='<strong>'+n0(rows.length)+'</strong> rating'+(rows.length===1?'':'s')
+    +' in scope · <strong>'+n0(withText.length)+'</strong> carry review text ('
+    +(rows.length?(withText.length/rows.length*100).toFixed(0):0)+'%) · the rest are collapsed into the strip at the foot.';
+  if(!rows.length){$('#vWall').innerHTML='<p class="empty-note">Nothing matches these filters.</p>';return;}
+  const g={};withText.forEach(r=>{(g[r.th]=g[r.th]||[]).push(r);});
+  let h=THEME_ORDER.filter(t=>g[t]).map(t=>{
+    const sub=g[t].sort((a,b)=>(b.e-a.e)||(a.r-b.r)||b.d.localeCompare(a.d));
+    return '<div class="v-theme"><div class="v-theme-head"><h3>'+esc(t)+'</h3>'
+      +'<span class="count">'+sub.length+'</span></div><div class="v-cards">'
+      +sub.slice(0,150).map(vcard).join('')+'</div>'
+      +(sub.length>150?'<p class="scope" style="margin-top:8px">Showing first 150 of '+sub.length
+        +' — narrow the window or filter by outlet.</p>':'')+'</div>';}).join('');
+  if(silent.length)h+='<div class="v-theme"><div class="v-theme-head"><h3>Rating only, no review text</h3>'
+    +'<span class="count">'+silent.length+'</span></div>'+silentStrip(silent)+'</div>';
+  $('#vWall').innerHTML=h;
+}
+
+/* ---------- csv ---------- */
+function csv(cols,data,name){
+  const q=v=>'"'+String(v==null?'':v).replace(/<[^>]+>/g,'').replace(/"/g,'""')+'"';
+  const out=[cols.map(c=>q(c[1])).join(',')]
+    .concat(data.map(r=>cols.map(c=>{let v=r[c[0]];
+      return q(typeof v==='number'?(Number.isInteger(v)?v:v.toFixed(2)):v);}).join(',')));
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([out.join('\n')],{type:'text/csv'}));
+  a.download=name;a.click();
+}
+
+/* ---------- wiring ---------- */
+function chips(el,vals,set,cb){
+  el.innerHTML=vals.map(v=>'<span class="chip'+(set.has(v)?' on':'')+'" data-v="'+esc(v)+'">'+esc(v)+'</span>').join('');
+  [...el.children].forEach(c=>c.onclick=()=>{const v=c.dataset.v;
+    set.has(v)?set.delete(v):set.add(v);c.classList.toggle('on');cb();});
+}
+function seg(el,cb){[...el.children].forEach(b=>b.onclick=()=>{
+  [...el.children].forEach(x=>x.classList.remove('on'));b.classList.add('on');cb(b.dataset.v);});}
+function sortable(tbl,st,cb){
+  $$(tbl+' thead th.sortable').forEach(th=>th.onclick=()=>{
+    const k=th.dataset.k; st.dir=(st.k===k)?-st.dir:-1; st.k=k;
+    $$(tbl+' thead th .arrow').forEach(a=>a.remove());
+    th.insertAdjacentHTML('beforeend','<span class="arrow">'+(st.dir>0?'▲':'▼')+'</span>');
+    cb();});
+}
+function renderAll(){renderHeader();renderBriefing();renderGlance();renderCharts();
+  renderAnatomy();renderOutlets();renderItems();renderVerbatims();}
+
+(function init(){
+  $('#selDate').innerHTML=DATES.slice().reverse().map(d=>'<option value="'+d+'">'
+    +fmtD(d)+' · '+dow(d).slice(0,3)+'</option>').join('');
+  $('#selDate').value=S.date;
+  $('#selDate').onchange=e=>{S.date=e.target.value;S.iOpen.clear();renderAll();};
+
+  chips($('#chipCity'),CITIES,S.oCity,renderOutlets);
+  chips($('#chipCityI'),CITIES,S.iCity,renderItems);
+  chips($('#chipCat'),CATS,S.iCat,renderItems);
+  chips($('#chipTheme'),THEME_ORDER,S.vTheme,renderVerbatims);
+
+  seg($('#segOWin'),v=>{S.oWin=+v;renderOutlets();});
+  $('#thRate').oninput=e=>{S.thRate=+e.target.value||4.2;renderOutlets();renderGlance();renderItems();};
+  $('#thPct').oninput=e=>{S.thPct=+e.target.value||0;renderOutlets();};
+  sortable('#tblOutlet',S.oSort,renderOutlets);
+  $('#btnOCsv').onclick=()=>csv([['o','Outlet'],['city','City'],['orders','Orders'],
+    ['rated','Rated'],['ratedPct','RatedPct'],['avg','AvgRating'],['bad','Bad13'],
+    ['badPct','BadPct'],['good','Good45'],['goodPct','GoodPct'],['avg7','Avg7d'],['avg30','Avg30d']],
+    outletData(),'cc_outlets_'+S.date+'.csv');
+
+  seg($('#segIWin'),v=>{S.iWin=+v;S.iOpen.clear();renderItems();});
+  $('#minR').oninput=e=>{S.iMin=+e.target.value||1;renderItems();};
+  $('#iSearch').oninput=e=>{S.iSearch=e.target.value.toLowerCase().trim();renderItems();};
+  sortable('#tblItem',S.iSort,renderItems);
+  $('#btnIReset').onclick=()=>{S.iCat.clear();S.iCity.clear();S.iSearch='';S.iMin=1;S.iOpen.clear();
+    $('#iSearch').value='';$('#minR').value=1;
+    $$('#chipCat .chip,#chipCityI .chip').forEach(c=>c.classList.remove('on'));renderItems();};
+  $('#btnICsv').onclick=()=>csv([['k','Item'],['cat','Category'],['n','Ratings'],['avg','AvgRating'],
+    ['bad','Bad13'],['badPct','BadPct'],['good','Good45'],['goodPct','GoodPct'],
+    ['withText','Reviews'],['nOut','Outlets']],itemData(),'cc_items_'+S.date+'.csv');
+
+  seg($('#segVWin'),v=>{S.vWin=+v;renderVerbatims();});
+  seg($('#segStar'),v=>{S.vStar=v;renderVerbatims();});
+  $('#selVOutlet').innerHTML='<option value="">All outlets</option>'
+    +Object.keys(OUTLETS).map(o=>'<option>'+esc(o)+'</option>').join('');
+  $('#selVOutlet').onchange=e=>{S.vOutlet=e.target.value;renderVerbatims();};
+  $('#vSearch').oninput=e=>{S.vSearch=e.target.value.toLowerCase().trim();renderVerbatims();};
+  $('#btnVReset').onclick=()=>{S.vTheme.clear();S.vStar='bad3';S.vOutlet='';S.vSearch='';S.vWin=1;
+    $('#vSearch').value='';$('#selVOutlet').value='';
+    $$('#chipTheme .chip').forEach(c=>c.classList.remove('on'));
+    [$('#segVWin'),$('#segStar')].forEach(el=>[...el.children].forEach((b,i)=>b.classList.toggle('on',i===0)));
+    renderVerbatims();};
+
+  renderAll();
+})();
+</script>
+</body></html>

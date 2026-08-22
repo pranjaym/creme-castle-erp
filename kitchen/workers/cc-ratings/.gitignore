@@ -1,0 +1,8 @@
+# runtime artefacts, never committed
+out/
+run.log
+launchd.log
+.last_success
+.run.lock/
+__pycache__/
+recipients_test.json

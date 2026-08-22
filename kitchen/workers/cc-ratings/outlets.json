@@ -1,0 +1,275 @@
+{
+ "_note": "Frozen from erp-plan/Outlet Master.xlsx plus Pranjay's corrections, 21 Aug 2026. The scheduled job must NOT read iCloud Drive, so this file is the source of truth at run time. Refresh with: python3 glossary.py --refresh (reads the xlsx, rewrites this file).",
+ "outlets": {
+  "306520": {
+   "name": "CC-ND-Alpha 2",
+   "city": "Noida",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "18988513": {
+   "name": "CC-ND-Sector 68",
+   "city": "Noida",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "19561066": {
+   "name": "CC-GGN-Sector 4",
+   "city": "Gurgaon",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21086662": {
+   "name": "CC-DL-Shahpurjat",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21086673": {
+   "name": "CC-DL-Janakpuri",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21251869": {
+   "name": "CC-DL-Krishna Nagar",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21264282": {
+   "name": "CC-GGN-DLF Ph 4",
+   "city": "Gurgaon",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21308818": {
+   "name": "CC-GGN-Sector 49",
+   "city": "Gurgaon",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21317808": {
+   "name": "CC-ND-Sector 45",
+   "city": "Noida",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21317826": {
+   "name": "CC-ND-Sector141",
+   "city": "Noida",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21710105": {
+   "name": "CC-DL-Shalimar Bagh",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21710125": {
+   "name": "CC-DL-Karol Bagh",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21710140": {
+   "name": "CC-DL-Dwarka",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21803038": {
+   "name": "CC-FBD-Sector 15",
+   "city": "Faridabad",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21804504": {
+   "name": "CC-GZB-Vasundhara",
+   "city": "Ghaziabad",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21817822": {
+   "name": "CC-DL-Vasant Kunj",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21876814": {
+   "name": "CC-UP-Meerut",
+   "city": "Meerut",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21961204": {
+   "name": "CC-ND-Gaur City",
+   "city": "Noida",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "21969690": {
+   "name": "CC-DL-NFC",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22002105": {
+   "name": "CC-DL-Mayur Vihar Ph 3",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22065804": {
+   "name": "CC-JP-Malviya Nagar",
+   "city": "Jaipur",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22065805": {
+   "name": "CC-JP-Bais Godam",
+   "city": "Jaipur",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22065806": {
+   "name": "CC-JP-Vaishali Nagar",
+   "city": "Jaipur",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22181929": {
+   "name": "CC-GGN-Sector 60",
+   "city": "Gurgaon",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22184428": {
+   "name": "CC-DL-Paschim Vihar",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22184663": {
+   "name": "CC-DL-Rohini",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22213649": {
+   "name": "CC-GGN-Sector 86",
+   "city": "Gurgaon",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22215422": {
+   "name": "CC-GGN-Sector 52",
+   "city": "Gurgaon",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22223494": {
+   "name": "CC-GZB-Raj Nagar",
+   "city": "Ghaziabad",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22230746": {
+   "name": "CC-DL-Sarita Vihar",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22375516": {
+   "name": "CC-CHD-Mohali",
+   "city": "Chandigarh",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22375520": {
+   "name": "CC-CHD-Zirakpur",
+   "city": "Chandigarh",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22407186": {
+   "name": "CC-CHD-Industrial Area",
+   "city": "Chandigarh",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22449679": {
+   "name": "CC-CHD-Sector 16",
+   "city": "Chandigarh",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22521001": {
+   "name": "CC-FBD-Sector 37",
+   "city": "Faridabad",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22521042": {
+   "name": "CC-DL-South Campus",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22531033": {
+   "name": "CC-DL-Dwarka Mor",
+   "city": "Delhi",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22531048": {
+   "name": "CC-ND-Diamond Plaza",
+   "city": "Noida",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22531070": {
+   "name": "CC-ND-Sector 116",
+   "city": "Noida",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22531082": {
+   "name": "CC-JP-Pratap Nagar",
+   "city": "Jaipur",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22543455": {
+   "name": "CC-LKO-Jankipuram",
+   "city": "Lucknow",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22543471": {
+   "name": "CC-LKO-Ashiyana",
+   "city": "Lucknow",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22543478": {
+   "name": "CC-LKO-Hazratganj",
+   "city": "Lucknow",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22550559": {
+   "name": "CC-LKO-Gomti Nagar",
+   "city": "Lucknow",
+   "type": "Dark Store",
+   "mapped": true
+  },
+  "22871646": {
+   "name": "CC-PB-Ludhiana",
+   "city": "Ludhiana",
+   "type": "Dark Store",
+   "mapped": true
+  }
+ }
+}
