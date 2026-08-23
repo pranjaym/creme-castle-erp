@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>in.cremecastle.zomato-business</string>
+    <!-- LOCAL checkout on purpose: launchd cannot execute from iCloud Drive. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/Pranjay/creme-castle-erp/kitchen/workers/zomato-business/run_zomato_business.sh</string>
+    </array>
+    <!-- Morning slots, 07:00 / 08:00 / 09:00, chosen by Pranjay: that is when the
+         laptop is reliably awake and online. A job that never fires because the Mac
+         is asleep is worse than one that contends (F14).
+
+         No conflict with the sibling zomato-ingest worker, which runs evenings
+         (18:00 to 22:00). They share a saved browser session, so the wrapper also
+         refuses to start if that worker is running.
+
+         On F15 (the 07:30 to 09:30 spine load window): 07:00 is the primary and
+         normally finishes well before the 08:00 dashboard job starts. The success
+         stamp means 08:00 and 09:00 exit in milliseconds once 07:00 has delivered,
+         so they only ever do real work on a morning the first slot failed.
+
+         Freshness is deliberately not a concern: the pull uses a rolling window
+         (5 days for quality, segment and orders; 31 days for ads), so if yesterday
+         is not yet materialised the remaining days still load and yesterday is
+         picked up tomorrow. -->
+    <key>RunAtLoad</key>
+    <false/>
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/Pranjay/creme-castle-erp/kitchen/workers/zomato-business/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/Pranjay/creme-castle-erp/kitchen/workers/zomato-business/launchd.log</string>
+</dict>
+</plist>
