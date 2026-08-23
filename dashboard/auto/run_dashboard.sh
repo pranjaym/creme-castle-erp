@@ -169,5 +169,11 @@ fi
 # if any failed or went missing. Never fatal to the morning: the dashboard matters more.
 "$PYTHON" check_spine_cron.py >> "$LOG" 2>&1 || log "spine cron check could not run"
 
+# Evening stamp watch, added 23 Aug 2026 on Pranjay's instruction: a schedule that
+# silently never fired must still become a message. Each evening worker stamps
+# .last_success when it delivers; a stamp not saying yesterday means a missed
+# evening that no failure alert covered (asleep Mac, or every slot deferred).
+"$PYTHON" check_evening_stamps.py >> "$LOG" 2>&1 || log "evening stamp check could not run"
+
 # Hand launchd the truth, so `launchctl list` stops reporting 0 for a failed morning.
 exit $status
