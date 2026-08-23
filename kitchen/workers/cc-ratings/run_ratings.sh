@@ -28,6 +28,7 @@ TODAY="$(date +%Y-%m-%d)"
 HOUR="$(date +%H)"
 LOG="$HERE/run.log"
 STAMP="$HERE/.last_success"
+ALERT_STAMP="$HERE/.last_alert"
 LOCK="$HERE/.run.lock"
 
 log() { echo "$*" >> "$LOG"; }
@@ -94,5 +95,16 @@ RECIP=""
 "$PYTHON" run.py --send $FRESH $RECIP >> "$LOG" 2>&1
 status=$?
 log "----- exit $status -----"
-[ "$status" -eq 0 ] && echo "$TODAY" > "$STAMP"
+if [ "$status" -eq 0 ]; then
+  echo "$TODAY" > "$STAMP"
+elif [ "$status" -ne 75 ]; then
+  # A real failure, not a defer (75): mail the owner, once per day, so a broken
+  # evening is a message and never a silence. Added 23 Aug 2026 (automation audit);
+  # 75 stays quiet because the next slot simply retries.
+  if [ "$(cat "$ALERT_STAMP" 2>/dev/null)" != "$TODAY" ]; then
+    if "$PYTHON" alert_ratings_failure.py "$status" >> "$LOG" 2>&1; then
+      echo "$TODAY" > "$ALERT_STAMP"
+    fi
+  fi
+fi
 exit $status

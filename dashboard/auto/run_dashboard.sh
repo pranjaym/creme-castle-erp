@@ -163,5 +163,11 @@ else
   fi
 fi
 
+# Spine cron watch, added 23 Aug 2026 (automation audit): the database runs its own
+# scheduled refreshes (pg_cron) and a failed one used to die in silence (the identity
+# refresh did exactly that on 16 Aug). Check the last day of runs and mail the owner
+# if any failed or went missing. Never fatal to the morning: the dashboard matters more.
+"$PYTHON" check_spine_cron.py >> "$LOG" 2>&1 || log "spine cron check could not run"
+
 # Hand launchd the truth, so `launchctl list` stops reporting 0 for a failed morning.
 exit $status
