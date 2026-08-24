@@ -11,6 +11,10 @@ export default async function Home() {
       <h1 className="page">Welcome, {user.fullName || user.email}</h1>
       <p className="hint">Everything here reads from the spine, the one canonical database.</p>
       <div className="tiles">
+        <Link className="tile" href="/daily">
+          <div className="t">Store performance</div>
+          <div className="d">The daily Zomato operations dashboard: your store, your area, or the whole network, any day.</div>
+        </Link>
         <Link className="tile" href="/dashboards">
           <div className="t">Daily dashboards</div>
           <div className="d">The Zomato and Swiggy sales dashboard: latest day and the full archive.</div>

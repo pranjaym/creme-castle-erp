@@ -1,0 +1,158 @@
+// Data layer for the daily dashboard module. All numbers come from the spine
+// functions dash_all / dash_store_detail / dash_store_reasons (migration 150),
+// so the portal and the future mailer can never disagree: the definitions live
+// in the database. Ranks and area rollups are simple arithmetic done here.
+import 'server-only';
+import { spine } from '@/lib/supabase/service';
+import type { SessionUser } from '@/lib/session';
+
+export interface DayStats {
+  orders: number | null; delivered: number | null; subtotal: number | null;
+  rating: number | null; comps: number | null; cpct: number | null;
+  srej: number | null; rej: number | null; rpct: number | null;
+  online: number | null; offmin: number | null;
+  wait: number | null; fr: number | null; avgord: number | null;
+}
+export interface WkStats {
+  orders: number | null; delivered: number | null; subtotal: number | null;
+  rating: number | null; comps: number | null; srej: number | null; rej: number | null;
+  online: number | null; offmin: number | null;
+  wait: number | null; waits3: number | null; fr: number | null;
+  stockout: number | null; refunds: number | null;
+}
+export interface StoreStats {
+  code: string; locality: string | null; city: string | null; am: string | null;
+  day: DayStats; wk: WkStats;
+  dayScore?: number | null; wkScore?: number | null;
+  dayRank?: number | null; wkRank?: number | null;
+}
+export interface DashAll {
+  date: string; week_start: string; week_end: string;
+  stores: StoreStats[];
+  reasons_wk: { comps: number; wrong: number; missing: number; packaging: number; quality: number; late: number } | null;
+  levers: {
+    seg_day: Record<string, number | null> | null;
+    seg_wk: Record<string, number | null> | null;
+    ads_day: Record<string, number | null> | null;
+    ads_wk: Record<string, number | null> | null;
+  } | null;
+}
+export interface Receipt { label: string; basket: string | null; [k: string]: unknown }
+export interface StoreDetail {
+  code: string; locality: string | null; city: string | null; am: string | null;
+  date: string; week_start: string;
+  trend: { d: string; online: number | null; comps: number | null; srej: number | null; rating: number | null; orders: number | null }[];
+  mealtime_wk: Record<string, number>;
+  complaints_day: Receipt[]; rated_day: Receipt[]; rejections_wk: Receipt[];
+  false_ready_wk: Receipt[]; low_ratings_wk: Receipt[];
+  other_cancels_wk: number; refunds_day: number; refunds_wk: number; stockout_wk: number;
+}
+export interface StoreReasons {
+  comps?: number; wrong?: number; missing?: number; packaging?: number; quality?: number; late?: number;
+}
+
+async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await spine().rpc(fn, args);
+  if (error) throw new Error(`${fn} failed: ${error.message}`);
+  return data as T;
+}
+
+export async function getLatestDate(): Promise<string> {
+  return rpc<string>('dash_latest_date', {});
+}
+
+// Clean-day score: complaints % + rejections % + offline penalty; lower is
+// better. Ties break on rating then orders (same rule as the sample pages and
+// the mailer). Stores with no quality row that day are unranked.
+function score(cpct: number | null, rpct: number | null, online: number | null): number | null {
+  if (cpct === null && rpct === null && online === null) return null;
+  return (cpct ?? 0) + (rpct ?? 0) + (100 - (online ?? 100));
+}
+
+export async function getDashAll(date: string): Promise<DashAll> {
+  const d = await rpc<DashAll>('dash_all', { p_date: date });
+  for (const s of d.stores) {
+    s.dayScore = score(s.day.cpct, s.day.rpct, s.day.online);
+    s.wkScore = s.wk.orders
+      ? (100 * (s.wk.comps ?? 0)) / s.wk.orders + (100 * (s.wk.rej ?? 0)) / s.wk.orders + (100 - (s.wk.online ?? 100))
+      : null;
+  }
+  const rank = (key: 'dayScore' | 'wkScore', rating: (s: StoreStats) => number, orders: (s: StoreStats) => number,
+                out: 'dayRank' | 'wkRank') => {
+    const ranked = d.stores.filter(s => s[key] !== null)
+      .sort((a, b) => (a[key]! - b[key]!) || (rating(b) - rating(a)) || (orders(b) - orders(a)));
+    ranked.forEach((s, i) => { s[out] = i + 1; });
+  };
+  rank('dayScore', s => s.day.rating ?? 0, s => s.day.orders ?? 0, 'dayRank');
+  rank('wkScore', s => s.wk.rating ?? 0, s => s.wk.orders ?? 0, 'wkRank');
+  return d;
+}
+
+export async function getStoreDetail(code: string, date: string): Promise<StoreDetail> {
+  return rpc<StoreDetail>('dash_store_detail', { p_code: code, p_date: date });
+}
+export async function getStoreReasons(code: string, date: string): Promise<StoreReasons> {
+  return rpc<StoreReasons>('dash_store_reasons', { p_code: code, p_date: date });
+}
+
+export interface AreaAgg {
+  am: string; stores: number;
+  day: { orders: number; comps: number; cpct: number | null; srej: number; offmin: number };
+  wk: { orders: number; comps: number; cpct: number | null; srej: number; offmin: number; fr: number; stockout: number; refunds: number };
+}
+export function aggregateAreas(stores: StoreStats[]): AreaAgg[] {
+  const by = new Map<string, StoreStats[]>();
+  for (const s of stores) {
+    const am = s.am ?? 'Unassigned';
+    if (!by.has(am)) by.set(am, []);
+    by.get(am)!.push(s);
+  }
+  const sum = (xs: StoreStats[], f: (s: StoreStats) => number | null | undefined) =>
+    xs.reduce((t, s) => t + (f(s) ?? 0), 0);
+  const out: AreaAgg[] = [];
+  for (const [am, xs] of by) {
+    const dOrders = sum(xs, s => s.day.orders), dComps = sum(xs, s => s.day.comps);
+    const wOrders = sum(xs, s => s.wk.orders), wComps = sum(xs, s => s.wk.comps);
+    out.push({
+      am, stores: xs.length,
+      day: { orders: dOrders, comps: dComps, cpct: dOrders ? (100 * dComps) / dOrders : null,
+             srej: sum(xs, s => s.day.srej), offmin: sum(xs, s => s.day.offmin) },
+      wk: { orders: wOrders, comps: wComps, cpct: wOrders ? (100 * wComps) / wOrders : null,
+            srej: sum(xs, s => s.wk.srej), offmin: sum(xs, s => s.wk.offmin),
+            fr: sum(xs, s => s.wk.fr), stockout: sum(xs, s => s.wk.stockout),
+            refunds: sum(xs, s => s.wk.refunds) },
+    });
+  }
+  return out.sort((a, b) => (a.day.cpct ?? 99) - (b.day.cpct ?? 99));
+}
+
+// What may this user open? Role equals scope.
+export function canSeeStore(user: SessionUser, code: string): boolean {
+  if (user.role === 'admin' || user.role === 'central' || user.role === 'viewer') return true;
+  return user.outletCodes.includes(code);
+}
+export function allowedAms(user: SessionUser, stores: StoreStats[]): string[] {
+  if (user.role === 'admin' || user.role === 'central' || user.role === 'viewer') {
+    return [...new Set(stores.map(s => s.am ?? 'Unassigned'))];
+  }
+  return [...new Set(stores.filter(s => user.outletCodes.includes(s.code)).map(s => s.am ?? 'Unassigned'))];
+}
+
+// Formatting helpers shared by the pages.
+export const inr = (v: number | null | undefined) =>
+  v === null || v === undefined ? '-' : '₹' + Math.round(v).toLocaleString('en-IN');
+export const n1 = (v: number | null | undefined) =>
+  v === null || v === undefined ? '-' : (Math.round(v * 10) / 10).toFixed(1);
+export const n0 = (v: number | null | undefined) =>
+  v === null || v === undefined ? '-' : Math.round(v).toLocaleString('en-IN');
+export const lakh = (v: number | null | undefined) =>
+  v === null || v === undefined ? '-' : '₹' + (v / 100000).toFixed(2) + 'L';
+export function dateLabel(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-IN',
+    { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+export function shiftDate(iso: string, days: number): string {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
