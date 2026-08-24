@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import TopBar from '@/app/TopBar';
 import { requireUser } from '@/lib/session';
 import { getDashAll, getLatestDate, aggregateAreas, inr, lakh, n0, n1 } from '@/lib/daily';
 import { DashHead, DashScript, Tile, V, D, HBar, SecHead, StoresTables, AreasTables } from '../ui';
@@ -45,7 +44,6 @@ export default async function CentralDaily({ searchParams }:
   const r = d.reasons_wk;
   return (
     <main className="dashroot" data-view="y">
-      <TopBar user={user} />
       <DashHead title="Network Daily: all dark stores" subtitle={`${d.stores.length} stores, ${areas.length} areas. Zomato operations.`}
         date={date} latest={latest} basePath="/daily/central" />
 

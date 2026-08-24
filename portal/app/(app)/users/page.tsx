@@ -1,4 +1,3 @@
-import TopBar from '@/app/TopBar';
 import { requireAdmin, type Role } from '@/lib/session';
 import { spine } from '@/lib/supabase/service';
 import { createUser, updateUser } from './actions';
@@ -75,7 +74,6 @@ export default async function UsersPage({ searchParams }:
 
   return (
     <main>
-      <TopBar user={user} />
       <h1 className="page">Users</h1>
       <p className="hint">
         The role decides what a person sees everywhere: a store account sees its one store,

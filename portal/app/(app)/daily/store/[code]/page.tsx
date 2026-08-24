@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import TopBar from '@/app/TopBar';
 import { requireUser } from '@/lib/session';
 import {
   getDashAll, getLatestDate, getStoreDetail, getStoreReasons, canSeeStore,
@@ -72,7 +71,6 @@ export default async function StoreDaily({ params, searchParams }:
 
   return (
     <main className="dashroot" data-view="y">
-      <TopBar user={user} />
       <DashHead title={`Store Daily: ${code}`}
         subtitle={`${detail.locality ?? ''}${detail.city ? ', ' + detail.city : ''} · Area manager: ${detail.am ?? '-'}`}
         date={date} latest={latest} basePath={`/daily/store/${encodeURIComponent(code)}`} />

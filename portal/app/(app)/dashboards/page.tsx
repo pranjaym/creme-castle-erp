@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { requireUser } from '@/lib/session';
 import { listDashboards, prettyDate } from '@/lib/dashboards';
-import TopBar from '@/app/TopBar';
 
 // The archive: every daily dashboard, newest first. Click a day to open it.
 export default async function DashboardsPage() {
@@ -10,7 +9,6 @@ export default async function DashboardsPage() {
 
   return (
     <main>
-      <TopBar user={user} />
       <h1 className="page">Daily dashboards</h1>
       <p className="hint">The Zomato and Swiggy sales dashboard, one per business day. Newest first.</p>
 

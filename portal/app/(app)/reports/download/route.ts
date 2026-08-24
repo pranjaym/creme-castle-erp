@@ -10,7 +10,8 @@ import {
 export const maxDuration = 300;
 
 export async function GET(req: Request) {
-  await requireUser();
+  const user = await requireUser();
+  if (!['admin', 'central', 'viewer'].includes(user.role)) return bad('Not allowed for this role.');
   const url = new URL(req.url);
   const reportKey = url.searchParams.get('report') || '';
   const from = url.searchParams.get('from') || '';
@@ -18,11 +19,13 @@ export async function GET(req: Request) {
 
   const def = REPORTS[reportKey];
   if (!def) return bad('Unknown report.');
-  if (!isValidDate(from) || !isValidDate(to)) return bad('Pick a valid from and to date.');
-  if (from > to) return bad('The from date is after the to date.');
-  const span = daysBetween(from, to);
-  if (span > MAX_RANGE_DAYS) {
-    return bad(`That range is ${span + 1} days. Keep a single download to ${MAX_RANGE_DAYS} days or fewer.`);
+  if (!def.dateless) {
+    if (!isValidDate(from) || !isValidDate(to)) return bad('Pick a valid from and to date.');
+    if (from > to) return bad('The from date is after the to date.');
+    const span = daysBetween(from, to);
+    if (span > MAX_RANGE_DAYS) {
+      return bad(`That range is ${span + 1} days. Keep a single download to ${MAX_RANGE_DAYS} days or fewer.`);
+    }
   }
 
   // Run the query first so a DB failure returns a clean 500, never a header-only file.
@@ -36,7 +39,7 @@ export async function GET(req: Request) {
     });
   }
 
-  const filename = `${def.filenameStem}_${from}_to_${to}.csv`;
+  const filename = def.dateless ? `${def.filenameStem}.csv` : `${def.filenameStem}_${from}_to_${to}.csv`;
   const body = rowsToCsvStream(def, rows);
   return new NextResponse(body, {
     status: 200,

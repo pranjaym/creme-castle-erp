@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import TopBar from '@/app/TopBar';
 import { requireUser } from '@/lib/session';
 import { getDashAll, getLatestDate, aggregateAreas, allowedAms, inr, n0, n1 } from '@/lib/daily';
 import { DashHead, DashScript, Tile, V, D, SecHead, StoresTables, AreasTables } from '../../ui';
@@ -37,7 +36,6 @@ export default async function AreaDaily({ params, searchParams }:
 
   return (
     <main className="dashroot" data-view="y">
-      <TopBar user={user} />
       <DashHead title={`Area Daily: ${am}`}
         subtitle={`${mine.length} stores. Zomato operations.`}
         date={date} latest={latest} basePath={`/daily/area/${encodeURIComponent(am)}`} />

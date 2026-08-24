@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireUser } from '@/lib/session';
 import { getDashboardHtml, prettyDate } from '@/lib/dashboards';
-import TopBar from '@/app/TopBar';
 
 // View one day's dashboard. The self-contained HTML is served, gated, by the
 // sibling /view route and shown in an iframe so its own styles stay sandboxed.
@@ -21,7 +20,6 @@ export default async function DashboardView({
 
   return (
     <main>
-      <TopBar user={user} />
       <div className="frameback">
         <Link className="ghostbtn" href="/dashboards">All dashboards</Link>
         <span style={{ marginLeft: 12, color: 'var(--muted)' }}>{prettyDate(date)}</span>
