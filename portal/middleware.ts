@@ -52,6 +52,15 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Run on everything except Next internals and obvious static files.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
+  // Run on everything except Next internals and static files.
+  //
+  // Fonts belong in this list and were missing until 24 Aug 2026: /fonts/*.otf
+  // was matched, so an unauthenticated request for the brand typeface was
+  // answered with a redirect to /login and the browser got HTML where it
+  // expected a font. The login page therefore NEVER rendered in Owners, it
+  // silently fell back to a system serif. Any new asset type served out of
+  // /public has to be added here too.
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|otf|ttf|woff|woff2|css|js|map)$).*)',
+  ],
 };
