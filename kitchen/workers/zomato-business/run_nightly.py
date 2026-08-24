@@ -1,4 +1,5 @@
-"""Nightly pull for the Zomato enterprise business reports.
+"""Daily pull for the Zomato enterprise business reports.
+Scheduled on the 08:30 morning ladder since 24 Aug 2026 (nightly 21:00 before).
 
     python3 run_nightly.py              # 10-day rolling window ending yesterday
     python3 run_nightly.py --days 21    # wider catch-up
@@ -38,6 +39,7 @@ import sys
 import traceback
 from datetime import date, datetime, timedelta, timezone
 
+import psycopg2
 import requests as _rq
 
 import harvest as H
@@ -69,8 +71,30 @@ DEFAULT_DAYS = 5
 SHAPE_DAYS = {"ads_sp": 31, "ads_nrl": 31}
 DEFER = 75
 
+# The two psycopg2 classes are the spine connection dying mid-load, which is a
+# transport failure the next slot can heal, not a data fault: on 23 Aug 2026
+# the 21:30 slot lost Wi-Fi during the quality load and the resulting
+# OperationalError was wrongly treated as fatal. Bare OSError stays OUT of this
+# tuple: it would swallow a missing session file (FileNotFoundError), and a
+# dead session must alert loudly (the F24 lesson), never defer in silence.
 TRANSPORT = (socket.timeout, socket.gaierror, ssl.SSLError, ConnectionError,
-             _rq.exceptions.Timeout, _rq.exceptions.ConnectionError)
+             _rq.exceptions.Timeout, _rq.exceptions.ConnectionError,
+             psycopg2.OperationalError, psycopg2.InterfaceError)
+
+# Playwright wraps a network drop in its own Error class, so it never matches
+# TRANSPORT by type; these message fragments are how one looks from outside.
+NET_FRAGMENTS = ("NetworkError", "net::ERR", "ERR_INTERNET_DISCONNECTED",
+                 "ERR_NAME_NOT_RESOLVED", "ERR_NETWORK_CHANGED")
+
+
+def rollback_quietly(conn):
+    """Roll back if the connection is still alive; a dead one has already lost
+    the transaction, and letting rollback() raise from inside an except block
+    is what silenced the owner alert on 23 Aug 2026 (same defect as F20)."""
+    try:
+        conn.rollback()
+    except Exception as e:
+        RB.log(f"rollback skipped, connection already gone: {type(e).__name__}")
 
 
 def alert(subject, body):
@@ -124,7 +148,10 @@ def main():
             res += R.request_reports(SESSION, sh, w1, w2)
     except TRANSPORT as e:
         RB.log(f"DEFER, could not reach Zomato: {type(e).__name__}: {e}"); return DEFER
-    except Exception:
+    except Exception as e:
+        if any(f in str(e) for f in NET_FRAGMENTS):
+            RB.log(f"DEFER, network drop while requesting: {type(e).__name__}: {e}")
+            return DEFER
         RB.log("FATAL requesting reports:\n" + traceback.format_exc())
         if not args.no_alert:
             alert("Zomato business pull failed", traceback.format_exc()[-3000:])
@@ -159,15 +186,20 @@ def main():
                 RB.log(f"  loaded {shape:9s} {rows:>8,} rows  {counts}")
         conn.commit()
     except TRANSPORT as e:
-        conn.rollback(); RB.log(f"DEFER, transport during load: {type(e).__name__}: {e}")
+        rollback_quietly(conn)
+        RB.log(f"DEFER, transport during load: {type(e).__name__}: {e}")
         return DEFER
     except Exception:
-        conn.rollback(); RB.log("FATAL loading:\n" + traceback.format_exc())
+        rollback_quietly(conn)
+        RB.log("FATAL loading:\n" + traceback.format_exc())
         if not args.no_alert:
             alert("Zomato business load failed", traceback.format_exc()[-3000:])
         return 1
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
 
     RB.log(f"committed {total:,} rows across {len(loaded)} shapes")
     return 0 if len(links) >= len(shapes) else DEFER
