@@ -14,10 +14,14 @@
 //   node pull_oms_feed.mjs --customers-full    customer sweep only
 //   node pull_oms_feed.mjs --sweep 30          force an N day order sweep
 //
-// Transport (spec section 3, amended 24 Aug 2026, see integration-notes F29):
-// reads go through supabase-js. The OMS has RLS with zero policies, so the only
-// key that can read it is the service role key; this worker is read only BY
-// CODE: every OMS call is a select, and nothing here ever writes to the OMS.
+// Transport (spec section 3; F29 RESOLVED 24 Aug 2026): reads go to the OMS
+// over its ap-south-1 pooler as the dedicated `spine_reader` role
+// (OMS_RO_DATABASE_URL), which can SELECT exactly six tables and runs
+// read-only transactions enforced by Postgres itself. Nothing here can write
+// to the OMS even by accident.
+// HASH STABILITY: full-row reads use `to_jsonb` with the session pinned to
+// UTC, byte-identical to the PostgREST JSON the original backfill hashed.
+// Do not change either without re-verifying an all-unchanged run.
 // Writes go to the spine over the ap-south-1 pooler (SPINE_DATABASE_URL),
 // never db.<ref> which is IPv6 only (F15).
 //
@@ -39,7 +43,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -133,30 +136,39 @@ function isTransportError(err) {
   if (err?.transportClassified !== undefined) return err.transportClassified;
   const s = `${err?.message ?? ''} ${err?.code ?? ''} ${err?.cause?.code ?? ''} ${err?.cause?.message ?? ''}`;
   if (/ECONNRESET|ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|ENETDOWN|EADDRNOTAVAIL|EAI_AGAIN|ENOTFOUND|EPIPE/i.test(s)) return true;
-  if (/fetch failed|aborted|socket hang up|network|Connection terminated|timeout exceeded|server closed the connection/i.test(s)) return true;
+  if (/fetch failed|aborted|socket hang up|network|Connection terminated|timeout exceeded|server closed the connection|Client was closed/i.test(s)) return true;
   if (/^(08|57)/.test(String(err?.code ?? ''))) return true; // pg connection / admin classes
   if (err?.httpStatus && err.httpStatus >= 500) return true;
   return false;
 }
 
-// ---------- OMS reads (supabase-js, selects only, retried) ----------
+// ---------- OMS reads (spine_reader role over the pooler, retried) ----------
 
-let oms;
-async function omsSelect(build, label) {
+let omsPg;
+async function omsConnect() {
+  omsPg = new pg.Client({
+    connectionString: reqEnv('OMS_RO_DATABASE_URL'),
+    ssl: { rejectUnauthorized: false },
+    keepAlive: true,
+    connectionTimeoutMillis: 30_000,
+  });
+  await omsPg.connect();
+  // Pin the serialization the row hashes were built on (PostgREST used UTC).
+  await omsPg.query(`set time zone 'UTC'`);
+}
+
+async function omsRead(label, sql, params) {
   for (let attempt = 1; ; attempt++) {
     try {
-      const { data, error, status } = await build();
-      if (error) {
-        const e = new Error(`${label}: ${error.message}`);
-        e.httpStatus = status;
-        throw e;
-      }
-      return data ?? [];
+      const res = await omsPg.query(sql, params);
+      return res.rows;
     } catch (err) {
       const transport = isTransportError(err);
       if (transport && attempt < 3) {
-        console.log(`${label}: attempt ${attempt} failed (${err.message}); retrying in 10 s.`);
+        console.log(`${label}: attempt ${attempt} failed (${err.message}); reconnecting in 10 s.`);
+        try { await omsPg.end(); } catch {}
         await new Promise((r) => setTimeout(r, 10_000));
+        try { await omsConnect(); } catch (e2) { console.log(`reconnect failed (${e2.message}); will retry.`); }
         continue;
       }
       err.transportClassified = transport;
@@ -386,32 +398,38 @@ function chunks(arr, n) {
   return out;
 }
 
+// Full-row reads come back as to_jsonb documents (column `j`), matching the
+// PostgREST JSON shape the row hashes were built on.
+const CUSTOMER_JSON = `to_jsonb(c) || jsonb_build_object('customer_addresses',
+  coalesce((select jsonb_agg(to_jsonb(a) order by a.id)
+            from public.customer_addresses a where a.customer_id = c.id), '[]'::jsonb))`;
+
 async function fetchOrdersByIds(ids) {
   const out = [];
-  for (const part of chunks(ids, 100)) {
-    const rows = await omsSelect(
-      () => oms.from('orders').select('*').in('id', part), 'orders by id');
-    out.push(...rows);
+  for (const part of chunks(ids, 1000)) {
+    const rows = await omsRead('orders by id',
+      'select to_jsonb(t) as j from public.orders t where t.id = any($1::bigint[])', [part]);
+    out.push(...rows.map((r) => r.j));
   }
   return out;
 }
 
 async function fetchItemsForOrders(orderIds) {
   const out = [];
-  for (const part of chunks(orderIds, 100)) {
-    const rows = await omsSelect(
-      () => oms.from('order_items').select('*').in('order_id', part), 'order_items');
-    out.push(...rows);
+  for (const part of chunks(orderIds, 1000)) {
+    const rows = await omsRead('order_items',
+      'select to_jsonb(t) as j from public.order_items t where t.order_id = any($1::bigint[])', [part]);
+    out.push(...rows.map((r) => r.j));
   }
   return out;
 }
 
 async function fetchCustomersByIds(ids) {
   const out = [];
-  for (const part of chunks(ids, 100)) {
-    const rows = await omsSelect(
-      () => oms.from('customers').select('*, customer_addresses(*)').in('id', part), 'customers by id');
-    out.push(...rows);
+  for (const part of chunks(ids, 1000)) {
+    const rows = await omsRead('customers by id',
+      `select ${CUSTOMER_JSON} as j from public.customers c where c.id = any($1::bigint[])`, [part]);
+    out.push(...rows.map((r) => r.j));
   }
   return out;
 }
@@ -437,8 +455,11 @@ async function main() {
   const customersOnly = args.includes('--customers-full');
   const forcedSweep = Number(getOpt('--sweep') ?? 0);
 
-  oms = createClient(reqEnv('OMS_SUPABASE_URL'), reqEnv('OMS_SUPABASE_KEY'),
-    { auth: { persistSession: false } });
+  try {
+    await omsConnect();
+  } catch (err) {
+    fatal(`could not connect to the OMS as spine_reader: ${err.message}`, isTransportError(err) || true);
+  }
 
   spine = new pg.Client({
     connectionString: reqEnv('SPINE_DATABASE_URL'),
@@ -468,8 +489,8 @@ async function main() {
   let ok = false;
   try {
     // Outlet code map, once per run.
-    const outlets = await omsSelect(() => oms.from('outlets').select('id, code'), 'outlets');
-    const outletCode = new Map(outlets.map((o) => [o.id, o.code]));
+    const outlets = await omsRead('outlets', 'select id, code from public.outlets');
+    const outletCode = new Map(outlets.map((o) => [Number(o.id), o.code]));
 
     let orderIds = [];
     let newCursor = null;
@@ -481,14 +502,13 @@ async function main() {
       // Initialise the event cursor to the CURRENT max event id up front:
       // events landing during the backfill are re-read by the next incremental,
       // and the landing is idempotent, so nothing is lost or doubled.
-      const maxEv = await omsSelect(
-        () => oms.from('order_events').select('id').order('id', { ascending: false }).limit(1), 'max event id');
+      const maxEv = await omsRead('max event id', 'select max(id) as id from public.order_events');
       newCursor = maxEv[0]?.id ?? 0;
       let last = 0;
       for (;;) {
-        const page = await omsSelect(
-          () => oms.from('orders').select('id').gte('placed_at', fromIso).gt('id', last)
-            .order('id', { ascending: true }).limit(1000), 'backfill order ids');
+        const page = await omsRead('backfill order ids',
+          `select id from public.orders where placed_at >= $1 and id > $2
+           order by id limit 1000`, [fromIso, last]);
         orderIds.push(...page.map((r) => r.id));
         if (page.length < 1000) break;
         last = page[page.length - 1].id;
@@ -501,10 +521,9 @@ async function main() {
       const touched = new Set();
       let cur = cursor;
       for (;;) {
-        const page = await omsSelect(
-          () => oms.from('order_events').select('id, order_id').gt('id', cur)
-            .order('id', { ascending: true }).limit(1000), 'order_events');
-        for (const e of page) { if (e.order_id != null) touched.add(e.order_id); cur = e.id; }
+        const page = await omsRead('order_events',
+          'select id, order_id from public.order_events where id > $1 order by id limit 1000', [cur]);
+        for (const e of page) { if (e.order_id != null) touched.add(Number(e.order_id)); cur = Number(e.id); }
         if (page.length < 1000) break;
       }
       newCursor = cur;
@@ -514,11 +533,11 @@ async function main() {
       //    plus the Monday 30 day sweep (spec section 4).
       const sweepDays = forcedSweep || (monday ? 30 : 3);
       const sweepIso = isoDaysAgo(sweepDays);
-      const recentPlaced = await omsSelect(
-        () => oms.from('orders').select('id').gte('placed_at', sweepIso), 'rolling window (placed)');
-      const recentUpdated = await omsSelect(
-        () => oms.from('orders').select('id').gte('updated_at', isoDaysAgo(3)), 'rolling window (updated)');
-      for (const r of [...recentPlaced, ...recentUpdated]) touched.add(r.id);
+      const recentPlaced = await omsRead('rolling window (placed)',
+        'select id from public.orders where placed_at >= $1', [sweepIso]);
+      const recentUpdated = await omsRead('rolling window (updated)',
+        'select id from public.orders where updated_at >= $1', [isoDaysAgo(3)]);
+      for (const r of [...recentPlaced, ...recentUpdated]) touched.add(Number(r.id));
       summary.sweep_days = sweepDays;
       orderIds = [...touched];
     }
@@ -571,9 +590,9 @@ async function main() {
     if (fullCustomerSweep) {
       let last = 0; let n = 0;
       for (;;) {
-        const page = await omsSelect(
-          () => oms.from('customers').select('*, customer_addresses(*)').gt('id', last)
-            .order('id', { ascending: true }).limit(1000), 'customers sweep');
+        const page = (await omsRead('customers sweep',
+          `select ${CUSTOMER_JSON} as j from public.customers c where c.id > $1
+           order by c.id limit 1000`, [last])).map((r) => r.j);
         if (!page.length) break;
         last = page[page.length - 1].id;
         n += page.length;
@@ -586,9 +605,9 @@ async function main() {
       }
       summary.customers_swept = n;
     } else if (mode === 'incremental') {
-      const recent = await omsSelect(
-        () => oms.from('customers').select('id').gte('created_at', isoDaysAgo(3)), 'recent customers');
-      for (const r of recent) customerIds.add(r.id);
+      const recent = await omsRead('recent customers',
+        'select id from public.customers where created_at >= $1', [isoDaysAgo(3)]);
+      for (const r of recent) customerIds.add(Number(r.id));
       if (customerIds.size) {
         const custs = await fetchCustomersByIds([...customerIds]);
         for (const part of chunks(custs.map(prepCustomer), 1000)) {
@@ -627,6 +646,7 @@ async function main() {
     fatal(`${err?.stack ?? err}`, transport);
   } finally {
     try { await spine.end(); } catch {}
+    try { await omsPg?.end(); } catch {}
   }
   process.exit(ok ? 0 : 1);
 }

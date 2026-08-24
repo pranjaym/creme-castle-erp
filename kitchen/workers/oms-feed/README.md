@@ -32,11 +32,15 @@ fidelity. They disagree on which day an order belongs to, by design.
 
 ## Reading and writing
 
-- Reads the OMS via supabase-js, selects only. The key in
-  `dashboard/auto/.env` (`OMS_SUPABASE_KEY`) is currently the OMS service role
-  key, because the OMS has RLS with zero policies and no lesser key can read
-  anything (integration-notes F29). Read-only is enforced BY CODE until a
-  scoped Postgres reader role is created (needs Pranjay, steps in F29).
+- Reads the OMS over its ap-south-1 pooler as the dedicated `spine_reader`
+  Postgres role (`OMS_RO_DATABASE_URL` in `dashboard/auto/.env`), which can
+  SELECT exactly six tables and runs read-only transactions enforced by
+  Postgres itself (F29, resolved 24 Aug 2026: Pranjay created the role, the
+  worker switched the same day and the service role key was removed from the
+  env file). HASH STABILITY: full-row reads use `to_jsonb` with the session
+  pinned to UTC, byte-identical to the PostgREST JSON the original backfill
+  hashed; verified with an all-unchanged sweep over all 114k customers. Do
+  not change the read serialization without re-verifying that.
 - Writes the spine over the ap-south-1 pooler (`SPINE_DATABASE_URL`), never
   `db.<ref>` (IPv6 only, F15). Chunked short transactions (F21).
 - Never, under any circumstances, writes to the OMS. It runs live GST billing.
