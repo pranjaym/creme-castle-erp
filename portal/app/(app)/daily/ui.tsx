@@ -26,7 +26,7 @@ export function DashHead({ title, subtitle, date, latest, basePath }:
         </span>
       </div>
       <p className="note">
-        Zomato may revise the last 3 days of figures slightly. Click any column heading to sort.
+        Newest selectable day is 2 days back on purpose: Zomato keeps revising fresher days. Click any column heading to sort.
         &quot;Last 7 days&quot; = the 7 days ending on the selected date.
       </p>
     </div>

@@ -58,7 +58,7 @@ export default async function Home() {
     <main className="dashroot" data-view="y">
       <h1 className="page">{greeting}</h1>
       <p className="freshline">
-        Data loaded up to <b>{dateLabel}</b>. Every number below opens the page that explains it.
+        Showing <b>{dateLabel}</b>, the newest settled day (Zomato keeps revising the last 2 days, so they are hidden on purpose). Every number below opens the page that explains it.
       </p>
 
       <div className="dctx">
