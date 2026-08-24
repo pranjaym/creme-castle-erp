@@ -2,7 +2,7 @@
 // role and outlet, log out), left sidebar (role-filtered nav), content area.
 // Every signed-in page renders inside this; /login lives outside the group.
 import { requireUser } from '@/lib/session';
-import { navItemsFor, ROLE_LABELS } from '@/lib/nav';
+import { navSectionsFor, ROLE_LABELS } from '@/lib/nav';
 import { logout } from '@/app/login/actions';
 import Sidebar from './sidebar';
 
@@ -15,7 +15,7 @@ function istToday(): string {
 
 export default async function AppShell({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  const items = navItemsFor(user);
+  const sections = navSectionsFor(user);
   const scope = user.role === 'store' && user.outletCodes.length
     ? user.outletCodes[0]
     : user.role === 'area_manager' && user.outletCodes.length
@@ -39,7 +39,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
         </div>
       </header>
       <div className="shellbody">
-        <aside className="shellside"><Sidebar items={items} /></aside>
+        <aside className="shellside"><Sidebar sections={sections} /></aside>
         <main className="shellmain">{children}</main>
       </div>
     </div>

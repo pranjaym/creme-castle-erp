@@ -1,41 +1,61 @@
 // The navigation registry, same pattern as the OMS (lib/roles.ts NAV_ITEMS):
-// one list, filtered by role. The sidebar renders exactly what the role allows,
-// so navigation and permissions can never disagree.
+// grouped sections, filtered by role, so navigation and permissions can never
+// disagree. Names per Pranjay (24 Aug): plain words that say what a thing is.
 import type { Role, SessionUser } from '@/lib/session';
 
 export interface NavItem {
   href: string;
   label: string;
-  roles: Role[];
+}
+export interface NavSection {
+  title: string | null; // null = ungrouped items
+  items: NavItem[];
 }
 
-const ALL: Role[] = ['admin', 'central', 'area_manager', 'store', 'viewer'];
-const MGMT: Role[] = ['admin', 'central', 'viewer'];
+export function navSectionsFor(user: SessionUser): NavSection[] {
+  const mgmt = user.role === 'admin' || user.role === 'central' || user.role === 'viewer';
+  const sections: NavSection[] = [];
 
-const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: 'Home', roles: ALL },
-  { href: '/daily', label: 'Daily', roles: ALL },
-  { href: '/stores', label: 'Stores', roles: ['admin', 'central', 'viewer', 'area_manager'] },
-  { href: '/areas', label: 'Areas', roles: MGMT },
-  { href: '/dashboards', label: 'Sales Dashboard', roles: MGMT },
-  { href: '/reports', label: 'Reports', roles: MGMT },
-  { href: '/users', label: 'Users', roles: ['admin'] },
-  { href: '/account', label: 'Change password', roles: ALL },
-];
+  sections.push({ title: null, items: [{ href: '/', label: 'Home' }] });
 
-export function navItemsFor(user: SessionUser): NavItem[] {
-  return NAV_ITEMS.map(item => {
-    // The Daily label reads naturally per role.
-    if (item.href === '/daily') {
-      const label = user.role === 'store' ? 'My Store'
-        : user.role === 'area_manager' ? 'My Area' : 'Daily';
-      return { ...item, label };
-    }
-    if (item.href === '/stores' && user.role === 'area_manager') {
-      return { ...item, label: 'My Stores' };
-    }
-    return item;
-  }).filter(item => item.roles.includes(user.role));
+  if (mgmt) {
+    sections.push({
+      title: 'Store Performance',
+      items: [
+        { href: '/daily/central', label: 'All Stores Overview' },
+        { href: '/areas', label: 'Area Managers' },
+        { href: '/stores', label: 'Store Pages' },
+      ],
+    });
+    sections.push({
+      title: 'Sales',
+      items: [{ href: '/dashboards', label: 'Daily Sales Dashboard' }],
+    });
+    sections.push({
+      title: 'Data',
+      items: [{ href: '/reports', label: 'Reports & Downloads' }],
+    });
+  } else if (user.role === 'area_manager') {
+    sections.push({
+      title: 'Store Performance',
+      items: [
+        { href: '/daily', label: 'My Area' },
+        { href: '/stores', label: 'My Store Pages' },
+      ],
+    });
+  } else if (user.role === 'store') {
+    sections.push({
+      title: 'Store Performance',
+      items: [{ href: '/daily', label: 'My Store' }],
+    });
+  }
+
+  const account: NavItem[] = [];
+  if (user.role === 'admin') account.push({ href: '/users', label: 'Users & Access' });
+  account.push({ href: '/account', label: 'Change Password' });
+  sections.push({ title: 'Account', items: account });
+
+  return sections;
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
