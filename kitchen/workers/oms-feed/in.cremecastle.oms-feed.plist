@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>in.cremecastle.oms-feed</string>
+    <!-- LOCAL checkout on purpose: launchd cannot execute from iCloud Drive
+         (same lesson as in.cremecastle.dashboard). -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/Pranjay/creme-castle-erp/kitchen/workers/oms-feed/run_oms_feed.sh</string>
+    </array>
+    <!-- Morning ladder, offset from the dashboard (08:00 slots) and the
+         zomato-business ladder (08:30/09:00/09:45/10:45) so the spine's morning
+         window is not stacked. The OMS is its own live system with no data lag,
+         so any time works; 09:05 lands yesterday's D2C in time for the 10:00
+         IST core refresh. The worker exits 75 to defer transport trouble to the
+         next slot and escalates to an owner alert at the last slot (11:15,
+         see CC_OMS_LAST_SLOT_HOUR in pull_oms_feed.mjs). -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>5</integer></dict>
+        <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>35</integer></dict>
+        <dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>15</integer></dict>
+        <dict><key>Hour</key><integer>11</integer><key>Minute</key><integer>15</integer></dict>
+    </array>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/Pranjay/creme-castle-erp/kitchen/workers/oms-feed/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/Pranjay/creme-castle-erp/kitchen/workers/oms-feed/launchd.log</string>
+</dict>
+</plist>

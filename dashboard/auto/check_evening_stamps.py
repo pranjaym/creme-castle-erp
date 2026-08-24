@@ -40,6 +40,9 @@ EVENING_JOBS = [
     ("Zomato business pull (enterprise reports, 08:30 morning ladder)",
      os.path.join(WORKERS, "zomato-business", ".last_success"),
      "bash ~/creme-castle-erp/kitchen/workers/zomato-business/run_zomato_business.sh --force"),
+    ("OMS to spine feed (D2C orders and customers, 09:05 morning ladder)",
+     os.path.join(WORKERS, "oms-feed", ".last_success"),
+     "bash ~/creme-castle-erp/kitchen/workers/oms-feed/run_oms_feed.sh --force"),
 ]
 
 
