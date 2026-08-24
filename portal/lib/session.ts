@@ -6,13 +6,18 @@ import { redirect } from 'next/navigation';
 import { authClient } from '@/lib/supabase/authClient';
 import { spine } from '@/lib/supabase/service';
 
-export type Role = 'admin' | 'viewer';
+// Phase 2 roles (migration 140). 'viewer' predates the role-equals-scope model and
+// is treated as read-only central until reassigned in /users.
+export type Role = 'admin' | 'central' | 'area_manager' | 'store' | 'viewer';
 
 export interface SessionUser {
   id: string;
   email: string;
   fullName: string | null;
   role: Role;
+  // Scope: store = one internal_code, area_manager = their outlets,
+  // admin/central/viewer = empty meaning all.
+  outletCodes: string[];
 }
 
 // Returns the logged-in user with their profile, or null if not signed in / not
@@ -25,7 +30,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   const { data: profile, error } = await spine()
     .from('profiles')
-    .select('role, full_name, active')
+    .select('role, full_name, active, outlet_codes')
     .eq('id', user.id)
     .single();
 
@@ -36,6 +41,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     email: user.email ?? '',
     fullName: profile.full_name ?? null,
     role: (profile.role as Role) ?? 'viewer',
+    outletCodes: ((profile as { outlet_codes?: string[] }).outlet_codes) ?? [],
   };
 }
 

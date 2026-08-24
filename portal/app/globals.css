@@ -1,28 +1,41 @@
+/* Portal theme, Phase 2 (Aug 2026): identical to the OMS brand theme.
+   Tokens and type come from cremecastle-oms/app/globals.css + creme-castle.css
+   (Owners typeface, cream #FAF8F6 ground, maroon #3C0618 primary, coral #DB5436
+   accent). The class structure is unchanged from Phase 1; only skin changed. */
+
+@font-face { font-family: "Owners"; src: url("/fonts/Owners-Regular.otf") format("opentype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Owners"; src: url("/fonts/Owners-Medium.otf") format("opentype"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "Owners"; src: url("/fonts/Owners-Bold.otf") format("opentype"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Montserrat"; src: url("/fonts/Montserrat-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Montserrat"; src: url("/fonts/Montserrat-SemiBold.ttf") format("truetype"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "Montserrat"; src: url("/fonts/Montserrat-Bold.ttf") format("truetype"); font-weight: 700; font-style: normal; font-display: swap; }
+
 :root {
   --coral: #DB5436; --coral-dark: #BE4127; --maroon: #3C0618;
-  --cream: #FBF6EF; --card: #FFFFFF; --ink: #2A1A1F; --muted: #8C7A70; --line: #EADFD3;
-  --head: #F3EBE0;
+  --cream: #FAF8F6; --card: #FFFFFF; --ink: #2A1A1D; --muted: #7E6B6E; --line: #EDE3E5;
+  --head: #FFF5F7; --pink: #F4D4DA;
   --ok-bg: #E9F2E6; --ok-fg: #2F5630;
   --warn-bg: #FBEAE6; --warn-fg: #872724;
+  --font-sans: "Owners", "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: var(--cream); color: var(--ink);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
 .wrap { max-width: 1000px; margin: 0 auto; padding: 20px 24px 80px; }
 a { color: var(--coral); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 /* top bar */
 .topbar { display: flex; align-items: baseline; gap: 12px; padding: 2px 2px 12px; border-bottom: 1px solid var(--line); }
-.brand { font-family: Georgia, serif; font-size: 22px; color: var(--maroon); font-weight: 700; }
+.brand { font-family: var(--font-sans); font-size: 22px; color: var(--maroon); font-weight: 700; }
 .brand a { color: var(--maroon); }
 .sub { color: var(--muted); font-size: 14px; }
 .who { margin-left: auto; color: var(--muted); font-size: 14px; display: flex; align-items: center; gap: 12px; }
-.pill { background: var(--head); border-radius: 999px; padding: 4px 12px; font-weight: 700; font-size: 12px; color: var(--maroon); text-transform: uppercase; letter-spacing: .03em; }
-.linkbtn { border: none; background: none; color: var(--coral-dark); font-weight: 700; cursor: pointer; font-size: 14px; padding: 0; }
+.pill { background: var(--pink); border-radius: 999px; padding: 4px 12px; font-weight: 700; font-size: 12px; color: var(--maroon); text-transform: uppercase; letter-spacing: .03em; }
+.linkbtn { border: none; background: none; color: var(--coral-dark); font-weight: 700; cursor: pointer; font-size: 14px; padding: 0; font-family: var(--font-sans); }
 
-h1.page { font-family: Georgia, serif; font-size: 24px; color: var(--maroon); margin: 18px 2px 6px; }
-h2.section { font-family: Georgia, serif; font-size: 18px; color: var(--maroon); margin: 26px 2px 10px; }
+h1.page { font-family: var(--font-sans); font-size: 24px; color: var(--maroon); font-weight: 700; margin: 18px 2px 6px; }
+h2.section { font-family: var(--font-sans); font-size: 18px; color: var(--maroon); font-weight: 700; margin: 26px 2px 10px; }
 .hint { color: var(--muted); font-size: 14px; margin: 0 2px 16px; }
 /* A hint that has to actually be read, e.g. the personal-data warning on the reports
    page. Muted grey is the wrong weight for something carrying a legal consequence. */
@@ -33,7 +46,7 @@ h2.section { font-family: Georgia, serif; font-size: 18px; color: var(--maroon);
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin-top: 10px; }
 .tile { display: block; padding: 22px 24px; border: 1.5px solid var(--line); border-radius: 16px; background: var(--card); }
 .tile:hover { border-color: var(--coral); text-decoration: none; }
-.tile .t { font-size: 20px; font-weight: 800; color: var(--ink); }
+.tile .t { font-size: 20px; font-weight: 700; color: var(--ink); }
 .tile .d { color: var(--muted); font-size: 14px; margin-top: 6px; }
 
 /* table */
@@ -42,21 +55,24 @@ table.sheet { width: 100%; border-collapse: collapse; background: var(--card);
 .sheet th { text-align: left; font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
   color: var(--muted); padding: 10px 14px; background: var(--head); }
 .sheet td { padding: 10px 14px; border-top: 1px solid var(--line); font-size: 15px; }
-.sheet tr:hover td { background: #FFFBF7; }
+.sheet tr:hover td { background: #FFF5F7; }
 .sheet .name { font-weight: 600; }
 
 /* forms / buttons */
 label.fld { display: block; margin: 12px 0 4px; font-weight: 700; font-size: 14px; }
 input.txt, select.txt { width: 100%; max-width: 360px; font-size: 15px; padding: 10px 12px;
-  border: 1.5px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); }
+  border: 1.5px solid var(--line); border-radius: 10px; background: var(--card); color: var(--ink); font-family: var(--font-sans); }
 .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
-.primary { background: var(--coral); color: #fff; border: none; border-radius: 12px;
-  padding: 12px 26px; font-size: 16px; font-weight: 800; cursor: pointer; box-shadow: 0 2px 8px rgba(219,84,54,.25); }
-.primary:disabled { background: #E7C9BF; box-shadow: none; }
+.primary { background: var(--maroon); color: #fff; border: none; border-radius: 12px;
+  padding: 12px 26px; font-size: 16px; font-weight: 700; cursor: pointer; font-family: var(--font-sans);
+  box-shadow: 0 2px 8px rgba(60,6,24,.22); }
+.primary:hover { background: #55112B; }
+.primary:disabled { background: #C9AEB6; box-shadow: none; }
 .ghostbtn { display: inline-block; border: 1.5px solid var(--line); background: var(--card); border-radius: 12px;
-  padding: 10px 18px; font-weight: 700; cursor: pointer; color: var(--ink); }
+  padding: 10px 18px; font-weight: 700; cursor: pointer; color: var(--ink); font-family: var(--font-sans); }
 .ghostbtn:hover { border-color: var(--coral); text-decoration: none; }
 .err { color: var(--warn-fg); font-weight: 700; font-size: 14px; margin-top: 10px; }
+.ok { color: var(--ok-fg); font-weight: 700; font-size: 14px; margin-top: 10px; }
 .note { color: var(--muted); font-size: 13px; margin-top: 8px; }
 
 /* login */
@@ -74,3 +90,16 @@ iframe.dash { width: 100%; height: calc(100vh - 150px); border: 1px solid var(--
   border-radius: 14px; background: var(--card); }
 .empty { color: var(--muted); font-size: 15px; padding: 30px; text-align: center;
   border: 1px dashed var(--line); border-radius: 14px; background: var(--card); }
+
+/* users module */
+.sheet select.mini, .sheet input.mini { font-size: 14px; padding: 6px 8px; border: 1.5px solid var(--line);
+  border-radius: 8px; background: var(--card); color: var(--ink); font-family: var(--font-sans); }
+.sheet select[multiple].mini { min-width: 190px; }
+.smallbtn { background: var(--maroon); color: #fff; border: none; border-radius: 8px;
+  padding: 7px 14px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: var(--font-sans); }
+.smallbtn.ghost { background: var(--card); color: var(--ink); border: 1.5px solid var(--line); }
+.smallbtn.ghost:hover { border-color: var(--coral); }
+.badge-off { background: var(--warn-bg); color: var(--warn-fg); border-radius: 999px;
+  padding: 3px 10px; font-weight: 700; font-size: 12px; }
+.badge-on { background: var(--ok-bg); color: var(--ok-fg); border-radius: 999px;
+  padding: 3px 10px; font-weight: 700; font-size: 12px; }

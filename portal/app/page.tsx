@@ -19,6 +19,12 @@ export default async function Home() {
           <div className="t">Download reports</div>
           <div className="d">Order and item reports as clean CSV, for any date or range.</div>
         </Link>
+        {user.role === 'admin' ? (
+          <Link className="tile" href="/users">
+            <div className="t">Users</div>
+            <div className="d">Add accounts and set what each person can see: store, area, or everything.</div>
+          </Link>
+        ) : null}
       </div>
     </main>
   );
