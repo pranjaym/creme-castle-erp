@@ -38,3 +38,4 @@ venv/
 .DS_Store
 **/.DS_Store
 *.tsbuildinfo
+dashboard/auto/f29_spine_reader.sql
