@@ -479,3 +479,33 @@ iframe.dash { width: 100%; height: calc(100vh - 190px); border: 1px solid var(--
 .rolepick .rd { color: var(--muted); font-size: 12.5px; margin-top: 3px; line-height: 1.45; }
 .formfoot { display: flex; gap: 10px; align-items: center; margin-top: 8px; padding-top: 16px;
   border-top: 1px solid var(--line); }
+
+
+/* ===== v3 store page ===== */
+.pblock { padding: 9px 0 4px; }
+.pblock + .pblock { border-top: 1px dashed var(--line); }
+.ptitle { display: table; font-size: 12.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--maroon); background: var(--head); border-radius: 6px; padding: 3px 10px; margin-bottom: 10px; }
+.chart { display: inline-block; margin: 4px 0; max-width: 100%; }
+.chart svg { max-width: 100%; height: auto; }
+.charttitle { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.tlabel { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 12px 0 4px; }
+.rchip { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 1px 8px; white-space: nowrap; }
+.r-packing { background: #FBEAE6; color: #872724; }
+.r-taste { background: #FDF3D7; color: #7A5A12; }
+.r-missing { background: #EAF0FA; color: #2C4E82; }
+.r-wrong { background: #F2E8FA; color: #5E3B82; }
+.r-other { background: #F0EDEB; color: #6b5a5d; }
+.rfilters { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.rfilter { font: inherit; font-family: var(--font-sans); font-size: 12.5px; border: 1.5px solid var(--line);
+  background: var(--card); border-radius: 999px; padding: 3px 12px; cursor: pointer; color: var(--ink); }
+.rfilter.on { border-color: var(--maroon); background: var(--maroon); color: #fff; }
+details.fold { margin-top: 8px; }
+details.fold summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--maroon);
+  background: var(--head); border-radius: 8px; padding: 7px 12px; list-style: none; }
+details.fold summary::-webkit-details-marker { display: none; }
+.dashroot table { font-size: 13px; }
+.dashroot td { padding: 4px 6px; white-space: normal; }
+.dashroot th { font-size: 10.5px; }
+.dcard { padding: 4px 14px 10px; }
+section { margin-bottom: 16px; }

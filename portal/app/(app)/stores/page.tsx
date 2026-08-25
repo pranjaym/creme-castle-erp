@@ -22,7 +22,7 @@ export default async function StoresPage({ searchParams }:
     <main className="dashroot" data-view="y">
       <DashHead title={user.role === 'area_manager' ? 'My stores' : 'All stores'}
         subtitle="Click any store to open its full page, exactly what its manager sees."
-        date={date} latest={latest} basePath="/stores" />
+        date={date} latest={latest} basePath="/stores" toggle />
       <div className="dcard"><StoresTables stores={mine} date={date} /></div>
       <DashScript />
     </main>

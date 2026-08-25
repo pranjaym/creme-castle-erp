@@ -4,8 +4,8 @@ import Script from 'next/script';
 import Link from 'next/link';
 import { dateLabel, shiftDate } from '@/lib/daily';
 
-export function DashHead({ title, subtitle, date, latest, basePath }:
-  { title: string; subtitle: string; date: string; latest: string; basePath: string }) {
+export function DashHead({ title, subtitle, date, latest, basePath, toggle }:
+  { title: string; subtitle: string; date: string; latest: string; basePath: string; toggle?: boolean }) {
   const prev = shiftDate(date, -1);
   const next = shiftDate(date, 1);
   return (
@@ -20,14 +20,16 @@ export function DashHead({ title, subtitle, date, latest, basePath }:
           <input className="mini txt" type="date" name="date" defaultValue={date} min="2025-01-01" max={latest} />
           <button className="smallbtn" type="submit">Go</button>
         </form>
-        <span className="views" role="tablist" aria-label="Period">
-          <button className="on" data-view="y" type="button">Day</button>
-          <button data-view="wk" type="button">Last 7 days</button>
-        </span>
+        {toggle ? (
+          <span className="views" role="tablist" aria-label="Period">
+            <button className="on" data-view="y" type="button">Day</button>
+            <button data-view="wk" type="button">Last 7 days</button>
+          </span>
+        ) : null}
       </div>
       <p className="note">
-        Newest selectable day is 2 days back on purpose: Zomato keeps revising fresher days. Click any column heading to sort.
-        &quot;Last 7 days&quot; = the 7 days ending on the selected date.
+        Settled data only: the newest selectable day is 2 days back because Zomato keeps revising fresher days.
+        Each section shows the selected day first, then the 7 days ending on it.
       </p>
     </div>
   );
@@ -202,4 +204,96 @@ export function AreasTables({ areas, date }:
       <p className="note">Ranked by complaint rate for the selected period. Money lost = stockout rejections + refunds for the 7 days.</p>
     </>
   );
+}
+
+// ---- v3 store page components (approved design, 25 Aug 2026) ----
+
+// A chart with real axes: day labels along the bottom (edge labels anchored so
+// nothing clips), value ticks with gridlines. Server-rendered, no client JS.
+export function Chart({ series, labels, title, unit = '', lo, hi, width = 430 }:
+  { series: (number | null)[]; labels: string[]; title: string; unit?: string;
+    lo?: number; hi?: number; width?: number }) {
+  const vals = series.filter((v): v is number => v !== null && v !== undefined);
+  if (!vals.length) return <p className="note">No data for these days.</p>;
+  let LO = lo ?? Math.min(...vals);
+  let HI = hi ?? Math.max(...vals);
+  if (HI === LO) HI = LO + 1;
+  const W = width, H = 116, L = 46, R = 26, T = 10, B = 24;
+  const n = series.length;
+  const x = (i: number) => L + (i * (W - L - R)) / Math.max(n - 1, 1);
+  const y = (v: number) => T + ((HI - v) * (H - T - B)) / (HI - LO);
+  const ticks = [LO, (LO + HI) / 2, HI];
+  const fmt = (v: number) => (Math.abs(HI - LO) >= 5 ? Math.round(v).toString() : v.toFixed(1)) + unit;
+  const pts = series.map((v, i) => (v === null ? null : `${x(i).toFixed(1)},${y(v).toFixed(1)}`))
+    .filter(Boolean).join(' ');
+  return (
+    <div className="chart">
+      <div className="charttitle">{title}</div>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title}>
+        {ticks.map((tv, i) => (
+          <g key={i}>
+            <line x1={L} y1={y(tv)} x2={W - R} y2={y(tv)} stroke="#EDE3E5" strokeWidth="1" />
+            <text x={L - 5} y={y(tv) + 3.5} fontSize="10.5" fill="#7E6B6E" textAnchor="end">{fmt(tv)}</text>
+          </g>
+        ))}
+        {labels.map((la, i) => (
+          <text key={i} x={x(i)} y={H - 7} fontSize="10" fill="#7E6B6E"
+            textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>{la}</text>
+        ))}
+        <polyline points={pts} fill="none" stroke="#DB5436" strokeWidth="2"
+          strokeLinejoin="round" strokeLinecap="round" />
+        {series.map((v, i) => v === null ? null : (
+          <circle key={i} cx={x(i)} cy={y(v)} r="3" fill="#DB5436" stroke="#fff" strokeWidth="1.5">
+            <title>{`${labels[i]}: ${v}${unit}`}</title>
+          </circle>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+// A KPI verdict: never a bare number, always what it means and the goal.
+export function Verdict({ ok, good, bad }: { ok: boolean; good: string; bad: string }) {
+  return <span className={ok ? 'chip okc' : 'chip watch'}>{ok ? '✓ ' : '▲ '}{ok ? good : bad}</span>;
+}
+
+// Labelled period block: "Yesterday" then "Last 7 days", never a hidden toggle.
+export function Period({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="pblock"><div className="ptitle">{label}</div>{children}</div>;
+}
+
+// Long week lists fold behind one tap-to-open line, so the page stays short.
+export function Fold({ label, count, open, children }:
+  { label: string; count: number; open?: boolean; children: React.ReactNode }) {
+  if (!count) return <p className="note">None.</p>;
+  return (
+    <details className="fold" open={open}>
+      <summary>{label} ({count}) &rsaquo; tap to {open ? 'close' : 'open'}</summary>
+      {children}
+    </details>
+  );
+}
+
+export function Rows({ cols, rows, empty }:
+  { cols: string[]; rows: React.ReactNode[][]; empty?: string }) {
+  if (!rows.length) return <p className="note">{empty ?? 'Nothing to list.'}</p>;
+  return (
+    <div className="scroll-x">
+      <table>
+        <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
+        <tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{c}</td>)}</tr>)}</tbody>
+      </table>
+    </div>
+  );
+}
+
+// Complaint reason tag, coloured by family. The tag text comes from the ORDER
+// row, never from Zomato's daily report (the two use different words).
+export function Tag({ reason }: { reason: string }) {
+  const r = reason.toLowerCase();
+  const cls = r.includes('packag') || r.includes('spill') ? 'packing'
+    : r.includes('taste') || r.includes('quality') ? 'taste'
+    : r.includes('missing') ? 'missing'
+    : r.includes('wrong') ? 'wrong' : 'other';
+  return <span className={`rchip r-${cls}`}>{reason}</span>;
 }

@@ -37,15 +37,28 @@ export interface DashAll {
     ads_wk: Record<string, number | null> | null;
   } | null;
 }
-export interface Receipt { label: string; basket: string | null; [k: string]: unknown }
+export interface Receipt {
+  d?: string; dlabel?: string; time?: string; basket?: string | null;
+  tag?: string | null; reason?: string | null; refund?: number | null;
+  value?: number | null; rating?: string | null;
+  ready_secs?: number | null; waited_min?: number | null;
+}
+export interface TrendDay {
+  d: string; online: number | null; offmin: number | null; comps: number | null;
+  srej: number | null; rating: number | null; orders: number | null; wait: number | null;
+}
 export interface StoreDetail {
   code: string; locality: string | null; city: string | null; am: string | null;
   date: string; week_start: string;
-  trend: { d: string; online: number | null; comps: number | null; srej: number | null; rating: number | null; orders: number | null }[];
+  trend: TrendDay[];
   mealtime_wk: Record<string, number>;
-  complaints_day: Receipt[]; rated_day: Receipt[]; rejections_wk: Receipt[];
-  false_ready_wk: Receipt[]; low_ratings_wk: Receipt[];
-  other_cancels_wk: number; refunds_day: number; refunds_wk: number; stockout_wk: number;
+  complaints_day: Receipt[]; complaints_wk: Receipt[];
+  rated_day: Receipt[]; low_ratings_wk: Receipt[];
+  rejections_day: Receipt[]; rejections_wk: Receipt[];
+  false_ready_day: Receipt[]; false_ready_wk: Receipt[];
+  waits3_day: number; waits3_wk: number; delivered_day: number;
+  other_cancels_wk: number; refunds_day: number; refunds_wk: number;
+  stockout_day: number; stockout_wk: number;
 }
 export interface StoreReasons {
   comps?: number; wrong?: number; missing?: number; packaging?: number; quality?: number; late?: number;

@@ -38,7 +38,7 @@ export default async function AreaDaily({ params, searchParams }:
     <main className="dashroot" data-view="y">
       <DashHead title={`Area Daily: ${am}`}
         subtitle={`${mine.length} stores. Zomato operations.`}
-        date={date} latest={latest} basePath={`/daily/area/${encodeURIComponent(am)}`} />
+        date={date} latest={latest} basePath={`/daily/area/${encodeURIComponent(am)}`} toggle />
 
       <div className="dctx">
         <Tile label="Orders"

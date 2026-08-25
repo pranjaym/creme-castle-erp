@@ -5,12 +5,27 @@
   var root = document.querySelector('.dashroot');
   if (!root) return;
 
-  // View toggle
+  // Day / week toggle, on the pages that still offer one.
   document.querySelectorAll('.views button').forEach(function (b) {
     b.addEventListener('click', function () {
       root.dataset.view = b.dataset.view;
       document.querySelectorAll('.views button').forEach(function (x) {
         x.classList.toggle('on', x === b);
+      });
+    });
+  });
+
+  // Complaint reason filters. The chips carry the tags the rows actually have,
+  // so a chip can never come up empty (the 25 Aug bug).
+  document.querySelectorAll('.rfilter').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var target = b.dataset.target || 'comp-wk';
+      document.querySelectorAll('.rfilter[data-target="' + target + '"]').forEach(function (x) {
+        x.classList.toggle('on', x === b);
+      });
+      var want = b.dataset.reason;
+      document.querySelectorAll('#' + target + ' tbody tr').forEach(function (tr) {
+        tr.style.display = (!want || tr.dataset.reason === want) ? '' : 'none';
       });
     });
   });

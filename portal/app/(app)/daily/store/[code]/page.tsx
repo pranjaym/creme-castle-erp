@@ -4,25 +4,23 @@ import {
   getDashAll, getLatestDate, getStoreDetail, getStoreReasons, canSeeStore,
   inr, n0, n1, type Receipt,
 } from '@/lib/daily';
-import { DashHead, DashScript, Tile, V, D, Spark, HBar, SecHead, StoresTables } from '../../ui';
+import {
+  DashHead, DashScript, SecHead, StoresTables, HBar,
+  Chart, Verdict, Period, Fold, Rows, Tag,
+} from '../../ui';
 
-function ReceiptTable({ rows, cols, caption }:
-  { rows: Receipt[]; cols: { key: string; label: string; fmt?: (v: unknown) => string }[]; caption?: string }) {
-  if (!rows.length) return <p className="note">Nothing to list.</p>;
-  return (
-    <div className="scroll-x">
-      <table className="sheet sortable">
-        <thead><tr>{cols.map(c => <th key={c.key}>{c.label}</th>)}</tr></thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i}>{cols.map(c => <td key={c.key}>{c.fmt ? c.fmt(r[c.key]) : String(r[c.key] ?? '-')}</td>)}</tr>
-          ))}
-        </tbody>
-      </table>
-      {caption ? <p className="note">{caption}</p> : null}
-    </div>
-  );
-}
+// The store page, approved design v3 (25 Aug 2026). Rules, in order of the
+// arguments that produced them:
+//   1. No hidden day/week toggle: each section shows a labelled Yesterday block
+//      then a labelled Last 7 days block.
+//   2. No number without its orders.
+//   3. Week lists exclude yesterday (already listed above); week TOTALS still
+//      cover 7 days and say so. Times show clock only, because a post-midnight
+//      order belongs to the previous business day.
+//   4. Charts carry axes. 5. Every KPI carries a verdict and its goal.
+//   6. Long lists fold. 7. Complaint filters are built from the tags the ORDER
+//      rows carry, never from Zomato's daily-report words: they differ, and
+//      mixing them made filters that returned nothing.
 
 export default async function StoreDaily({ params, searchParams }:
   { params: Promise<{ code: string }>; searchParams: Promise<{ date?: string }> }) {
@@ -35,206 +33,280 @@ export default async function StoreDaily({ params, searchParams }:
   const sp = await searchParams;
   const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? '') && sp.date! <= latest ? sp.date! : latest;
 
-  const [all, detail, reasons] = await Promise.all([
+  const [all, det, reasons] = await Promise.all([
     getDashAll(date), getStoreDetail(code, date), getStoreReasons(code, date),
   ]);
   const me = all.stores.find(s => s.code === code);
   if (!me) redirect('/daily');
-
   const day = me.day, wk = me.wk;
-  const trendDays = detail.trend.map(t =>
+
+  const tLabels = det.trend.map(t =>
     new Date(t.d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' }));
-  const hasOrderDetail = detail.trend.length > 0 && (wk.wait !== null || detail.false_ready_wk.length > 0
-    || detail.complaints_day.length > 0 || wk.stockout !== null);
+  const weekLabel = `Last 7 days (${new Date(det.week_start + 'T00:00:00')
+    .toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} to ${new Date(date + 'T00:00:00')
+    .toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})`;
+  const dayLabel = `Yesterday (${new Date(date + 'T00:00:00')
+    .toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})`;
 
-  const meal = detail.mealtime_wk;
-  const mealTotal = Object.values(meal).reduce((a, b) => a + b, 0);
-  const mealRows = [
-    ['Dinner', 'Dinner (7 to 11 pm)'], ['Lunch', 'Lunch (11 am to 4 pm)'],
-    ['Snacks', 'Snacks (4 to 7 pm)'], ['Late night', 'Late night (11 pm to 7 am)'],
-    ['Breakfast', 'Breakfast (7 to 11 am)'],
-  ].map(([k, label]) => ({ name: label, value: meal[k] ?? 0 }))
-    .sort((a, b) => b.value - a.value);
-
-  const attention: React.ReactNode[] = [];
-  const rTop = [
-    ['packaging', 'packaging and spillage'], ['quality', 'taste or quality'],
-    ['missing', 'missing items'], ['wrong', 'wrong items'], ['late', 'late delivery'],
-  ].map(([k, label]) => ({ label, v: (reasons as Record<string, number>)[k] ?? 0 }))
-    .sort((a, b) => b.v - a.v)[0];
-  if (rTop && rTop.v >= 3) attention.push(<li key="r"><b>Top complaint reason this week: {rTop.label}</b> ({rTop.v} tags). Worth one physical check of how orders go out.</li>);
-  if ((wk.stockout ?? 0) > 0) attention.push(<li key="s"><b>Stockouts cost {inr(wk.stockout)} this week</b> ({detail.rejections_wk.length} rejected orders, listed below). Check stock before the dinner rush.</li>);
-  if ((wk.fr ?? 0) > 0) attention.push(<li key="f"><b>&quot;Ready&quot; was pressed early on {n0(wk.fr)} orders this week</b> while the rider stood waiting. Press ready only when the bag is sealed.</li>);
-  if ((day.comps ?? 0) === 0 && (day.srej ?? 0) === 0 && (day.online ?? 0) >= 99.9) {
-    attention.push(<li key="g"><b>A clean day:</b> no complaints, no rejections, fully online. That is the standard.</li>);
+  // Filter chips come from the tags the week's own rows carry.
+  const tagCounts = new Map<string, number>();
+  for (const r of det.complaints_wk) {
+    const t = r.tag ?? 'reason not tagged by Zomato';
+    tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
   }
+  const chips = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]);
+
+  const things: React.ReactNode[] = [];
+  const topReason = ([['packaging and spillage', reasons.packaging], ['taste or quality', reasons.quality],
+    ['missing items', reasons.missing], ['wrong items', reasons.wrong], ['late delivery', reasons.late]] as const)
+    .map(([n, v]) => ({ n, v: v ?? 0 })).sort((a, b) => b.v - a.v)[0];
+  if (topReason && topReason.v >= 3) things.push(
+    <li key="r"><b>Top complaint reason this week: {topReason.n}</b> ({topReason.v} tags). Worth one physical check of how orders go out.</li>);
+  if (det.stockout_wk > 0) things.push(
+    <li key="s"><b>Stockouts cost {inr(det.stockout_wk)} this week.</b> The rejected orders and their items are in section 2.</li>);
+  if ((wk.fr ?? 0) > 0) things.push(
+    <li key="f"><b>&quot;Ready&quot; was pressed early on {n0(wk.fr)} orders this week</b> while the rider stood waiting. Press ready only when the bag is sealed.</li>);
+  if (!things.length) things.push(<li key="g"><b>A clean week.</b> Keep it there.</li>);
+
+  const meal = det.mealtime_wk ?? {};
+  const mealTotal = Object.values(meal).reduce((a, b) => a + b, 0);
+  const mealNames: [string, string][] = [['Dinner', 'Dinner (7 to 11 pm)'], ['Lunch', 'Lunch (11 am to 4 pm)'],
+    ['Snacks', 'Snacks (4 to 7 pm)'], ['Late night', 'Late night (11 pm to 7 am)'], ['Breakfast', 'Breakfast (7 to 11 am)']];
+
+  const league = [...all.stores].sort((a, b) => (a.dayRank ?? 99) - (b.dayRank ?? 99));
+  const leagueShown = league.slice(0, 5).concat((me.dayRank ?? 99) > 5 ? [me] : []);
+
+  const R = (r: Receipt, ...cells: React.ReactNode[]) => cells;
 
   return (
-    <main className="dashroot" data-view="y">
+    <main className="dashroot">
       <DashHead title={`Store Daily: ${code}`}
-        subtitle={`${detail.locality ?? ''}${detail.city ? ', ' + detail.city : ''} · Area manager: ${detail.am ?? '-'}`}
+        subtitle={`${det.locality ?? ''}${det.city ? ', ' + det.city : ''} · Area manager: ${det.am ?? '-'}`}
         date={date} latest={latest} basePath={`/daily/store/${encodeURIComponent(code)}`} />
 
       <div className="dctx">
-        <Tile label="Orders"
-          y={<><V>{n0(day.orders)}</V><D>{day.avgord ? `own 7-day average ${n0(day.avgord)}` : ''}</D></>}
-          wk={<><V>{n0(wk.orders)}</V><D>{wk.orders ? `${n0(Math.round(wk.orders / 7))} per day` : ''}</D></>} />
-        <Tile label="Delivered"
-          y={<V>{n0(day.delivered)} <small>of {n0(day.orders)}</small></V>}
-          wk={<V>{n0(wk.delivered)} <small>of {n0(wk.orders)}</small></V>} />
-        <Tile label="Food rating"
-          y={<><V>{day.rating ? n1(day.rating) : '-'} <small>/ 5</small></V><D>{detail.rated_day.length} orders rated</D></>}
-          wk={<><V>{wk.rating ? n1(wk.rating) : '-'} <small>/ 5</small></V><D>average of the daily ratings</D></>} />
-        <Tile label="Network rank"
-          y={<><V>{me.dayRank ?? '-'} <small>of {all.stores.length}</small></V><D>for the day</D></>}
-          wk={<><V>{me.wkRank ?? '-'} <small>of {all.stores.length}</small></V><D>for the 7 days</D></>} />
+        <div className="dtile"><div className="dlabel">Orders</div><div className="dvalue">{n0(day.orders)}</div>
+          <div className="ddelta">own 7-day average {n0(day.avgord)}</div></div>
+        <div className="dtile"><div className="dlabel">Delivered</div>
+          <div className="dvalue">{n0(day.delivered)} <small>of {n0(day.orders)}</small></div></div>
+        <div className="dtile"><div className="dlabel">Food rating</div>
+          <div className="dvalue">{day.rating ? n1(day.rating) : '-'} <small>/ 5</small></div>
+          <div className="ddelta">{det.rated_day.length} orders rated</div></div>
+        <div className="dtile"><div className="dlabel">Network rank</div>
+          <div className="dvalue">{me.dayRank ?? '-'} <small>of {all.stores.length}</small></div>
+          <div className="ddelta">for this day</div></div>
       </div>
 
-      {attention.length ? (
-        <div className="attention"><h2>Things for today</h2><ol>{attention.slice(0, 3)}</ol></div>
-      ) : null}
+      <div className="attention"><h2>Things for today</h2><ol>{things.slice(0, 3)}</ol></div>
 
       <SecHead num="1">Were you open?</SecHead>
       <div className="dcard">
-        <div className="krow">
-          <div className="kpi"><div className="dlabel">Online time</div>
-            <span className="only-y"><V>{day.online === null ? '-' : n1(day.online) + '%'}</V>
-              {day.online !== null && day.online >= 99.9 ? <span className="chip okc">&#10003; full day online</span> : null}</span>
-            <span className="only-wk"><V>{wk.online === null ? '-' : n1(wk.online) + '%'}</V></span></div>
-          <div className="kpi"><div className="dlabel">Time offline</div>
-            <span className="only-y"><V>{n0(day.offmin)} <small>min</small></V></span>
-            <span className="only-wk"><V>{n0(wk.offmin)} <small>min</small></V></span></div>
-          <Spark points={detail.trend.map(t => t.online)} labels={trendDays} min={95} max={100} suffix="%"
-            caption="online % per day, the 7 days ending on the selected date" />
-        </div>
+        <Period label={dayLabel}>
+          <div className="krow">
+            <div className="kpi"><div className="dlabel">Online time</div>
+              <div className="dvalue">{day.online === null ? '-' : n1(day.online) + '%'}</div>
+              <Verdict ok={(day.online ?? 0) >= 99.9} good="full day online" bad={`offline ${n0(day.offmin)} min`} /></div>
+            <div className="kpi"><div className="dlabel">Time offline</div>
+              <div className="dvalue">{n0(day.offmin)} <small>min</small></div></div>
+          </div>
+          <p className="note">Zomato tells us the total minutes offline per day, never the clock times. If a day shows
+            big offline minutes, ask the store what happened; the export cannot say when.</p>
+        </Period>
+        <Period label={weekLabel}>
+          <Chart series={det.trend.map(t => t.offmin)} labels={tLabels}
+            title="Minutes offline per day (0 = fully online)" unit=" min" lo={0} />
+        </Period>
       </div>
 
       <SecHead num="2">Did you accept what came?</SecHead>
       <div className="dcard">
-        <div className="krow">
-          <div className="kpi"><div className="dlabel">Rejected by the store</div>
-            <span className="only-y"><V>{n0(day.srej)}</V>
-              {(day.srej ?? 0) === 0 ? <span className="chip okc">&#10003; clean day</span> : null}</span>
-            <span className="only-wk"><V>{n0(wk.srej)}</V></span></div>
-          <Spark points={detail.trend.map(t => t.srej)} labels={trendDays} min={0}
-            caption="store-caused rejections per day" />
-        </div>
-        <div className="only-wk">
-          <ReceiptTable rows={detail.rejections_wk}
-            cols={[{ key: 'label', label: 'When' }, { key: 'reason', label: 'Reason' },
-                   { key: 'basket', label: 'What the customer had ordered' },
-                   { key: 'value', label: 'Value lost', fmt: v => inr(Number(v)) }]}
-            caption={`This week's store-caused rejections. Not counted against the store: ${n0(detail.other_cancels_wk)} further orders were cancelled from the customer or rider side.`} />
-        </div>
+        <Period label={dayLabel}>
+          <div className="krow"><div className="kpi"><div className="dlabel">Rejected by the store</div>
+            <div className="dvalue">{n0(day.srej)}</div>
+            <Verdict ok={(day.srej ?? 0) === 0} good="accepted everything"
+              bad={`${inr(det.stockout_day)} of orders turned away`} /></div></div>
+          <Rows cols={['Time', 'Why it was rejected', 'What the customer had ordered', 'Value lost']}
+            rows={det.rejections_day.map(r => R(r, r.time, <Tag reason={r.reason ?? ''} />, r.basket ?? '-', inr(r.value)))}
+            empty="No store-caused rejections yesterday." />
+        </Period>
+        <Period label={weekLabel}>
+          <div className="krow"><div className="kpi"><div className="dlabel">Rejected this week</div>
+            <div className="dvalue">{n0(wk.srej)}</div>
+            <div className="ddelta">{inr(det.stockout_wk)} of orders turned away</div></div></div>
+          <Chart series={det.trend.map(t => t.srej)} labels={tLabels} title="Store-caused rejections per day" lo={0} />
+          <Fold label="Rejections earlier this week, before yesterday" count={det.rejections_wk.length}>
+            <Rows cols={['Day', 'Time', 'Why', 'What the customer had ordered', 'Value lost']}
+              rows={det.rejections_wk.map(r => R(r, r.dlabel, r.time, <Tag reason={r.reason ?? ''} />, r.basket ?? '-', inr(r.value)))} />
+          </Fold>
+          <p className="note">Cancellations caused by the customer or the rider are not listed here and are not counted
+            against the store ({det.other_cancels_wk} this week).</p>
+        </Period>
       </div>
 
       <SecHead num="3">Was it right?</SecHead>
       <div className="dcard">
-        <div className="krow">
-          <div className="kpi"><div className="dlabel">Complaints</div>
-            <span className="only-y"><V>{n0(day.comps)} <small>{day.cpct !== null ? `(${n1(day.cpct)}% of orders)` : ''}</small></V></span>
-            <span className="only-wk"><V>{n0(wk.comps)}</V></span></div>
-          <Spark points={detail.trend.map(t => t.comps)} labels={trendDays} min={0}
-            caption="complaints per day" />
-        </div>
-        {(reasons.comps ?? 0) > 0 ? (
-          <>
-            <div className="dlabel" style={{ margin: '10px 0 6px' }}>Complaint reasons this week (one complaint can carry several)</div>
-            <HBar rows={[
-              { name: 'Poor taste or quality', value: reasons.quality ?? 0 },
-              { name: 'Packaging or spillage', value: reasons.packaging ?? 0 },
-              { name: 'Items missing', value: reasons.missing ?? 0 },
-              { name: 'Delivered late', value: reasons.late ?? 0 },
-              { name: 'Wrong items', value: reasons.wrong ?? 0 },
-            ].filter(r => r.value > 0).sort((a, b) => b.value - a.value)} />
-          </>
-        ) : null}
-        <div className="only-y" style={{ marginTop: 10 }}>
-          <ReceiptTable rows={detail.complaints_day}
-            cols={[{ key: 'label', label: 'When' }, { key: 'basket', label: 'What was in the order' },
-                   { key: 'tag', label: 'Tag' }]}
-            caption="Orders where the customer reported an issue on the selected day. Zomato's official complaint count can be lower; both are shown." />
-        </div>
+        <Period label={dayLabel}>
+          <div className="krow">
+            <div className="kpi"><div className="dlabel">Complaints (Zomato official)</div>
+              <div className="dvalue">{n0(day.comps)}</div>
+              <Verdict ok={(day.comps ?? 0) === 0} good="no complaints"
+                bad={`${n0(day.comps)} on ${n0(day.orders)} orders (${n1(day.cpct)}%)`} /></div>
+            <div className="kpi"><div className="dlabel">Customers reporting an issue</div>
+              <div className="dvalue">{det.complaints_day.length}</div>
+              <div className="ddelta">Zomato counts only some as official complaints</div></div>
+          </div>
+          <div className="tlabel">Every order with an issue yesterday, with its tag</div>
+          <Rows cols={['Time', 'Tag on the order', 'What was in the order', 'Refunded']}
+            rows={det.complaints_day.map(r => R(r, r.time, <Tag reason={r.tag ?? ''} />, r.basket ?? '-',
+              r.refund ? inr(r.refund) : '-'))} empty="No issues reported yesterday." />
+        </Period>
+        <Period label={weekLabel}>
+          <div className="krow">
+            <div className="kpi"><div className="dlabel">Complaints this week (Zomato official)</div>
+              <div className="dvalue">{n0(reasons.comps)}</div></div>
+            <div className="kpi"><div className="dlabel">Orders with a reported issue</div>
+              <div className="dvalue">{det.complaints_day.length + det.complaints_wk.length}</div>
+              <div className="ddelta">{det.complaints_wk.length} of them before yesterday, listed below</div></div>
+          </div>
+          <Chart series={det.trend.map(t => t.comps)} labels={tLabels} title="Complaints per day" lo={0} />
+          <div className="tlabel">Zomato&apos;s reason counts for the week (their own daily figures)</div>
+          <HBar rows={[{ name: 'Poor taste or quality', value: reasons.quality ?? 0 },
+            { name: 'Poor packaging or spillage', value: reasons.packaging ?? 0 },
+            { name: 'Items missing', value: reasons.missing ?? 0 },
+            { name: 'Wrong items', value: reasons.wrong ?? 0 },
+            { name: 'Delivered late', value: reasons.late ?? 0 }].filter(r => r.value > 0)} />
+          <div className="tlabel">Orders before yesterday that you can open, grouped by the tag on the order. Click a tag to filter.</div>
+          <div className="rfilters">
+            {chips.map(([t, c]) => (
+              <button key={t} className="rfilter" data-reason={t} data-target="comp-wk" type="button">{t}: <b>{c}</b></button>
+            ))}
+            <button className="rfilter on" data-reason="" data-target="comp-wk" type="button">Show all</button>
+          </div>
+          <details className="fold" open>
+            <summary>Orders with issues earlier this week ({det.complaints_wk.length}) &rsaquo; tap to close</summary>
+            <div className="scroll-x">
+              <table id="comp-wk">
+                <thead><tr><th>Day</th><th>Time</th><th>Tag on the order</th><th>What was in the order</th><th>Refunded</th></tr></thead>
+                <tbody>
+                  {det.complaints_wk.map((r, i) => (
+                    <tr key={i} data-reason={r.tag ?? 'reason not tagged by Zomato'}>
+                      <td>{r.dlabel}</td><td>{r.time}</td><td><Tag reason={r.tag ?? ''} /></td>
+                      <td>{r.basket ?? '-'}</td><td>{r.refund ? inr(r.refund) : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+          <p className="note">Two counts, two sources, both true: Zomato&apos;s official complaint figure comes from their
+            daily report, while the list is every order where a customer raised something. Zomato tags a reason on only
+            some orders, so the tag counts are smaller than their daily totals. Nothing is hidden: untagged orders are listed too.</p>
+        </Period>
       </div>
 
       <SecHead num="4">Was it fast, and was &quot;ready&quot; honest?</SecHead>
       <div className="dcard">
-        <div className="krow">
-          <div className="kpi"><div className="dlabel">Avg rider wait at counter</div>
-            <span className="only-y"><V>{day.wait === null ? '-' : n1(day.wait) + ' min'}</V>
-              {day.wait !== null && day.wait < 1 ? <span className="chip okc">&#10003; under 1 min</span> : null}</span>
-            <span className="only-wk"><V>{wk.wait === null ? '-' : n1(wk.wait) + ' min'}</V></span></div>
-          <div className="kpi"><div className="dlabel">Rider waited 3+ min</div>
-            <span className="only-y"><V>{day.fr === null && day.wait === null ? '-' : n0(day.fr)}</V><D>ready pressed early</D></span>
-            <span className="only-wk"><V>{n0(wk.waits3)}</V><D>of {n0(wk.delivered)} delivered</D></span></div>
-          <div className="kpi"><div className="dlabel">&quot;Ready&quot; pressed early, rider left waiting</div>
-            <span className="only-y"><V>{day.fr === null ? '-' : n0(day.fr)}</V><D>{n0(wk.fr)} this week, listed below</D></span>
-            <span className="only-wk"><V>{n0(wk.fr)}</V></span></div>
-        </div>
-        <ReceiptTable rows={detail.false_ready_wk}
-          cols={[{ key: 'label', label: 'When' },
-                 { key: 'ready_secs', label: 'Marked ready after', fmt: v => `${v} sec` },
-                 { key: 'waited_min', label: 'Rider then waited', fmt: v => `${v} min` },
-                 { key: 'basket', label: 'What was in the order' }]}
-          caption='Orders where "food ready" was pressed within a minute of accepting, yet the rider waited 3+ minutes. Cross-verified across two independent Zomato feeds.' />
-        <div className="callout"><b>Why there is no kitchen preparation time here:</b> verified across 20 months,
-          Zomato&apos;s KPT only measures how quickly the tablet button is pressed, and its daily average has produced
-          impossible values. It is excluded as meaningless, not missing.</div>
+        <Period label={dayLabel}>
+          <div className="krow">
+            <div className="kpi"><div className="dlabel">Avg rider wait at counter</div>
+              <div className="dvalue">{day.wait === null ? '-' : n1(day.wait)} <small>min</small></div>
+              <Verdict ok={(day.wait ?? 9) < 1.5} good="riders picked up fast (goal: under 1.5 min)"
+                bad="riders waited too long (goal: under 1.5 min)" /></div>
+            <div className="kpi"><div className="dlabel">Rider waited 3+ min</div>
+              <div className="dvalue">{n0(det.waits3_day)} <small>of {n0(det.delivered_day)}</small></div>
+              <Verdict ok={det.waits3_day <= Math.max(2, det.delivered_day * 0.03)}
+                good="within the normal 3%" bad="above the normal 3% of orders" /></div>
+            <div className="kpi"><div className="dlabel">&quot;Ready&quot; pressed early, rider left waiting</div>
+              <div className="dvalue">{det.false_ready_day.length}</div>
+              <Verdict ok={det.false_ready_day.length === 0} good="the ready button was honest"
+                bad="pressed ready before the food was ready" /></div>
+          </div>
+          <Fold label="Yesterday's false ready-presses, order by order" count={det.false_ready_day.length} open>
+            <Rows cols={['Time', 'Marked ready after', 'Rider then waited', 'What was in the order']}
+              rows={det.false_ready_day.map(r => R(r, r.time, `${r.ready_secs} sec`, `${r.waited_min} min`, r.basket ?? '-'))} />
+          </Fold>
+        </Period>
+        <Period label={weekLabel}>
+          <div className="krow">
+            <div className="kpi"><div className="dlabel">False ready-presses this week</div>
+              <div className="dvalue">{n0(wk.fr)}</div>
+              <Verdict ok={(wk.fr ?? 0) <= 5} good="rare" bad="a habit, not an accident: raise it with the team" /></div>
+            <div className="kpi"><div className="dlabel">Riders kept waiting 3+ min</div>
+              <div className="dvalue">{n0(det.waits3_wk)}</div></div>
+          </div>
+          <Chart series={det.trend.map(t => t.wait)} labels={tLabels} title="Average rider wait per day" unit=" min" lo={0} />
+          <Fold label="Worst false ready-presses earlier this week" count={det.false_ready_wk.length}>
+            <Rows cols={['Day', 'Time', 'Marked ready after', 'Rider then waited', 'What was in the order']}
+              rows={det.false_ready_wk.map(r => R(r, r.dlabel, r.time, `${r.ready_secs} sec`, `${r.waited_min} min`, r.basket ?? '-'))} />
+          </Fold>
+          <p className="note">Why this matters: pressing ready early looks fast on Zomato&apos;s screens but makes riders
+            wait, delays other orders and risks penalties. Kitchen preparation time is shown nowhere: we verified it only
+            measures how fast the tablet button is pressed. Rider wait is the honest speed measure, cross-checked across
+            two independent Zomato feeds.</p>
+        </Period>
       </div>
 
       <SecHead num="5">What did mistakes cost?</SecHead>
       <div className="dcard">
-        <div className="krow">
-          <div className="kpi"><div className="dlabel">Refunded</div>
-            <span className="only-y"><V>{inr(detail.refunds_day)}</V></span>
-            <span className="only-wk"><V>{inr(detail.refunds_wk)}</V></span></div>
-          <div className="kpi"><div className="dlabel">Lost to stockouts, week</div><V>{inr(detail.stockout_wk)}</V></div>
-        </div>
+        <Period label="Yesterday and the week together">
+          <Rows cols={['What cost money', 'Yesterday', 'Last 7 days', 'What it means']}
+            rows={[
+              ['Refunds to customers', inr(det.refunds_day), inr(det.refunds_wk), 'charged back to the restaurant for complaints'],
+              ['Orders turned away', inr(det.stockout_day), inr(det.stockout_wk), 'value of store-rejected orders (section 2 lists them)'],
+            ]} />
+          <div className="krow" style={{ marginTop: 10 }}>
+            <div className="kpi"><div className="dlabel">Total avoidable loss, 7 days</div>
+              <div className="dvalue">{inr(det.refunds_wk + det.stockout_wk)}</div>
+              <Verdict ok={(det.refunds_wk + det.stockout_wk) < 1000} good="small"
+                bad="this is the number to bring down: both lines are store-controllable" /></div>
+          </div>
+          <p className="note">Every rupee here ties to a specific order listed in sections 2 and 3; nothing is an estimate.</p>
+        </Period>
       </div>
 
       <SecHead num="6">Scoreboard</SecHead>
       <div className="dcard">
-        <div className="krow">
-          <div className="kpi"><div className="dlabel">Rating</div>
-            <span className="only-y"><V>{day.rating ? n1(day.rating) : '-'}</V></span>
-            <span className="only-wk"><V>{wk.rating ? n1(wk.rating) : '-'}</V><D>few orders are rated, so this swings</D></span></div>
-          <Spark points={detail.trend.map(t => (t.rating && t.rating > 0 ? t.rating : null))}
-            labels={trendDays} min={1} max={5} caption="avg rating per day" />
-        </div>
-        <div className="only-y">
-          <ReceiptTable rows={detail.rated_day}
-            cols={[{ key: 'label', label: 'When' }, { key: 'rating', label: 'Stars' },
-                   { key: 'basket', label: 'What was in the order' }]} />
-        </div>
-        <div className="only-wk">
-          <ReceiptTable rows={detail.low_ratings_wk}
-            cols={[{ key: 'label', label: '1 and 2-star orders this week' },
-                   { key: 'rating', label: 'Stars' },
-                   { key: 'basket', label: 'What was in the order' },
-                   { key: 'tag', label: 'Complaint tag' }]} />
-        </div>
-        <div className="dlabel" style={{ margin: '16px 0 6px' }}>Network league (all stores)</div>
-        <StoresTables stores={all.stores} date={date} highlight={code} />
+        <Period label={dayLabel}>
+          <div className="krow"><div className="kpi"><div className="dlabel">Food rating</div>
+            <div className="dvalue">{day.rating ? n1(day.rating) : '-'} <small>/ 5</small></div>
+            <div className="ddelta">{det.rated_day.length} orders rated; every rating is listed so none hides</div></div></div>
+          <Rows cols={['Time', 'Stars', 'What was in the order']}
+            rows={det.rated_day.map(r => R(r, r.time, r.rating, r.basket ?? '-'))}
+            empty="No orders rated yesterday." />
+          <div className="tlabel" style={{ marginTop: 14 }}>
+            Network league for this day: top 5 plus this store (bold). Ranked by complaints + rejections + offline, lower is better.
+          </div>
+          <Rows cols={['#', 'Store', 'AM', 'Orders', 'Complaints', 'Online %', 'Rating']}
+            rows={leagueShown.map(s => [s.dayRank ?? '-',
+              s.code === code ? <b>{s.code}</b> : s.code, s.am ?? '', n0(s.day.orders), n0(s.day.comps),
+              s.day.online === null ? '-' : n1(s.day.online), s.day.rating ? n1(s.day.rating) : '-'])} />
+        </Period>
+        <Period label={weekLabel}>
+          <Chart series={det.trend.map(t => (t.rating && t.rating > 0 ? t.rating : null))} labels={tLabels}
+            title="Average rating per day (few orders are rated, so this swings)" lo={1} hi={5} />
+          <Fold label="Every 1 and 2-star order of the week" count={det.low_ratings_wk.length}>
+            <Rows cols={['Day', 'Time', 'Stars', 'What was in the order', 'Complaint tag if any']}
+              rows={det.low_ratings_wk.map(r => R(r, r.dlabel, r.time, r.rating, r.basket ?? '-',
+                r.tag ? <Tag reason={r.tag} /> : '-'))} />
+          </Fold>
+        </Period>
       </div>
 
       {mealTotal > 0 ? (
         <>
-          <SecHead num="+">When your orders come (for staffing and prep)</SecHead>
+          <SecHead num="+">When your orders come (staffing and prep)</SecHead>
           <div className="dcard">
-            <HBar rows={mealRows.map(r => ({ name: r.name, value: Math.round(100 * r.value / mealTotal) }))} />
-            <p className="note">Share (%) of this store&apos;s orders in the 7 days, using Zomato&apos;s daypart definitions.</p>
+            <HBar rows={mealNames.map(([k, label]) => ({ name: label, value: Math.round(100 * (meal[k] ?? 0) / mealTotal) }))} />
+            <p className="note">Share of this store&apos;s orders over the 7 days.</p>
           </div>
         </>
       ) : null}
 
-      {!hasOrderDetail ? (
-        <p className="hint warn">Order-level detail (receipts, rider wait, false-ready) exists from August 2026 onward;
-          earlier dates show the daily quality numbers only.</p>
-      ) : null}
-
       <div className="dfoot">
-        <p>Ads, discounts, offers and customer types are managed centrally and are deliberately absent from this page.
-        Zomato may revise the last 3 days of figures. Every number is reproducible from the spine.</p>
+        <p><b>Does an old day update?</b> Yes. This page reads the live database, and each morning&apos;s pull refreshes
+          recent days, so ratings and complaints that arrive late appear when you come back.</p>
+        <p>Ads, discounts and customer types are managed centrally and are deliberately absent. Every number here is
+          reproducible from the database.</p>
       </div>
       <DashScript />
     </main>

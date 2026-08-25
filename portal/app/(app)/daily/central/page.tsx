@@ -45,7 +45,7 @@ export default async function CentralDaily({ searchParams }:
   return (
     <main className="dashroot" data-view="y">
       <DashHead title="Network Daily: all dark stores" subtitle={`${d.stores.length} stores, ${areas.length} areas. Zomato operations.`}
-        date={date} latest={latest} basePath="/daily/central" />
+        date={date} latest={latest} basePath="/daily/central" toggle />
 
       <div className="dctx">
         <Tile label="Orders"

@@ -19,7 +19,7 @@ export default async function AreasPage({ searchParams }:
   return (
     <main className="dashroot" data-view="y">
       <DashHead title="Areas" subtitle="Five area managers, compared. Click an area for its full page."
-        date={date} latest={latest} basePath="/areas" />
+        date={date} latest={latest} basePath="/areas" toggle />
       <div className="homegrid" style={{ marginBottom: 22 }}>
         {areas.map((a, i) => (
           <Link key={a.am} className="homecard" href={`/daily/area/${encodeURIComponent(a.am)}?date=${date}`}>
