@@ -24,7 +24,6 @@ export interface SessionUser {
 // provisioned / deactivated. A user with an auth account but no active profile row
 // is treated as not allowed (accounts are provisioned deliberately, not by signup).
 export async function getSessionUser(): Promise<SessionUser | null> {
-
   const supabase = await authClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;

@@ -1,7 +1,18 @@
 import { redirect } from 'next/navigation';
 import { requireUser } from '@/lib/session';
-import { getDashAll, getLatestDate, aggregateAreas, allowedAms, inr, n0, n1 } from '@/lib/daily';
-import { DashHead, DashScript, Tile, V, D, SecHead, StoresTables, AreasTables } from '../../ui';
+import {
+  getDashAll, getAreaDetail, getLatestDate, aggregateAreas, allowedAms,
+  inr, n0, n1, type AreaReceipt,
+} from '@/lib/daily';
+import {
+  DashHead, DashScript, SecHead, Period, Fold, Rows, Tag, Basket,
+  AreaStores, DipCard, AreasTables,
+} from '../../ui';
+
+// The area manager page, approved design v2 (25 Aug 2026). It answers a
+// different question from the store page: not "what happened here" but "which
+// of my stores needs me today, and what exactly do I say to that store". So
+// every number names its outlet and lists the orders behind it.
 
 export default async function AreaDaily({ params, searchParams }:
   { params: Promise<{ am: string }>; searchParams: Promise<{ date?: string }> }) {
@@ -12,63 +23,213 @@ export default async function AreaDaily({ params, searchParams }:
   const latest = await getLatestDate();
   const sp = await searchParams;
   const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? '') && sp.date! <= latest ? sp.date! : latest;
-  const d = await getDashAll(date);
 
-  if (!allowedAms(user, d.stores).includes(am)) redirect('/daily');
-  const mine = d.stores.filter(s => (s.am ?? 'Unassigned') === am);
-  if (mine.length === 0) redirect('/daily');
-  const areas = aggregateAreas(d.stores);
-  const a = areas.find(x => x.am === am)!;
+  const all = await getDashAll(date);
+  if (!allowedAms(user, all.stores).includes(am)) redirect('/daily');
+  const A = await getAreaDetail(am, date);
+  const mine = all.stores.filter(s => A.stores.includes(s.code));
+  if (!mine.length) redirect('/daily');
+  const areas = aggregateAreas(all.stores);
 
-  const attention: React.ReactNode[] = [];
-  const hotspot = mine.filter(s => (s.day.comps ?? 0) >= 2)
-    .sort((x, y) => (y.day.cpct ?? 0) - (x.day.cpct ?? 0))[0];
-  if (hotspot) attention.push(<li key="c"><b>{hotspot.code}</b>: {n0(hotspot.day.comps)} complaints on {n0(hotspot.day.orders)} orders ({n1(hotspot.day.cpct)}%). Ask what went out wrong.</li>);
-  const frTop = [...mine].sort((x, y) => (y.wk.fr ?? 0) - (x.wk.fr ?? 0))[0];
-  if (frTop && (frTop.wk.fr ?? 0) >= 15) attention.push(<li key="f"><b>{frTop.code}</b> pressed &quot;ready&quot; early on {n0(frTop.wk.fr)} orders this week while the rider waited. Remind them: press ready only when the bag is sealed.</li>);
-  const offline = mine.filter(s => (s.day.offmin ?? 0) >= 15)
-    .sort((x, y) => (y.day.offmin ?? 0) - (x.day.offmin ?? 0))[0];
-  if (offline) attention.push(<li key="o"><b>{offline.code}</b> was offline {n0(offline.day.offmin)} minutes. Ask what happened at the tablet.</li>);
-  const stockTop = [...mine].sort((x, y) => (y.wk.stockout ?? 0) - (x.wk.stockout ?? 0))[0];
-  if (stockTop && (stockTop.wk.stockout ?? 0) >= 1500) attention.push(<li key="s"><b>{stockTop.code}</b> lost {inr(stockTop.wk.stockout)} to stockout rejections this week. Check its prep and stock list.</li>);
-  const best = [...mine].sort((x, y) => (x.dayRank ?? 99) - (y.dayRank ?? 99))[0];
-  if (best?.dayRank) attention.push(<li key="g"><b>Good news to pass on:</b> {best.code} ranks {best.dayRank} of {d.stores.length} network-wide for the day.</li>);
+  const dshort = new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const wkLabel = `Last 7 days (${new Date(A.week_start + 'T00:00:00')
+    .toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} to ${dshort})`;
+  const sum = (f: (s: typeof mine[number]) => number | null | undefined) =>
+    mine.reduce((t, s) => t + (f(s) ?? 0), 0);
+
+  const today = (r: AreaReceipt) => r.today === true;
+  const earlier = (r: AreaReceipt) => r.today !== true;
+  const rejT = A.rejections.filter(today), rejW = A.rejections.filter(earlier);
+  const compT = A.complaints.filter(today), compW = A.complaints.filter(earlier).slice(0, 60);
+  const lowT = A.low_ratings.filter(today), lowW = A.low_ratings.filter(earlier);
+  const moneyWk = A.money_stores.reduce((t, m) => t + m.total_wk, 0);
+
+  const tagCounts = new Map<string, number>();
+  for (const r of compW) tagCounts.set(r.tag!, (tagCounts.get(r.tag!) ?? 0) + 1);
+  const chips = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]);
+
+  const need: React.ReactNode[] = [];
+  if (A.online_dips.length) {
+    const w = A.online_dips[0];
+    need.push(<li key="o"><b>{w.code} was not fully online</b> ({n1(w.online_day)}%, {n0(w.offmin_day)} min offline).
+      Ask what happened at the tablet; section 2 shows the week.</li>);
+  }
+  if (A.fr_stores.length) {
+    const f = A.fr_stores[0];
+    need.push(<li key="f"><b>{f.code} pressed &quot;ready&quot; early on {n0(f.fr_wk)} orders this week</b> ({f.pct}% of
+      its delivered orders). Section 7 lists the worst ones.</li>);
+  }
+  if (A.money_stores.length) {
+    const m = A.money_stores[0];
+    need.push(<li key="m"><b>{m.code} lost {inr(m.total_wk)} this week</b> ({inr(m.stockout_wk)} turned-away orders
+      + {inr(m.refunds_wk)} refunds). Section 8 has the split per store.</li>);
+  }
+  const best = [...mine].sort((a, b) => (a.dayRank ?? 99) - (b.dayRank ?? 99))[0];
+  if (best?.dayRank) need.push(<li key="g"><b>Good news to pass on:</b> {best.code} ranks {best.dayRank} of
+    {' '}{all.stores.length} network-wide for this day.</li>);
 
   return (
-    <main className="dashroot" data-view="y">
-      <DashHead title={`Area Daily: ${am}`}
-        subtitle={`${mine.length} stores. Zomato operations.`}
-        date={date} latest={latest} basePath={`/daily/area/${encodeURIComponent(am)}`} toggle />
+    <main className="dashroot">
+      <DashHead title={`${am}'s area`} subtitle={`${mine.length} stores`}
+        date={date} latest={latest} basePath={`/daily/area/${encodeURIComponent(am)}`} />
 
       <div className="dctx">
-        <Tile label="Orders"
-          y={<V>{n0(a.day.orders)}</V>}
-          wk={<><V>{n0(a.wk.orders)}</V><D>{n0(Math.round(a.wk.orders / 7))} per day</D></>} />
-        <Tile label="Complaints"
-          y={<V>{n0(a.day.comps)} <small>({a.day.cpct?.toFixed(1) ?? '-'}%)</small></V>}
-          wk={<V>{n0(a.wk.comps)} <small>({a.wk.cpct?.toFixed(1) ?? '-'}%)</small></V>} />
-        <Tile label="Store-caused rejections"
-          y={<V>{n0(a.day.srej)}</V>} wk={<V>{n0(a.wk.srej)}</V>} />
-        <Tile label="Money lost, week"
-          y={<><V>{inr(a.wk.stockout + a.wk.refunds)}</V><D>{inr(a.wk.stockout)} stockouts + {inr(a.wk.refunds)} refunds</D></>}
-          wk={<><V>{inr(a.wk.stockout + a.wk.refunds)}</V><D>{inr(a.wk.stockout)} stockouts + {inr(a.wk.refunds)} refunds</D></>} />
+        <div className="dtile"><div className="dlabel">Orders</div>
+          <div className="dvalue">{n0(sum(s => s.day.orders))}</div>
+          <div className="ddelta">across {mine.length} stores</div></div>
+        <div className="dtile"><div className="dlabel">Complaints</div>
+          <div className="dvalue">{n0(sum(s => s.day.comps))}</div>
+          <div className="ddelta">{compT.length} orders had an issue</div></div>
+        <div className="dtile"><div className="dlabel">Store rejections</div>
+          <div className="dvalue">{n0(sum(s => s.day.srej))}</div>
+          <div className="ddelta">{rejT.length} orders turned away</div></div>
+        <div className="dtile"><div className="dlabel">Money lost, week</div>
+          <div className="dvalue">{inr(moneyWk)}</div>
+          <div className="ddelta">stockouts + refunds</div></div>
       </div>
 
-      <div className="attention">
-        <h2>Where you are needed</h2>
-        <ol>{attention.slice(0, 5)}</ol>
+      <div className="attention"><h2>Where you are needed</h2><ol>{need.slice(0, 4)}</ol></div>
+
+      <SecHead num="1">Your stores on {dshort}</SecHead>
+      <div className="dcard"><Period label={`Ranked worst-first for ${dshort}`}>
+        <AreaStores stores={mine} date={date} />
+        <p className="note">Ranked by complaints + rejections + offline, lower is better. Red marks a number worth a
+          question. Store names open the store page.</p>
+      </Period></div>
+
+      <SecHead num="2">Outlets not fully online</SecHead>
+      <div className="dcard"><Period label={`${dshort} dips, with their 7-day line`}>
+        {A.online_dips.length
+          ? <div className="minigrid">{A.online_dips.map(d => <DipCard key={d.code} dip={d} />)}</div>
+          : <p className="note">Every store was fully online on this day.</p>}
+        <p className="note">Zomato reports total minutes offline per day, never the clock times.</p>
+      </Period></div>
+
+      <SecHead num="3">Rejected orders</SecHead>
+      <div className="dcard">
+        <Period label={dshort}>
+          <Rows cols={['Store', 'Time', 'Reason', 'What the customer had ordered', 'Value lost']}
+            rows={rejT.map(r => [r.code, r.time, <Tag key="t" reason={r.reason ?? ''} />,
+              <Basket key="b" text={r.basket} />, inr(r.value)])}
+            empty="No store-caused rejections on this day." />
+        </Period>
+        <Period label={wkLabel}>
+          <Fold label="Rejections earlier this week" count={rejW.length}>
+            <Rows cols={['Store', 'Day', 'Time', 'Reason', 'What the customer had ordered', 'Value lost']}
+              rows={rejW.map(r => [r.code, r.dlabel, r.time, <Tag key="t" reason={r.reason ?? ''} />,
+                <Basket key="b" text={r.basket} />, inr(r.value)])} />
+          </Fold>
+          <p className="note">Only store-caused rejections are listed; customer and rider cancellations are excluded.</p>
+        </Period>
       </div>
 
-      <SecHead num="1">Your stores, best rank first</SecHead>
-      <div className="dcard"><StoresTables stores={mine} date={date} /></div>
+      <SecHead num="4">Complaints</SecHead>
+      <div className="dcard">
+        <Period label={dshort}>
+          {compT.length <= 25
+            ? <Rows cols={['Store', 'Time', 'Tag on the order', 'What was in the order', 'Refunded']}
+                rows={compT.map(r => [r.code, r.time, <Tag key="t" reason={r.tag ?? ''} />,
+                  <Basket key="b" text={r.basket} />, r.refund ? inr(r.refund) : '-'])}
+                empty="No issues reported on this day." />
+            : <Fold label={`Every order with an issue on ${dshort}`} count={compT.length} open>
+                <Rows cols={['Store', 'Time', 'Tag on the order', 'What was in the order', 'Refunded']}
+                  rows={compT.map(r => [r.code, r.time, <Tag key="t" reason={r.tag ?? ''} />,
+                    <Basket key="b" text={r.basket} />, r.refund ? inr(r.refund) : '-'])} />
+              </Fold>}
+        </Period>
+        <Period label={wkLabel}>
+          <div className="rfilters">
+            {chips.map(([t, c]) => (
+              <button key={t} className="rfilter" data-reason={t} data-target="area-cw" type="button">{t}: <b>{c}</b></button>
+            ))}
+            <button className="rfilter on" data-reason="" data-target="area-cw" type="button">Show all</button>
+          </div>
+          <Fold label="Complaints earlier this week (newest 60)" count={compW.length}>
+            <div className="scroll-x">
+              <table id="area-cw" className="tight">
+                <thead><tr><th>Store</th><th>Day</th><th>Time</th><th>Tag on the order</th>
+                  <th>What was in the order</th><th>Refunded</th></tr></thead>
+                <tbody>
+                  {compW.map((r, i) => (
+                    <tr key={i} data-reason={r.tag ?? ''}>
+                      <td className="name">{r.code}</td><td>{r.dlabel}</td><td>{r.time}</td>
+                      <td><Tag reason={r.tag ?? ''} /></td>
+                      <td><Basket text={r.basket} /></td>
+                      <td>{r.refund ? inr(r.refund) : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Fold>
+          <p className="note">Tags come from the order itself; Zomato leaves many untagged, and those are listed too.</p>
+        </Period>
+      </div>
 
-      <SecHead num="2">Area versus area</SecHead>
+      <SecHead num="5">1, 2 and 3-star orders</SecHead>
+      <div className="dcard">
+        <Period label={dshort}>
+          <Rows cols={['Store', 'Time', 'Stars', 'What was in the order', 'Complaint tag if any']}
+            rows={lowT.map(r => [r.code, r.time, r.rating, <Basket key="b" text={r.basket} />,
+              r.tag ? <Tag key="t" reason={r.tag} /> : '-'])}
+            empty="No low-rated orders on this day." />
+        </Period>
+        <Period label={wkLabel}>
+          <Fold label="Low-rated orders earlier this week" count={lowW.length}>
+            <Rows cols={['Store', 'Day', 'Time', 'Stars', 'What was in the order', 'Complaint tag if any']}
+              rows={lowW.map(r => [r.code, r.dlabel, r.time, r.rating, <Basket key="b" text={r.basket} />,
+                r.tag ? <Tag key="t" reason={r.tag} /> : '-'])} />
+          </Fold>
+          <p className="note">Only a small share of orders get rated, so treat each one as a specific customer, not a percentage.</p>
+        </Period>
+      </div>
+
+      <SecHead num="6">Where riders wait</SecHead>
+      <div className="dcard"><Period label={`Worst first, ${wkLabel.toLowerCase()}`}>
+        <Rows cols={['Store', `Wait on ${dshort}`, 'Wait, week', 'Orders kept 3+ min', 'Delivered', 'Share 3+ min']}
+          rows={A.wait_stores.map(w => [w.code,
+            (w.wait_day ?? 0) >= 2 ? <span key="a" className="flag">{n1(w.wait_day)}</span> : n1(w.wait_day),
+            (w.wait_wk ?? 0) >= 2 ? <span key="b" className="flag">{n1(w.wait_wk)}</span> : n1(w.wait_wk),
+            n0(w.waits3_wk), n0(w.delivered_wk),
+            (w.pct3 ?? 0) >= 15 ? <span key="c" className="flag">{w.pct3}%</span> : `${w.pct3}%`])} />
+        <p className="note">Goal is under 1.5 minutes average and under 3% of orders kept waiting. Rider wait is the
+          verified speed measure; Zomato&apos;s kitchen time is excluded because it only tracks how fast the tablet
+          button is pressed.</p>
+      </Period></div>
+
+      <SecHead num="7">&quot;Ready&quot; pressed before the food was ready</SecHead>
+      <div className="dcard">
+        <Period label="By store, worst first">
+          <Rows cols={['Store', `On ${dshort}`, 'This week', 'Delivered', 'Share of orders']}
+            rows={A.fr_stores.map(f => [f.code, n0(f.fr_day), n0(f.fr_wk), n0(f.delivered_wk),
+              (f.pct ?? 0) >= 5 ? <span key="p" className="flag">{f.pct}%</span> : `${f.pct}%`])}
+            empty="No false ready-presses this week." />
+        </Period>
+        <Period label="The worst 20 orders of the week">
+          <Fold label="Order by order" count={A.fr_orders.length}>
+            <Rows cols={['Store', 'Day', 'Time', 'Marked ready after', 'Rider then waited', 'What was in the order']}
+              rows={A.fr_orders.map(r => [r.code, r.dlabel, r.time, `${r.ready_secs} sec`,
+                `${r.waited_min} min`, <Basket key="b" text={r.basket} />])} />
+          </Fold>
+          <p className="note">These are orders marked ready within a minute of accepting where the rider then waited 3+ minutes.</p>
+        </Period>
+      </div>
+
+      <SecHead num="8">Money lost, by store</SecHead>
+      <div className="dcard"><Period label={wkLabel}>
+        <Rows cols={['Store', 'Turned-away orders', 'Rejections', 'Refunds', 'Complaints', 'Total lost']}
+          rows={A.money_stores.map(m => [m.code, inr(m.stockout_wk), n0(m.rej_wk), inr(m.refunds_wk),
+            n0(m.comp_wk), <b key="t">{inr(m.total_wk)}</b>])}
+          empty="Nothing lost to rejections or refunds this week." />
+        <p className="note">Every rupee ties to an order listed in sections 3 and 4. Nothing here is an estimate.</p>
+      </Period></div>
+
+      <SecHead num="9">Area versus area</SecHead>
       <div className="dcard"><AreasTables areas={areas} date={date} /></div>
 
       <div className="dfoot">
-        <p>Click a store for its full page: complaints with the exact orders, rejections with baskets and value,
-        and the false ready-presses one by one. Kitchen preparation time is excluded permanently
-        (verified: it measures tablet button-pressing, not kitchen work).</p>
+        <p>This page reads the live database and each morning&apos;s pull refreshes recent days, so late ratings and
+          complaints appear when you come back. Hover any shortened item list to read it in full.</p>
       </div>
       <DashScript />
     </main>

@@ -96,7 +96,7 @@ export function SecHead({ num, children }: { num: string; children: React.ReactN
 // (all stores) and the area page (their stores). Store names link to the
 // store page for the same date: every number is a door.
 import type { StoreStats } from '@/lib/daily';
-import { inr, n1 } from '@/lib/daily';
+import { inr, n1, n0 } from '@/lib/daily';
 
 function vsAvg(s: StoreStats): React.ReactNode {
   const o = s.day.orders, a = s.day.avgord;
@@ -210,15 +210,15 @@ export function AreasTables({ areas, date }:
 
 // A chart with real axes: day labels along the bottom (edge labels anchored so
 // nothing clips), value ticks with gridlines. Server-rendered, no client JS.
-export function Chart({ series, labels, title, unit = '', lo, hi, width = 430 }:
+export function Chart({ series, labels, title, unit = '', lo, hi, width = 430, height = 116, tips }:
   { series: (number | null)[]; labels: string[]; title: string; unit?: string;
-    lo?: number; hi?: number; width?: number }) {
+    lo?: number; hi?: number; width?: number; height?: number; tips?: string[] }) {
   const vals = series.filter((v): v is number => v !== null && v !== undefined);
   if (!vals.length) return <p className="note">No data for these days.</p>;
   let LO = lo ?? Math.min(...vals);
   let HI = hi ?? Math.max(...vals);
   if (HI === LO) HI = LO + 1;
-  const W = width, H = 116, L = 46, R = 26, T = 10, B = 24;
+  const W = width, H = height, L = 46, R = 26, T = 10, B = 24;
   const n = series.length;
   const x = (i: number) => L + (i * (W - L - R)) / Math.max(n - 1, 1);
   const y = (v: number) => T + ((HI - v) * (H - T - B)) / (HI - LO);
@@ -244,7 +244,7 @@ export function Chart({ series, labels, title, unit = '', lo, hi, width = 430 }:
           strokeLinejoin="round" strokeLinecap="round" />
         {series.map((v, i) => v === null ? null : (
           <circle key={i} cx={x(i)} cy={y(v)} r="3" fill="#DB5436" stroke="#fff" strokeWidth="1.5">
-            <title>{`${labels[i]}: ${v}${unit}`}</title>
+            <title>{`${(tips ?? labels)[i]}: ${v}${unit}`}</title>
           </circle>
         ))}
       </svg>
@@ -296,4 +296,71 @@ export function Tag({ reason }: { reason: string }) {
     : r.includes('missing') ? 'missing'
     : r.includes('wrong') ? 'wrong' : 'other';
   return <span className={`rchip r-${cls}`}>{reason}</span>;
+}
+
+// ---- area page components (approved design v2, 25 Aug 2026) ----
+
+// Long item baskets are what made tables three lines tall. Cap them and put
+// the full text on hover: the row stays one line and nothing is lost.
+export function Basket({ text, n = 52 }: { text?: string | null; n?: number }) {
+  const t = text ?? '-';
+  if (t.length <= n) return <>{t}</>;
+  return <span title={t}>{t.slice(0, n - 1)}&hellip;</span>;
+}
+
+// The compact store table: nine tight columns, worst-first, red only where a
+// number deserves a question. Store names open the store page.
+export function AreaStores({ stores, date }:
+  { stores: import('@/lib/daily').StoreStats[]; date: string }) {
+  const rows = [...stores].sort((a, b) => (a.dayRank ?? 99) - (b.dayRank ?? 99));
+  const mark = (v: React.ReactNode, bad: boolean) => bad ? <span className="flag">{v}</span> : v;
+  return (
+    <div className="scroll-x">
+      <table className="tight sortable">
+        <thead><tr>
+          <th>#</th><th>Store</th><th>Orders</th><th>vs avg</th><th>Online %</th>
+          <th>Rej</th><th>Comp</th><th>Rating</th><th>Wait</th>
+        </tr></thead>
+        <tbody>
+          {rows.map(s => {
+            const d = s.day;
+            const p = d.orders !== null && d.avgord ? Math.round(100 * (d.orders - d.avgord) / d.avgord) : null;
+            return (
+              <tr key={s.code}>
+                <td>{s.dayRank ?? '-'}</td>
+                <td className="name">
+                  <Link href={`/daily/store/${encodeURIComponent(s.code)}?date=${date}`}>{s.code}</Link>
+                </td>
+                <td>{n0(d.orders)}</td>
+                <td>{p === null ? '-' :
+                  <span className={p >= 10 ? 'goodv' : p <= -15 ? 'flag' : ''}>{p >= 0 ? '+' : ''}{p}%</span>}</td>
+                <td>{mark(d.online === null ? '-' : n1(d.online), (d.online ?? 100) < 99.9)}</td>
+                <td>{mark(n0(d.srej), (d.srej ?? 0) > 0)}</td>
+                <td>{mark(n0(d.comps), (d.comps ?? 0) >= 3)}</td>
+                <td>{d.rating ? n1(d.rating) : '-'}</td>
+                <td>{mark(d.wait === null ? '-' : n1(d.wait), (d.wait ?? 0) >= 2)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// One card per outlet that dipped below 100% online, with its own 7-day line.
+export function DipCard({ dip }: { dip: import('@/lib/daily').OnlineDip }) {
+  const labels = dip.series.map(p => p.d.slice(-2));
+  const tips = dip.series.map(p =>
+    new Date(p.d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }));
+  const lo = Math.min(90, ...dip.series.map(p => p.online)) - 1;
+  return (
+    <div className="minicard">
+      <div className="mtitle">{dip.code}</div>
+      <div className="mval">{n1(dip.online_day)}% <small>on the day</small></div>
+      <div className="mnote">{n0(dip.offmin_day)} min offline that day · {n0(dip.offmin_wk)} min across the week</div>
+      <Chart series={dip.series.map(p => p.online)} labels={labels} tips={tips}
+        title="Online % per day (day of month)" unit="%" lo={lo} hi={100} width={270} height={88} />
+    </div>
+  );
 }

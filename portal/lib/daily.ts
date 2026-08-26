@@ -169,3 +169,33 @@ export function shiftDate(iso: string, days: number): string {
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 }
+
+// ---- area page (migration 180): one call returns everything an AM needs,
+// every receipt naming its outlet. Shapes mirror dash_area_detail exactly.
+export interface AreaReceipt {
+  code: string; dlabel?: string; time?: string; basket?: string | null;
+  reason?: string | null; tag?: string | null; rating?: string | null;
+  value?: number | null; refund?: number | null; today?: boolean;
+  ready_secs?: number | null; waited_min?: number | null;
+}
+export interface OnlineDip {
+  code: string; online_day: number; offmin_day: number; offmin_wk: number;
+  series: { d: string; online: number }[];
+}
+export interface WaitStore {
+  code: string; wait_day: number | null; wait_wk: number | null;
+  waits3_wk: number; delivered_wk: number; pct3: number | null;
+}
+export interface FrStore { code: string; fr_day: number; fr_wk: number; delivered_wk: number; pct: number | null }
+export interface MoneyStore {
+  code: string; stockout_wk: number; refunds_wk: number; total_wk: number; rej_wk: number; comp_wk: number;
+}
+export interface AreaDetail {
+  am: string; date: string; week_start: string; stores: string[];
+  online_dips: OnlineDip[]; rejections: AreaReceipt[]; complaints: AreaReceipt[];
+  low_ratings: AreaReceipt[]; wait_stores: WaitStore[]; fr_stores: FrStore[];
+  fr_orders: AreaReceipt[]; money_stores: MoneyStore[];
+}
+export async function getAreaDetail(am: string, date: string): Promise<AreaDetail> {
+  return rpc<AreaDetail>('dash_area_detail', { p_am: am, p_date: date });
+}
