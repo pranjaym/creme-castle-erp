@@ -39,3 +39,6 @@ venv/
 **/.DS_Store
 *.tsbuildinfo
 dashboard/auto/f29_spine_reader.sql
+
+# Rendered pages from the daily mailer dry run (CC_MAILER_DRYRUN=1)
+kitchen/workers/daily-mailer/dryrun/
