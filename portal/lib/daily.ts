@@ -199,3 +199,41 @@ export interface AreaDetail {
 export async function getAreaDetail(am: string, date: string): Promise<AreaDetail> {
   return rpc<AreaDetail>('dash_area_detail', { p_am: am, p_date: date });
 }
+
+// ---- central page (migration 190): one call returns the whole network page.
+// Every receipt carries its outlet AND its area manager, because central acts
+// through the AM. Money and rejections here use the CORRECTED store-caused
+// reason list (F32); dash_all still carries the old one until migration 191
+// is applied, so the central page reads its money figures from HERE.
+export interface CentralReceipt extends AreaReceipt { am: string }
+export interface CentralDip extends OnlineDip { am: string }
+export interface TrendPoint {
+  d: string; orders: number | null; comps: number | null; cpct: number | null;
+  srej: number | null; online: number | null; rating: number | null; wait: number | null;
+  discount_pct: number | null; spend: number | null; roi: number | null;
+}
+export interface LeverStore {
+  code: string; am: string;
+  sub_day: number; disc_day: number; disc_pct_day: number | null;
+  sub_wk: number; disc_wk: number; disc_pct_wk: number | null;
+  net_wk: number; orders_wk: number; offer_pct_wk: number | null;
+  spend_day: number; spend_wk: number; adsales_wk: number; adorders_wk: number;
+  roi_wk: number | null; impr_wk: number; opens_wk: number;
+  open_pct_wk: number | null; conv_pct_wk: number | null;
+}
+export interface CentralDetail {
+  date: string; week_start: string; stores: string[]; ams: string[];
+  trend: TrendPoint[];
+  online_dips: CentralDip[];
+  rejections: CentralReceipt[];
+  complaints: CentralReceipt[]; complaints_total: number;
+  low_ratings: CentralReceipt[]; low_ratings_total: number;
+  wait_stores: (WaitStore & { am: string })[];
+  fr_stores: (FrStore & { am: string })[];
+  fr_orders: CentralReceipt[];
+  money_stores: (MoneyStore & { am: string })[];
+  lever_stores: LeverStore[];
+}
+export async function getCentralDetail(date: string): Promise<CentralDetail> {
+  return rpc<CentralDetail>('dash_central_detail', { p_date: date });
+}

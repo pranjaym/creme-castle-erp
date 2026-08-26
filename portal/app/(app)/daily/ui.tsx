@@ -349,18 +349,194 @@ export function AreaStores({ stores, date }:
 }
 
 // One card per outlet that dipped below 100% online, with its own 7-day line.
-export function DipCard({ dip }: { dip: import('@/lib/daily').OnlineDip }) {
+export function DipCard({ dip }: { dip: import('@/lib/daily').OnlineDip & { am?: string } }) {
   const labels = dip.series.map(p => p.d.slice(-2));
   const tips = dip.series.map(p =>
     new Date(p.d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }));
   const lo = Math.min(90, ...dip.series.map(p => p.online)) - 1;
   return (
     <div className="minicard">
-      <div className="mtitle">{dip.code}</div>
+      <div className="mtitle">{dip.code}{dip.am ? <small> &middot; {dip.am}</small> : null}</div>
       <div className="mval">{n1(dip.online_day)}% <small>on the day</small></div>
       <div className="mnote">{n0(dip.offmin_day)} min offline that day · {n0(dip.offmin_wk)} min across the week</div>
       <Chart series={dip.series.map(p => p.online)} labels={labels} tips={tips}
         title="Online % per day (day of month)" unit="%" lo={lo} hi={100} width={270} height={88} />
+    </div>
+  );
+}
+
+// ---- central page components (approved design v1, 26 Aug 2026) ----
+
+// The section lead: one sentence saying what the section is FOR, because a
+// network page has eleven of them and the reader needs a reason to stop.
+export function Lead({ children }: { children: React.ReactNode }) {
+  return <p className="lead">{children}</p>;
+}
+
+// A KPI tile that always carries a verdict and its goal (locked rule 5).
+export function VTile({ label, value, delta, ok, verdict }:
+  { label: string; value: React.ReactNode; delta: React.ReactNode; ok: boolean; verdict: string }) {
+  return (
+    <div className="dtile">
+      <div className="dlabel">{label}</div>
+      <div className="dvalue">{value}</div>
+      <div className="ddelta">{delta}</div>
+      <span className={ok ? 'chip okc' : 'chip watch'}>{ok ? '✓ ' : '▲ '}{verdict}</span>
+    </div>
+  );
+}
+
+// The compact all-stores table. Same shape as the area page's, with an AM
+// column, because at network level the next question after "which store" is
+// always "whose store". Money lost comes from the central function, not from
+// dash_all, so it uses the corrected rejection list.
+export function CentralStores({ stores, date, money, view }:
+  { stores: StoreStats[]; date: string; money: Map<string, number>; view: 'day' | 'wk' }) {
+  const mark = (v: React.ReactNode, bad: boolean) => bad ? <span className="flag">{v}</span> : v;
+  const link = (s: StoreStats) => (
+    <Link href={`/daily/store/${encodeURIComponent(s.code)}?date=${date}`}>{s.code}</Link>
+  );
+  if (view === 'day') {
+    const rows = [...stores].sort((a, b) => (a.dayRank ?? 99) - (b.dayRank ?? 99));
+    return (
+      <div className="scroll-x">
+        <table className="tight sortable">
+          <thead><tr>
+            <th>#</th><th>Store</th><th>AM</th><th>Orders</th><th>vs avg</th><th>Online %</th>
+            <th>Rej</th><th>Comp</th><th>Rating</th><th>Wait</th><th>False ready wk</th><th>Lost wk</th>
+          </tr></thead>
+          <tbody>
+            {rows.map(s => {
+              const d = s.day;
+              const p = d.orders !== null && d.avgord ? Math.round(100 * (d.orders - d.avgord) / d.avgord) : null;
+              return (
+                <tr key={s.code}>
+                  <td>{s.dayRank ?? '-'}</td>
+                  <td className="name">{link(s)}</td>
+                  <td>{s.am ?? ''}</td>
+                  <td>{n0(d.orders)}</td>
+                  <td>{p === null ? '-' :
+                    <span className={p >= 10 ? 'goodv' : p <= -15 ? 'flag' : ''}>{p >= 0 ? '+' : ''}{p}%</span>}</td>
+                  <td>{mark(d.online === null ? '-' : d.online.toFixed(2), (d.online ?? 100) < 99.9)}</td>
+                  <td>{mark(n0(d.srej), (d.srej ?? 0) > 0)}</td>
+                  <td>{mark(n0(d.comps), (d.comps ?? 0) >= 3)}</td>
+                  <td>{d.rating ? n1(d.rating) : '-'}</td>
+                  <td>{mark(d.wait === null ? '-' : n1(d.wait), (d.wait ?? 0) >= 2)}</td>
+                  <td>{mark(n0(s.wk.fr), (s.wk.fr ?? 0) >= 40)}</td>
+                  <td>{inr(money.get(s.code) ?? 0)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  const rows = [...stores].sort((a, b) => (a.wkRank ?? 99) - (b.wkRank ?? 99));
+  return (
+    <div className="scroll-x">
+      <table className="tight sortable">
+        <thead><tr>
+          <th>#</th><th>Store</th><th>AM</th><th>Orders</th><th>Per day</th><th>Online %</th>
+          <th>Rej</th><th>Comp</th><th>Comp %</th><th>Rating</th><th>Wait</th><th>False ready</th><th>Lost</th>
+        </tr></thead>
+        <tbody>
+          {rows.map(s => {
+            const w = s.wk;
+            const cp = w.orders ? (100 * (w.comps ?? 0)) / w.orders : null;
+            return (
+              <tr key={s.code}>
+                <td>{s.wkRank ?? '-'}</td>
+                <td className="name">{link(s)}</td>
+                <td>{s.am ?? ''}</td>
+                <td>{n0(w.orders)}</td>
+                <td>{w.orders ? n0(w.orders / 7) : '-'}</td>
+                <td>{mark(w.online === null ? '-' : w.online.toFixed(2), (w.online ?? 100) < 99.9)}</td>
+                <td>{mark(n0(w.srej), (w.srej ?? 0) > 0)}</td>
+                <td>{n0(w.comps)}</td>
+                <td>{cp === null ? '-' : cp.toFixed(2)}</td>
+                <td>{w.rating ? n1(w.rating) : '-'}</td>
+                <td>{mark(w.wait === null ? '-' : n1(w.wait), (w.wait ?? 0) >= 2)}</td>
+                <td>{mark(n0(w.fr), (w.fr ?? 0) >= 40)}</td>
+                <td>{inr(money.get(s.code) ?? 0)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Area versus area, as two labelled blocks rather than a hidden toggle.
+export interface CentralArea {
+  am: string; stores: number;
+  d_orders: number; d_comps: number; d_cpct: number | null; d_srej: number; d_off: number; d_rating: number | null;
+  w_orders: number; w_comps: number; w_cpct: number | null; w_srej: number; w_off: number;
+  w_fr: number; w_money: number; w_wait: number | null;
+}
+export function CentralAreas({ areas, date, view, netCpct }:
+  { areas: CentralArea[]; date: string; view: 'day' | 'wk'; netCpct: number | null }) {
+  const mark = (v: React.ReactNode, bad: boolean) => bad ? <span className="flag">{v}</span> : v;
+  const link = (a: CentralArea) => (
+    <Link href={`/daily/area/${encodeURIComponent(a.am)}?date=${date}`}>{a.am}</Link>
+  );
+  const rows = [...areas].sort((a, b) =>
+    ((view === 'day' ? a.d_cpct : a.w_cpct) ?? 99) - ((view === 'day' ? b.d_cpct : b.w_cpct) ?? 99));
+  return (
+    <div className="scroll-x">
+      <table className="tight sortable">
+        <thead><tr>
+          <th>#</th><th>Area manager</th><th>Stores</th><th>Orders</th>
+          {view === 'day' ? <th>Complaints</th> : null}
+          <th>Complaints %</th><th>Rejections</th><th>Offline</th>
+          {view === 'day' ? <th>Rating</th>
+            : <><th>Rider wait</th><th>False ready</th><th>Money lost</th></>}
+        </tr></thead>
+        <tbody>
+          {rows.map((a, i) => (
+            <tr key={a.am}>
+              <td>{i + 1}</td>
+              <td className="name">{link(a)}</td>
+              <td>{a.stores}</td>
+              <td>{n0(view === 'day' ? a.d_orders : a.w_orders)}</td>
+              {view === 'day' ? <td>{n0(a.d_comps)}</td> : null}
+              <td>{mark((view === 'day' ? a.d_cpct : a.w_cpct)?.toFixed(2) ?? '-',
+                ((view === 'day' ? a.d_cpct : a.w_cpct) ?? 0) > (netCpct ?? 0))}</td>
+              <td>{mark(n0(view === 'day' ? a.d_srej : a.w_srej), (view === 'day' ? a.d_srej : a.w_srej) > 0)}</td>
+              <td>{mark(`${n0(view === 'day' ? a.d_off : a.w_off)} min`, (view === 'day' ? a.d_off : a.w_off) > 0)}</td>
+              {view === 'day' ? <td>{a.d_rating ? n1(a.d_rating) : '-'}</td>
+                : <>
+                    <td>{mark(n1(a.w_wait), (a.w_wait ?? 0) >= 1.5)}</td>
+                    <td>{mark(n0(a.w_fr), a.w_fr > 0)}</td>
+                    <td>{inr(a.w_money)}</td>
+                  </>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// The funnel as three steps, not a KPI tile: it is a chain, and each link is
+// a different lever.
+export function Funnel({ impressions, opens, orders }:
+  { impressions: number | null; opens: number | null; orders: number | null }) {
+  const openPct = impressions ? (100 * (opens ?? 0)) / impressions : null;
+  const convPct = opens ? (100 * (orders ?? 0)) / opens : null;
+  return (
+    <div className="minigrid funnel3">
+      <div className="minicard"><div className="mtitle">Impressions</div>
+        <div className="mval">{n0(impressions)}</div>
+        <div className="mnote">the menu was shown this many times</div></div>
+      <div className="minicard"><div className="mtitle">Menu opens</div>
+        <div className="mval">{n0(opens)}</div>
+        <div className="mnote">{openPct === null ? '-' : openPct.toFixed(2)}% of impressions: the listing
+          itself is the first lever</div></div>
+      <div className="minicard"><div className="mtitle">Orders</div>
+        <div className="mval">{n0(orders)}</div>
+        <div className="mnote">{n1(convPct)}% of menu opens: price, offer and rating decide here</div></div>
     </div>
   );
 }
