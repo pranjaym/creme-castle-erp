@@ -190,7 +190,26 @@ export interface FrStore { code: string; fr_day: number; fr_wk: number; delivere
 export interface MoneyStore {
   code: string; stockout_wk: number; refunds_wk: number; total_wk: number; rej_wk: number; comp_wk: number;
 }
-export interface AreaDetail {
+
+// ---- the shut-shop tracker (migration 192, 26 Aug 2026) ----
+// Zomato only routes an order to a store whose listing it believes is OPEN, so
+// a rejection of "Restaurant is closed" or "Unavailable to accept the order"
+// means the listing was live while the shop could not serve. Different failure
+// from a stockout, different conversation, so it gets its own section on both
+// the central and the area page. Each order carries its store's online % for
+// that day as the proof the listing was up, and the hour, because the pattern
+// is in the clock.
+export interface ShutOrder {
+  code: string; am: string; dlabel: string; time: string; reason: string;
+  basket: string | null; value: number | null; today: boolean; hour: string;
+  online_day: number | null; offmin_day: number | null;
+}
+export interface ShutStore { code: string; am: string; orders: number; value: number; days: number }
+export interface ShutHour { hour: string; orders: number; value: number }
+export interface ShutBlock {
+  shut_orders: ShutOrder[]; shut_stores: ShutStore[]; shut_hours: ShutHour[];
+}
+export interface AreaDetail extends ShutBlock {
   am: string; date: string; week_start: string; stores: string[];
   online_dips: OnlineDip[]; rejections: AreaReceipt[]; complaints: AreaReceipt[];
   low_ratings: AreaReceipt[]; wait_stores: WaitStore[]; fr_stores: FrStore[];
@@ -221,7 +240,7 @@ export interface LeverStore {
   roi_wk: number | null; impr_wk: number; opens_wk: number;
   open_pct_wk: number | null; conv_pct_wk: number | null;
 }
-export interface CentralDetail {
+export interface CentralDetail extends ShutBlock {
   date: string; week_start: string; stores: string[]; ams: string[];
   trend: TrendPoint[];
   online_dips: CentralDip[];

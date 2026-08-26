@@ -4,7 +4,7 @@ import {
 } from '@/lib/daily';
 import {
   DashHead, DashScript, SecHead, Period, Fold, Rows, Tag, Basket, Chart, DipCard,
-  Lead, VTile, CentralStores, CentralAreas, Funnel, type CentralArea,
+  Lead, VTile, CentralStores, CentralAreas, Funnel, ShutShop, type CentralArea,
 } from '../ui';
 
 // The central page, approved design v1 (26 Aug 2026). It asks a third
@@ -109,12 +109,11 @@ export default async function CentralView({ date, latest }: { date: string; late
   const att: React.ReactNode[] = [];
   const dip = D.online_dips[0];
   if (dip) att.push(<li key="o"><b>{dip.code} ({dip.am}&apos;s area) lost {n0(dip.offmin_day)} minutes of
-    trading</b>: online {dip.online_day.toFixed(2)}% on {dshort}. Section 4 shows its week; this is the single
-    largest controllable loss on the page.</li>);
+    trading</b>: online {dip.online_day.toFixed(2)}% on {dshort}. Section 4 shows its week.</li>);
   const hot = stores.filter(s => (s.day.comps ?? 0) >= 3).sort((a, b) => (b.day.cpct ?? 0) - (a.day.cpct ?? 0))[0];
   if (hot) att.push(<li key="c"><b>{hot.code} ({hot.am}&apos;s area) is the day&apos;s complaint hotspot</b>:
     {' '}{n0(hot.day.comps)} complaints on {n0(hot.day.orders)} orders ({n1(hot.day.cpct)}%, against
-    {' '}{cpctDay?.toFixed(2)}% for the network). Section 6 lists every one of them.</li>);
+    {' '}{cpctDay?.toFixed(2)}% for the network). Section 7 lists every one of them.</li>);
   const byCpct = [...areas].sort((a, b) => (a.d_cpct ?? 99) - (b.d_cpct ?? 99));
   if (byCpct.length > 1) {
     const worst = byCpct[byCpct.length - 1], best = byCpct[0];
@@ -125,10 +124,18 @@ export default async function CentralView({ date, latest }: { date: string; late
   const fr = D.fr_stores[0];
   if (fr) att.push(<li key="f"><b>&quot;Ready&quot; is being pressed before the food exists</b>: {n0(frWk)} orders
     network-wide this week, worst is {fr.code} ({fr.am}&apos;s area) with {n0(fr.fr_wk)}, {n1(fr.pct)}% of
-    everything it delivered. Section 9 names them.</li>);
+    everything it delivered. Section 10 names them.</li>);
   const m = D.money_stores[0];
   if (m) att.push(<li key="m"><b>{inr(moneyWk)} of trade was lost to rejections and refunds this week</b>; the
-    largest single loser is {m.code} ({m.am}&apos;s area) at {inr(m.total_wk)}. Section 10 splits it per store.</li>);
+    largest single loser is {m.code} ({m.am}&apos;s area) at {inr(m.total_wk)}. Section 11 splits it per store.</li>);
+  if (D.shut_orders.length) {
+    const sv = D.shut_orders.reduce((t, r) => t + (r.value ?? 0), 0);
+    const w = D.shut_stores[0];
+    att.push(<li key="s"><b>{n0(D.shut_orders.length)} orders were turned away because the shop was shut</b>
+      {' '}({inr(sv)} this week), worst is {w.code} ({w.am}&apos;s area) on {w.days} separate
+      {w.days > 1 ? ' days' : ' day'}. Every one of those stores was showing as open on Zomato at the time.
+      Section 5 lists them by store and by hour.</li>);
+  }
   const best = stores.find(s => s.dayRank === 1);
   if (best) att.push(<li key="g"><b>Good news to pass on:</b> {best.code} ({best.am}&apos;s area) is the best-run
     store of the day: {n0(best.day.orders)} orders, {n0(best.day.comps)} complaints,
@@ -157,10 +164,10 @@ export default async function CentralView({ date, latest }: { date: string; late
           verdict={`${(segd?.net_sales ?? 0) >= (segw?.net_sales ?? 0) / 7 ? '+' : ''}${Math.round(100 * ((segd?.net_sales ?? 0) - (segw?.net_sales ?? 0) / 7) / (((segw?.net_sales ?? 0) / 7) || 1))}% on the week's daily average`} />
         <VTile label="Complaints (Zomato's count)"
           value={<>{n0(compsDay)} <small>({cpctDay?.toFixed(2) ?? '-'}%)</small></>}
-          delta={`${n0(compT.length)} order rows carry a complaint flag: section 6`}
+          delta={`${n0(compT.length)} order rows carry a complaint flag: section 7`}
           ok={(cpctDay ?? 0) <= (cpctWk ?? 0)} verdict={`against ${cpctWk?.toFixed(2) ?? '-'}% for the week`} />
         <VTile label="Store rejections (Zomato's count)" value={n0(srejDay)}
-          delta={`${n0(rejT.length)} order rows name a store reason: section 5`}
+          delta={`${n0(rejT.length)} order rows name a store reason: section 6`}
           ok={srejDay === 0} verdict={`${n0(srejWk)} in the week, goal is zero`} />
         <VTile label="Rider wait" value={`${n1(waitDay)} min`} delta={`${n1(waitWk)} min across the week`}
           ok={(waitDay ?? 9) < 1.5} verdict="goal is under 1.5 min" />
@@ -174,7 +181,7 @@ export default async function CentralView({ date, latest }: { date: string; late
           ok={frWk === 0} verdict="goal is zero, the button means food is out" />
       </div>
 
-      <div className="attention"><h2>What deserves central attention</h2><ol>{att.slice(0, 6)}</ol></div>
+      <div className="attention"><h2>What deserves central attention</h2><ol>{att.slice(0, 7)}</ol></div>
 
       <SecHead num="1">The network&apos;s own 7 days</SecHead>
       <Lead>Six lines, one idea each. This is the only place on the page where the network is a single number:
@@ -246,7 +253,13 @@ export default async function CentralView({ date, latest }: { date: string; late
         </p>
       </Period></div>
 
-      <SecHead num="5">Rejected orders</SecHead>
+      <SecHead num="5">Orders turned away because the shop was shut</SecHead>
+      <Lead>The one number on this page that should be zero. A store cannot be sent an order unless Zomato thinks
+        it is open, so each of these is a listing that was live while the shop could not serve. Section 4 is the
+        opposite case, the listing itself going down.</Lead>
+      <ShutShop block={D} dshort={dshort} wkLabel={wkLabel} showAm />
+
+      <SecHead num="6">Rejected orders</SecHead>
       <Lead>A rejection is a customer who wanted to buy and was told no. Each row is one of them.</Lead>
       <div className="dcard">
         <Period label={dshort}>
@@ -273,7 +286,7 @@ export default async function CentralView({ date, latest }: { date: string; late
         </Period>
       </div>
 
-      <SecHead num="6">Complaints</SecHead>
+      <SecHead num="7">Complaints</SecHead>
       <Lead>Two vocabularies exist and they are never mixed: the tags on the order rows drive the tables and the
         filters; Zomato&apos;s daily report is shown separately at the bottom as a read-only summary.</Lead>
       <div className="dcard">
@@ -332,7 +345,7 @@ export default async function CentralView({ date, latest }: { date: string; late
         </Period>
       </div>
 
-      <SecHead num="7">1, 2 and 3-star orders</SecHead>
+      <SecHead num="8">1, 2 and 3-star orders</SecHead>
       <Lead>A rating is the only place the customer speaks in their own time. These are the ones who were unhappy
         enough to say so.</Lead>
       <div className="dcard">
@@ -355,7 +368,7 @@ export default async function CentralView({ date, latest }: { date: string; late
         </Period>
       </div>
 
-      <SecHead num="8">Where riders wait</SecHead>
+      <SecHead num="9">Where riders wait</SecHead>
       <Lead>Every minute a rider stands in a store is a minute the order is late and the rider is not paid. This is
         the one speed number the data can prove.</Lead>
       <div className="dcard"><Period label={`Worst first, ${wkLabel.toLowerCase()}`}>
@@ -372,7 +385,7 @@ export default async function CentralView({ date, latest }: { date: string; late
           permanently because it only tracks how fast the tablet button is pressed.</p>
       </Period></div>
 
-      <SecHead num="9">&quot;Ready&quot; pressed before the food was ready</SecHead>
+      <SecHead num="10">&quot;Ready&quot; pressed before the food was ready</SecHead>
       <Lead>Pressing ready early makes the store&apos;s Zomato numbers look good and makes the rider wait. It is a
         habit, and habits are a central conversation, not a store one.</Lead>
       <div className="dcard">
@@ -396,7 +409,7 @@ export default async function CentralView({ date, latest }: { date: string; late
         </Period>
       </div>
 
-      <SecHead num="10">Money lost, by store</SecHead>
+      <SecHead num="11">Money lost, by store</SecHead>
       <Lead>The only place on the page where operational failure is priced.</Lead>
       <div className="dcard"><Period label={wkLabel}>
         <Rows cols={['Store', 'AM', 'Turned-away orders', 'Rejections', 'Refunds', 'Complaints', 'Total lost']}
@@ -404,11 +417,11 @@ export default async function CentralView({ date, latest }: { date: string; late
             n0(m2.comp_wk), <b key="t">{inr(m2.total_wk)}</b>])}
           empty="Nothing lost to rejections or refunds this week." />
         <p className="note">{inr(moneyWk)} across {D.money_stores.length} stores. Every rupee here ties to an order
-          listed in sections 5 and 6. Nothing on this line is an estimate, and offline minutes are NOT included:
+          listed in sections 6 and 7. Nothing on this line is an estimate, and offline minutes are NOT included:
           what a closed store would have sold cannot be measured, only guessed.</p>
       </Period></div>
 
-      <SecHead num="11">Central levers (never shown to a store or an area manager)</SecHead>
+      <SecHead num="12">Central levers (never shown to a store or an area manager)</SecHead>
       <Lead>Discounts, ads and the funnel. This is the block that separates the central page from the area page:
         these are the numbers only central can move, and each one lists the stores it came from.</Lead>
       <div className="dcard">

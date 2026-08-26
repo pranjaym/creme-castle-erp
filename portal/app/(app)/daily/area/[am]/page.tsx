@@ -6,7 +6,7 @@ import {
 } from '@/lib/daily';
 import {
   DashHead, DashScript, SecHead, Period, Fold, Rows, Tag, Basket,
-  AreaStores, DipCard, AreasTables,
+  AreaStores, DipCard, AreasTables, ShutShop, Lead,
 } from '../../ui';
 
 // The area manager page, approved design v2 (25 Aug 2026). It answers a
@@ -57,12 +57,19 @@ export default async function AreaDaily({ params, searchParams }:
   if (A.fr_stores.length) {
     const f = A.fr_stores[0];
     need.push(<li key="f"><b>{f.code} pressed &quot;ready&quot; early on {n0(f.fr_wk)} orders this week</b> ({f.pct}% of
-      its delivered orders). Section 7 lists the worst ones.</li>);
+      its delivered orders). Section 8 lists the worst ones.</li>);
   }
   if (A.money_stores.length) {
     const m = A.money_stores[0];
     need.push(<li key="m"><b>{m.code} lost {inr(m.total_wk)} this week</b> ({inr(m.stockout_wk)} turned-away orders
-      + {inr(m.refunds_wk)} refunds). Section 8 has the split per store.</li>);
+      + {inr(m.refunds_wk)} refunds). Section 9 has the split per store.</li>);
+  }
+  if (A.shut_orders.length) {
+    const w = A.shut_stores[0];
+    const sv = A.shut_orders.reduce((t, r) => t + (r.value ?? 0), 0);
+    need.push(<li key="s"><b>{w.code} turned away {n0(w.orders)} orders because the shop was shut</b>
+      {' '}on {w.days} separate {w.days > 1 ? 'days' : 'day'}, and it was showing as open on Zomato each time.
+      {' '}{inr(sv)} across your area this week. Section 3 gives the times of day.</li>);
   }
   const best = [...mine].sort((a, b) => (a.dayRank ?? 99) - (b.dayRank ?? 99))[0];
   if (best?.dayRank) need.push(<li key="g"><b>Good news to pass on:</b> {best.code} ranks {best.dayRank} of
@@ -88,7 +95,7 @@ export default async function AreaDaily({ params, searchParams }:
           <div className="ddelta">stockouts + refunds</div></div>
       </div>
 
-      <div className="attention"><h2>Where you are needed</h2><ol>{need.slice(0, 4)}</ol></div>
+      <div className="attention"><h2>Where you are needed</h2><ol>{need.slice(0, 5)}</ol></div>
 
       <SecHead num="1">Your stores on {dshort}</SecHead>
       <div className="dcard"><Period label={`Ranked worst-first for ${dshort}`}>
@@ -105,7 +112,13 @@ export default async function AreaDaily({ params, searchParams }:
         <p className="note">Zomato reports total minutes offline per day, never the clock times.</p>
       </Period></div>
 
-      <SecHead num="3">Rejected orders</SecHead>
+      <SecHead num="3">Orders turned away because the shop was shut</SecHead>
+      <Lead>The one number on this page that should be zero. Zomato does not send an order to a store it thinks
+        is closed, so each of these is a shop whose listing was live while it could not serve. Section 2 is the
+        opposite case, the listing itself going down.</Lead>
+      <ShutShop block={A} dshort={dshort} wkLabel={wkLabel} showAm={false} />
+
+      <SecHead num="4">Rejected orders</SecHead>
       <div className="dcard">
         <Period label={dshort}>
           <Rows cols={['Store', 'Time', 'Reason', 'What the customer had ordered', 'Value lost']}
@@ -123,7 +136,7 @@ export default async function AreaDaily({ params, searchParams }:
         </Period>
       </div>
 
-      <SecHead num="4">Complaints</SecHead>
+      <SecHead num="5">Complaints</SecHead>
       <div className="dcard">
         <Period label={dshort}>
           {compT.length <= 25
@@ -166,7 +179,7 @@ export default async function AreaDaily({ params, searchParams }:
         </Period>
       </div>
 
-      <SecHead num="5">1, 2 and 3-star orders</SecHead>
+      <SecHead num="6">1, 2 and 3-star orders</SecHead>
       <div className="dcard">
         <Period label={dshort}>
           <Rows cols={['Store', 'Time', 'Stars', 'What was in the order', 'Complaint tag if any']}
@@ -184,7 +197,7 @@ export default async function AreaDaily({ params, searchParams }:
         </Period>
       </div>
 
-      <SecHead num="6">Where riders wait</SecHead>
+      <SecHead num="7">Where riders wait</SecHead>
       <div className="dcard"><Period label={`Worst first, ${wkLabel.toLowerCase()}`}>
         <Rows cols={['Store', `Wait on ${dshort}`, 'Wait, week', 'Orders kept 3+ min', 'Delivered', 'Share 3+ min']}
           rows={A.wait_stores.map(w => [w.code,
@@ -197,7 +210,7 @@ export default async function AreaDaily({ params, searchParams }:
           button is pressed.</p>
       </Period></div>
 
-      <SecHead num="7">&quot;Ready&quot; pressed before the food was ready</SecHead>
+      <SecHead num="8">&quot;Ready&quot; pressed before the food was ready</SecHead>
       <div className="dcard">
         <Period label="By store, worst first">
           <Rows cols={['Store', `On ${dshort}`, 'This week', 'Delivered', 'Share of orders']}
@@ -215,7 +228,7 @@ export default async function AreaDaily({ params, searchParams }:
         </Period>
       </div>
 
-      <SecHead num="8">Money lost, by store</SecHead>
+      <SecHead num="9">Money lost, by store</SecHead>
       <div className="dcard"><Period label={wkLabel}>
         <Rows cols={['Store', 'Turned-away orders', 'Rejections', 'Refunds', 'Complaints', 'Total lost']}
           rows={A.money_stores.map(m => [m.code, inr(m.stockout_wk), n0(m.rej_wk), inr(m.refunds_wk),
@@ -224,7 +237,7 @@ export default async function AreaDaily({ params, searchParams }:
         <p className="note">Every rupee ties to an order listed in sections 3 and 4. Nothing here is an estimate.</p>
       </Period></div>
 
-      <SecHead num="9">Area versus area</SecHead>
+      <SecHead num="10">Area versus area</SecHead>
       <div className="dcard"><AreasTables areas={areas} date={date} /></div>
 
       <div className="dfoot">

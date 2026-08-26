@@ -540,3 +540,87 @@ export function Funnel({ impressions, opens, orders }:
     </div>
   );
 }
+
+// ---- the shut-shop tracker (26 Aug 2026), shared by the central and area
+// pages so the two can never drift apart. Pranjay's instruction: "the order
+// should not be rejected because the restaurant was closed", so this is the
+// one section on either page that is about a thing that should be zero.
+import type { ShutBlock } from '@/lib/daily';
+
+export function ShutShop({ block, dshort, wkLabel, showAm }:
+  { block: ShutBlock; dshort: string; wkLabel: string; showAm: boolean }) {
+  const { shut_orders: orders, shut_stores: stores, shut_hours: hours } = block;
+  const total = orders.reduce((t, r) => t + (r.value ?? 0), 0);
+  const today = orders.filter(r => r.today);
+  // The proof line: if the listing never went offline that day, the tablet was
+  // saying "open" while the shop could not serve.
+  const listedOpen = orders.filter(r => (r.online_day ?? 0) >= 99).length;
+  const peak = [...hours].sort((a, b) => b.orders - a.orders)[0];
+  const worst = stores[0];
+
+  if (!orders.length) {
+    return (
+      <div className="dcard"><Period label={wkLabel}>
+        <p className="note">No order was turned away for a shut shop in these 7 days. This is the section that
+          should stay empty.</p>
+      </Period></div>
+    );
+  }
+  const cols = showAm
+    ? ['Store', 'AM', 'Day', 'Time', 'Reason', 'What the customer wanted', 'Value', 'Store online, whole day']
+    : ['Store', 'Day', 'Time', 'Reason', 'What the customer wanted', 'Value', 'Store online, whole day'];
+  const row = (r: import('@/lib/daily').ShutOrder) => {
+    const online = r.online_day === null ? '-'
+      : r.online_day >= 99.9 ? <span className="flag">{r.online_day.toFixed(2)}%, never off</span>
+      : `${r.online_day.toFixed(2)}%, ${n0(r.offmin_day)} min off`;
+    const cells: React.ReactNode[] = [r.code];
+    if (showAm) cells.push(r.am);
+    cells.push(r.dlabel, r.time, <Tag key="t" reason={r.reason} />,
+      <Basket key="b" text={r.basket} />, inr(r.value), online);
+    return cells;
+  };
+
+  return (
+    <div className="dcard">
+      <Period label={`${wkLabel}, every one of them`}>
+        <p className="note" style={{ marginTop: 0 }}>
+          <b>{orders.length} orders, {inr(total)}</b>, {today.length} of them on {dshort}.
+          {' '}{listedOpen === orders.length
+            ? 'Every one came to a store that was listed open all day.'
+            : `${listedOpen} of the ${orders.length} came to a store that was listed open all day.`}
+          {peak ? ` The busiest hour for it is ${peak.hour}:00, with ${peak.orders} of them.` : ''}
+        </p>
+        <Rows cols={cols} rows={orders.map(row)} />
+        <p className="note">The last column is the store&apos;s online percentage for that whole day, from
+          Zomato&apos;s own report. It is here as proof: Zomato only sends an order to a store whose listing it
+          believes is open, so a store showing 100% online has been telling customers it is trading. The shop being
+          shut, or nobody being at the tablet, is the thing to ask about.</p>
+      </Period>
+
+      <Period label="Which outlets, worst first">
+        <Rows cols={showAm ? ['Store', 'AM', 'Orders turned away', 'Value', 'On how many days']
+          : ['Store', 'Orders turned away', 'Value', 'On how many days']}
+          rows={stores.map(s => {
+            const cells: React.ReactNode[] = [s.code];
+            if (showAm) cells.push(s.am);
+            cells.push(<span key="o" className="flag">{n0(s.orders)}</span>, inr(s.value),
+              s.days > 1 ? <span key="d" className="flag">{s.days} days</span> : `${s.days} day`);
+            return cells;
+          })} />
+        {worst && worst.days > 1 ? (
+          <p className="note"><b>{worst.code}</b> did it on {worst.days} separate days, which makes it a routine,
+            not an accident. Start there.</p>
+        ) : null}
+      </Period>
+
+      <Period label="At what time of day">
+        <Rows cols={['Hour', 'Orders turned away', 'Value']}
+          rows={hours.map(h => [`${h.hour}:00 to ${h.hour}:59`,
+            <span key="o" className={h.orders >= 3 ? 'flag' : undefined}>{n0(h.orders)}</span>, inr(h.value)])} />
+        <p className="note">The clock is usually the answer. Orders around opening time mean the listing goes live
+          before the shop does. Orders in the small hours mean the outlet is listed as trading overnight with
+          nobody at the tablet. Those are two different fixes.</p>
+      </Period>
+    </div>
+  );
+}
