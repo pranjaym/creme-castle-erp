@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "How Petpooja's menu categories roll up into the three groups Pranjay reads.",
+    "Kept as data, not code, because the menu changes and this is a commercial",
+    "judgement he may want to overrule. Every category present in the day's data",
+    "must appear in exactly one group; anything unlisted falls into 'Other' and is",
+    "named in the report so it can never be lost silently.",
+    "Rakhi Cakes sits under 'Rakhi collection', NOT under 'Cakes': the groups are",
+    "mutually exclusive so the four shares add to 100, and the occasion view is the",
+    "one asked for. The report states what Cakes would be if it were moved back."
+  ],
+  "groups": {
+    "Cakes": [
+      "Eggless Online Cakes",
+      "Signature Online Cakes",
+      "Online Eggless Classic Cake [1 KG]",
+      "Online Cheesecakes",
+      "Jar Cake",
+      "Bento Cakes",
+      "Sugarfree Cakes [Online]",
+      "Online Tea Cakes"
+    ],
+    "Desserts": [
+      "Instagram Trending Desserts",
+      "Signature Pastries",
+      "Classic Pastries",
+      "Cheesecake Jars",
+      "Cheesecake Slices",
+      "Tres Leches",
+      "Brownie",
+      "Gooey Cookies [Online]",
+      "Cookies & Crackers",
+      "Croissant",
+      "Chef's Table"
+    ],
+    "Rakhi collection": [
+      "Gift Hampers",
+      "Creme Castle x Fraganote",
+      "Rakhi Cakes",
+      "Rakhi"
+    ]
+  },
+  "overlap_note": {
+    "Rakhi Cakes": "counted in Rakhi collection; would add to Cakes if moved"
+  }
+}

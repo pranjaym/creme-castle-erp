@@ -5,3 +5,4 @@ latest.txt
 .last_success
 .run.lock/
 __pycache__/
+pulse_dashboard.html

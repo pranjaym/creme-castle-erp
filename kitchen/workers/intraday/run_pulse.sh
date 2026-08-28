@@ -94,6 +94,14 @@ if [ $rc -eq 0 ]; then
   # The report as a plain file, so the latest picture is one `cat` away and does not
   # need the database, a browser or a scrape to read.
   printf '%s\n' "$OUT" | sed -n '/CREME CASTLE, INTRADAY PULSE/,$p' >"$LATEST"
+  # The HTML dashboard, in the CC Spot Check's own format. Best effort and always
+  # AFTER the stamp: a rendering problem must never make a successful pull look
+  # like a failed one, and latest.txt already carries the same numbers.
+  if "$PYTHON" render_pulse.py >>"$LOG" 2>&1; then
+    log "dashboard rendered -> pulse_dashboard.html"
+  else
+    log "dashboard render failed (the pull itself was fine; read latest.txt)"
+  fi
   log "pulse ok."
 elif [ $rc -eq 75 ]; then
   log "pulse deferred on transport; the next slot heals it. Not alerting (F23)."
