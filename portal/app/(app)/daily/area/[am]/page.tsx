@@ -243,6 +243,7 @@ export default async function AreaDaily({ params, searchParams }:
       <div className="dfoot">
         <p>This page reads the live database and each morning&apos;s pull refreshes recent days, so late ratings and
           complaints appear when you come back. Hover any shortened item list to read it in full.</p>
+        <p>Item lists come from Zomato&apos;s item export, and fall back to the evening order feed when that export is missing, so a rejection or a complaint always names what the customer wanted.</p>
       </div>
       <DashScript />
     </main>

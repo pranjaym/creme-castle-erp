@@ -495,6 +495,7 @@ export default async function CentralView({ date, latest }: { date: string; late
           complaint counts on a day still move for several days after it. Online time and rejections do not move.
           Nothing on this page is an estimate and no number is produced by AI.</p>
         <p>Hover any shortened item list to read it in full. Store and area manager names open their own pages.</p>
+        <p>Item lists come from Zomato&apos;s item export, and fall back to the evening order feed when that export is missing, so a rejection or a complaint always names what the customer wanted.</p>
       </div>
       <DashScript />
     </main>

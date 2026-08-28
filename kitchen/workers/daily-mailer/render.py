@@ -522,5 +522,8 @@ def footer_html(extra=""):
             "feeds. Nothing here is an estimate and no number is produced by AI.</p>"
             "<p>Ratings and complaint counts on a day keep moving for several days after it; online time and "
             "rejections do not. Hover any shortened item list to read it in full.</p>"
+            "<p>Item lists come from Zomato&rsquo;s item export, and fall back to the evening order feed "
+            "when that export is missing, so a rejection or a complaint always names what the customer "
+            "wanted.</p>"
             f'<p>Live version, any date, at <a href="{PORTAL}/daily">{PORTAL}/daily</a> '
             "(use your portal login). This file is the same page.</p></footer>")
