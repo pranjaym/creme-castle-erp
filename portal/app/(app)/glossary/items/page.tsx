@@ -29,18 +29,19 @@ export default async function ItemGlossaryPage({ searchParams }:
   const db = spine();
   const [gapsRes, allRes] = await Promise.all([
     db.from('item_glossary_gaps').select('*')
-      .eq('item_source', 'petpooja').order('revenue', { ascending: false }).limit(200),
+      .eq('tracked', true).order('revenue', { ascending: false }).limit(200),
     db.from('item_glossary').select('*').order('item_name').limit(2000),
   ]);
   const gaps = gapsRes.data ?? [];
   const all = allRes.data ?? [];
 
-  // The OMS side is stated, never smuggled into the queue: it is a catalogue that has
-  // never been mapped, not a list of decisions waiting on a person.
-  const { data: omsRows } = await db.from('item_glossary_gaps')
-    .select('item_name, revenue').eq('item_source', 'oms');
-  const omsCount = omsRows?.length ?? 0;
-  const omsRevenue = (omsRows ?? []).reduce((s, r) => s + Number(r.revenue ?? 0), 0);
+  // Untracked sources (currently the D2C website) get their own screen. Pranjay does
+  // not analyse them, and 4,273 rows in this queue would bury the few dozen decisions
+  // that do need a person. Counted here only so the number is never hidden.
+  const { data: untrackedRows } = await db.from('item_glossary_gaps')
+    .select('item_name, revenue, source_label').eq('tracked', false);
+  const untrackedCount = untrackedRows?.length ?? 0;
+  const untrackedLabel = untrackedRows?.[0]?.source_label ?? 'D2C website';
 
   const categories = Array.from(new Set(all.map(r => r.category as string).filter(Boolean))).sort();
   const aliases = Array.from(new Set(all.map(r => r.alias as string).filter(Boolean))).sort();
@@ -119,12 +120,12 @@ export default async function ItemGlossaryPage({ searchParams }:
         </div>
       )}
 
-      {omsCount > 0 ? (
-        <p className="callout" style={{ marginTop: 18 }}>
-          <b>Separately: the D2C catalogue is not mapped at all.</b> {omsCount.toLocaleString('en-IN')}{' '}
-          item names from the website, worth Rs {rs(omsRevenue)} over 180 days, have no glossary
-          entry. That is deliberately not in the queue above: it is not a list of decisions for a
-          person, it is a catalogue that should be mapped from the OMS product list in one go.
+      {untrackedCount > 0 ? (
+        <p className="hint" style={{ marginTop: 14 }}>
+          {untrackedLabel} items are not tracked and are kept out of this queue.{' '}
+          <Link className="linkbtn" href="/glossary/items/d2c">
+            See them separately ({untrackedCount.toLocaleString('en-IN')})
+          </Link>
         </p>
       ) : null}
 

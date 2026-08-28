@@ -438,8 +438,8 @@ def outlet_watch():
     say = {"new": "NEW outlet name, tell me if this is a new store, a rename or a relocation",
            "quiet": "GONE QUIET, no orders lately. Closed, renamed, or a feed problem?",
            "unmapped": "NOT IN THE LOCATION MASTER, so its orders belong to no store",
-           "reopening": "shut, due back by {reopen}. Nothing to do unless that slips",
-           "overdue": "was due back by {reopen} and is STILL not trading"}
+           "reopening": "shut, restart expected around {reopen}. Nothing to do unless that slips",
+           "overdue": "was expected back around {reopen} and is more than two weeks late"}
     out = ["OUTLET WATCH (the spine's own check on outlet names):"]
     for status, name, first, last, n30, reopen in rows:
         msg = say.get(status, status).format(reopen=reopen)
