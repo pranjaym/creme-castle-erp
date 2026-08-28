@@ -7,6 +7,9 @@ import {
   Lead, VTile, CentralStores, CentralAreas, Funnel, ShutShop, type CentralArea,
 } from '../ui';
 
+// See the store page for why this note exists.
+const RECONCILE = '<b>Reading this next to Petpooja?</b> Three things differ by design, and none of them is an error. This page is <b>Zomato only</b>, so Petpooja will show roughly twice the orders once Swiggy and walk-in are included: compare against Petpooja&rsquo;s Zomato channel alone. Zomato files an order under the CALENDAR day it was placed while Petpooja files it under the trading night, so orders between midnight and 2am sit on different days in the two systems. And rank 1 means the best-RUN store of the day (fewest complaints, fewest rejections, fully online), never the busiest.';
+
 // The central page, approved design v1 (26 Aug 2026). It asks a third
 // question, not the store's "what happened here" and not the area's "which of
 // my stores needs me today", but "where do I put pressure across the network,
@@ -495,6 +498,7 @@ export default async function CentralView({ date, latest }: { date: string; late
           complaint counts on a day still move for several days after it. Online time and rejections do not move.
           Nothing on this page is an estimate and no number is produced by AI.</p>
         <p>Hover any shortened item list to read it in full. Store and area manager names open their own pages.</p>
+        <p dangerouslySetInnerHTML={{ __html: RECONCILE }} />
         <p>Item lists come from Zomato&apos;s item export, and fall back to the evening order feed when that export is missing, so a rejection or a complaint always names what the customer wanted.</p>
       </div>
       <DashScript />

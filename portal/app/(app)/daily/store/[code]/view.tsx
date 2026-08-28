@@ -8,6 +8,13 @@ import {
   Chart, Verdict, Period, Fold, Rows, Tag,
 } from '../../ui';
 
+// Why Petpooja will not agree with this page, in one place so the three pages
+// and the three mails can never drift apart. Written after area manager Ajay
+// Rana reported the dashboard as wrong on 27 Aug 2026: every one of his points
+// was either a real bug (the clock, now fixed) or one of these three, which are
+// definitions rather than errors and were simply never stated on the page.
+const RECONCILE = '<b>Reading this next to Petpooja?</b> Three things differ by design, and none of them is an error. This page is <b>Zomato only</b>, so Petpooja will show roughly twice the orders once Swiggy and walk-in are included: compare against Petpooja&rsquo;s Zomato channel alone. Zomato files an order under the CALENDAR day it was placed while Petpooja files it under the trading night, so orders between midnight and 2am sit on different days in the two systems. And rank 1 means the best-RUN store of the day (fewest complaints, fewest rejections, fully online), never the busiest.';
+
 // The store page, approved design v3 (25 Aug 2026). Rules, in order of the
 // arguments that produced them:
 //   1. No hidden day/week toggle: each section shows a labelled Yesterday block
@@ -71,7 +78,7 @@ export default async function StoreView({ code, date, latest }:
   return (
     <main className="dashroot">
       <DashHead title={`Store Daily: ${code}`}
-        subtitle={`${det.locality ?? ''}${det.city ? ', ' + det.city : ''} · Area manager: ${det.am ?? '-'}`}
+        subtitle={`${det.locality ?? ''}${det.city ? ', ' + det.city : ''} · Area manager: ${det.am ?? '-'} · Zomato orders only`}
         date={date} latest={latest} basePath={`/daily/store/${encodeURIComponent(code)}`} />
 
       <div className="dctx">
@@ -84,7 +91,7 @@ export default async function StoreView({ code, date, latest }:
           <div className="ddelta">{det.rated_day.length} orders rated</div></div>
         <div className="dtile"><div className="dlabel">Network rank</div>
           <div className="dvalue">{me.dayRank ?? '-'} <small>of {all.stores.length}</small></div>
-          <div className="ddelta">for this day</div></div>
+          <div className="ddelta">best-RUN store of the day, not the busiest</div></div>
       </div>
 
       <div className="attention"><h2>Things for today</h2><ol>{things.slice(0, 3)}</ol></div>
@@ -264,7 +271,9 @@ export default async function StoreView({ code, date, latest }:
             rows={det.rated_day.map(r => R(r, r.time, r.rating, r.basket ?? '-'))}
             empty="No orders rated yesterday." />
           <div className="tlabel" style={{ marginTop: 14 }}>
-            Network league for this day: top 5 plus this store (bold). Ranked by complaints + rejections + offline, lower is better.
+            Network league for this day: top 5 plus this store (bold). Ranked by complaints + rejections + offline,
+            lower is better. This is a cleanliness ranking, not a sales ranking: a small store with a spotless day
+            outranks a busy store with one complaint.
           </div>
           <Rows cols={['#', 'Store', 'AM', 'Orders', 'Complaints', 'Online %', 'Rating']}
             rows={leagueShown.map(s => [s.dayRank ?? '-',
@@ -297,6 +306,7 @@ export default async function StoreView({ code, date, latest }:
           recent days, so ratings and complaints that arrive late appear when you come back.</p>
         <p>Ads, discounts and customer types are managed centrally and are deliberately absent. Every number here is
           reproducible from the database.</p>
+        <p dangerouslySetInnerHTML={{ __html: RECONCILE }} />
         <p>Item lists come from Zomato&apos;s item export, and fall back to the evening order feed when that export is missing, so a rejection or a complaint always names what the customer wanted.</p>
       </div>
       <DashScript />

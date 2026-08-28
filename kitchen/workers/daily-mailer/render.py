@@ -489,9 +489,10 @@ def shut_shop(block, dshort, wk_label, show_am, date):
                      if worst and worst["days"] > 1 else ""))
     out += period("At what time of day",
                   rows(["Hour", "Orders turned away", "Value"], hbody)
-                  + note("The clock is usually the answer. Orders around opening time mean the listing goes live "
-                         "before the shop does. Orders in the small hours mean the outlet is listed as trading "
-                         "overnight with nobody at the tablet. Those are two different fixes."))
+                  + note("The clock is usually the answer, and the answer is mostly the closing hour: our stores "
+                         "shut at 2am and Zomato keeps routing orders up to and past it. That is a listing-hours "
+                         "question to take to Zomato, not store indiscipline. Orders inside trading hours are the "
+                         "ones to ask the store about."))
     return out
 
 
@@ -525,5 +526,12 @@ def footer_html(extra=""):
             "<p>Item lists come from Zomato&rsquo;s item export, and fall back to the evening order feed "
             "when that export is missing, so a rejection or a complaint always names what the customer "
             "wanted.</p>"
+            "<p><b>Reading this next to Petpooja?</b> Three things differ by design, and none of them is an "
+            "error. This page is <b>Zomato only</b>, so Petpooja will show roughly twice the orders once Swiggy "
+            "and walk-in are included: compare against Petpooja&rsquo;s Zomato channel alone. Zomato files an "
+            "order under the CALENDAR day it was placed while Petpooja files it under the trading night, so "
+            "orders between midnight and 2am sit on different days in the two systems. And rank 1 means the "
+            "best-RUN store of the day (fewest complaints, fewest rejections, fully online), never the "
+            "busiest.</p>"
             f'<p>Live version, any date, at <a href="{PORTAL}/daily">{PORTAL}/daily</a> '
             "(use your portal login). This file is the same page.</p></footer>")

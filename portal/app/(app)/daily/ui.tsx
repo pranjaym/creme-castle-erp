@@ -617,9 +617,9 @@ export function ShutShop({ block, dshort, wkLabel, showAm }:
         <Rows cols={['Hour', 'Orders turned away', 'Value']}
           rows={hours.map(h => [`${h.hour}:00 to ${h.hour}:59`,
             <span key="o" className={h.orders >= 3 ? 'flag' : undefined}>{n0(h.orders)}</span>, inr(h.value)])} />
-        <p className="note">The clock is usually the answer. Orders around opening time mean the listing goes live
-          before the shop does. Orders in the small hours mean the outlet is listed as trading overnight with
-          nobody at the tablet. Those are two different fixes.</p>
+        <p className="note">The clock is usually the answer, and the answer is mostly the closing hour: our stores
+          shut at 2am and Zomato keeps routing orders up to and past it. That is a listing-hours question to take
+          to Zomato, not store indiscipline. Orders inside trading hours are the ones to ask the store about.</p>
       </Period>
     </div>
   );

@@ -9,6 +9,10 @@ import {
   AreaStores, DipCard, AreasTables, ShutShop, Lead,
 } from '../../ui';
 
+// See the store page for why this note exists: three differences from Petpooja
+// that are definitions, not errors, and were never stated on the page.
+const RECONCILE = '<b>Reading this next to Petpooja?</b> Three things differ by design, and none of them is an error. This page is <b>Zomato only</b>, so Petpooja will show roughly twice the orders once Swiggy and walk-in are included: compare against Petpooja&rsquo;s Zomato channel alone. Zomato files an order under the CALENDAR day it was placed while Petpooja files it under the trading night, so orders between midnight and 2am sit on different days in the two systems. And rank 1 means the best-RUN store of the day (fewest complaints, fewest rejections, fully online), never the busiest.';
+
 // The area manager page, approved design v2 (25 Aug 2026). It answers a
 // different question from the store page: not "what happened here" but "which
 // of my stores needs me today, and what exactly do I say to that store". So
@@ -72,12 +76,13 @@ export default async function AreaDaily({ params, searchParams }:
       {' '}{inr(sv)} across your area this week. Section 3 gives the times of day.</li>);
   }
   const best = [...mine].sort((a, b) => (a.dayRank ?? 99) - (b.dayRank ?? 99))[0];
-  if (best?.dayRank) need.push(<li key="g"><b>Good news to pass on:</b> {best.code} ranks {best.dayRank} of
-    {' '}{all.stores.length} network-wide for this day.</li>);
+  if (best?.dayRank) need.push(<li key="g"><b>Good news to pass on:</b> {best.code} is the {best.dayRank}
+    {best.dayRank === 1 ? 'st' : best.dayRank === 2 ? 'nd' : best.dayRank === 3 ? 'rd' : 'th'} best-RUN store of
+    {' '}{all.stores.length} for this day (fewest complaints, rejections and offline minutes; not the busiest).</li>);
 
   return (
     <main className="dashroot">
-      <DashHead title={`${am}'s area`} subtitle={`${mine.length} stores`}
+      <DashHead title={`${am}'s area`} subtitle={`${mine.length} stores · Zomato orders only`}
         date={date} latest={latest} basePath={`/daily/area/${encodeURIComponent(am)}`} />
 
       <div className="dctx">
@@ -243,6 +248,7 @@ export default async function AreaDaily({ params, searchParams }:
       <div className="dfoot">
         <p>This page reads the live database and each morning&apos;s pull refreshes recent days, so late ratings and
           complaints appear when you come back. Hover any shortened item list to read it in full.</p>
+        <p dangerouslySetInnerHTML={{ __html: RECONCILE }} />
         <p>Item lists come from Zomato&apos;s item export, and fall back to the evening order feed when that export is missing, so a rejection or a complaint always names what the customer wanted.</p>
       </div>
       <DashScript />
