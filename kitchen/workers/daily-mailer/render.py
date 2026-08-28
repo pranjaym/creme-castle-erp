@@ -330,6 +330,18 @@ def rows(cols, body_rows, empty="Nothing to list.", table_id=None, sortable=Fals
     return "".join(out)
 
 
+def words(text, n=60):
+    """The customer's own words, where Zomato captured them. Truncated like a
+    basket so the row stays one line, with the whole review on hover. Zomato
+    leaves about seven complaints in ten with no reason tag, and this is the
+    only place the customer says why."""
+    if not text:
+        return '<span style="color:#7E6B6E">-</span>'
+    t = text if len(text) <= n else text[:n - 1] + "\u2026"
+    return (f'<span style="font-style:italic" title="{esc(text)}">'
+            f"&ldquo;{esc(t)}&rdquo;</span>")
+
+
 def tag(reason):
     """Complaint or rejection reason chip, coloured by family. The text comes
     from the ORDER row, never from Zomato's daily report: rule 7."""

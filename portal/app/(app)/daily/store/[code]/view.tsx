@@ -5,7 +5,7 @@ import {
 } from '@/lib/daily';
 import {
   DashHead, DashScript, SecHead, StoresTables, HBar,
-  Chart, Verdict, Period, Fold, Rows, Tag,
+  Chart, Verdict, Period, Fold, Rows, Tag, Words,
 } from '../../ui';
 
 // Why Petpooja will not agree with this page, in one place so the three pages
@@ -153,9 +153,9 @@ export default async function StoreView({ code, date, latest }:
               <div className="ddelta">Zomato counts only some as official complaints</div></div>
           </div>
           <div className="tlabel">Every order with an issue yesterday, with its tag</div>
-          <Rows cols={['Time', 'Tag on the order', 'What was in the order', 'Refunded']}
+          <Rows cols={['Time', 'Tag on the order', 'What was in the order', 'What the customer wrote', 'Refunded']}
             rows={det.complaints_day.map(r => R(r, r.time, <Tag reason={r.tag ?? ''} />, r.basket ?? '-',
-              r.refund ? inr(r.refund) : '-'))} empty="No issues reported yesterday." />
+              <Words text={r.review} />, r.refund ? inr(r.refund) : '-'))} empty="No issues reported yesterday." />
         </Period>
         <Period label={weekLabel}>
           <div className="krow">
@@ -183,12 +183,13 @@ export default async function StoreView({ code, date, latest }:
             <summary>Orders with issues earlier this week ({det.complaints_wk.length}) &rsaquo; tap to close</summary>
             <div className="scroll-x">
               <table id="comp-wk">
-                <thead><tr><th>Day</th><th>Time</th><th>Tag on the order</th><th>What was in the order</th><th>Refunded</th></tr></thead>
+                <thead><tr><th>Day</th><th>Time</th><th>Tag on the order</th><th>What was in the order</th><th>What the customer wrote</th><th>Refunded</th></tr></thead>
                 <tbody>
                   {det.complaints_wk.map((r, i) => (
                     <tr key={i} data-reason={r.tag ?? 'reason not tagged by Zomato'}>
                       <td>{r.dlabel}</td><td>{r.time}</td><td><Tag reason={r.tag ?? ''} /></td>
-                      <td>{r.basket ?? '-'}</td><td>{r.refund ? inr(r.refund) : '-'}</td>
+                      <td>{r.basket ?? '-'}</td><td><Words text={r.review} /></td>
+                      <td>{r.refund ? inr(r.refund) : '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -267,8 +268,8 @@ export default async function StoreView({ code, date, latest }:
           <div className="krow"><div className="kpi"><div className="dlabel">Food rating</div>
             <div className="dvalue">{day.rating ? n1(day.rating) : '-'} <small>/ 5</small></div>
             <div className="ddelta">{det.rated_day.length} orders rated; every rating is listed so none hides</div></div></div>
-          <Rows cols={['Time', 'Stars', 'What was in the order']}
-            rows={det.rated_day.map(r => R(r, r.time, r.rating, r.basket ?? '-'))}
+          <Rows cols={['Time', 'Stars', 'What was in the order', 'What the customer wrote']}
+            rows={det.rated_day.map(r => R(r, r.time, r.rating, r.basket ?? '-', <Words text={r.review} />))}
             empty="No orders rated yesterday." />
           <div className="tlabel" style={{ marginTop: 14 }}>
             Network league for this day: top 5 plus this store (bold). Ranked by complaints + rejections + offline,
@@ -284,9 +285,9 @@ export default async function StoreView({ code, date, latest }:
           <Chart series={det.trend.map(t => (t.rating && t.rating > 0 ? t.rating : null))} labels={tLabels}
             title="Average rating per day (few orders are rated, so this swings)" lo={1} hi={5} />
           <Fold label="Every 1 and 2-star order of the week" count={det.low_ratings_wk.length}>
-            <Rows cols={['Day', 'Time', 'Stars', 'What was in the order', 'Complaint tag if any']}
+            <Rows cols={['Day', 'Time', 'Stars', 'What was in the order', 'What the customer wrote', 'Complaint tag if any']}
               rows={det.low_ratings_wk.map(r => R(r, r.dlabel, r.time, r.rating, r.basket ?? '-',
-                r.tag ? <Tag reason={r.tag} /> : '-'))} />
+                <Words text={r.review} />, r.tag ? <Tag reason={r.tag} /> : '-'))} />
           </Fold>
         </Period>
       </div>

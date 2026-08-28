@@ -287,6 +287,14 @@ export function Rows({ cols, rows, empty }:
   );
 }
 
+// The customer's own words, where Zomato captured them. Truncated like a
+// basket so the row stays one line, with the whole review on hover.
+export function Words({ text }: { text?: string | null }) {
+  if (!text) return <span className="muted">-</span>;
+  const t = text.length <= 60 ? text : text.slice(0, 59) + '\u2026';
+  return <span className="words" title={text}>&ldquo;{t}&rdquo;</span>;
+}
+
 // Complaint reason tag, coloured by family. The tag text comes from the ORDER
 // row, never from Zomato's daily report (the two use different words).
 export function Tag({ reason }: { reason: string }) {

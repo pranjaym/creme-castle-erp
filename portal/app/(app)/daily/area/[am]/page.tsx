@@ -6,7 +6,7 @@ import {
 } from '@/lib/daily';
 import {
   DashHead, DashScript, SecHead, Period, Fold, Rows, Tag, Basket,
-  AreaStores, DipCard, AreasTables, ShutShop, Lead,
+  AreaStores, DipCard, AreasTables, ShutShop, Lead, Words,
 } from '../../ui';
 
 // See the store page for why this note exists: three differences from Petpooja
@@ -145,14 +145,16 @@ export default async function AreaDaily({ params, searchParams }:
       <div className="dcard">
         <Period label={dshort}>
           {compT.length <= 25
-            ? <Rows cols={['Store', 'Time', 'Tag on the order', 'What was in the order', 'Refunded']}
+            ? <Rows cols={['Store', 'Time', 'Tag on the order', 'What was in the order', 'What the customer wrote', 'Refunded']}
                 rows={compT.map(r => [r.code, r.time, <Tag key="t" reason={r.tag ?? ''} />,
-                  <Basket key="b" text={r.basket} />, r.refund ? inr(r.refund) : '-'])}
+                  <Basket key="b" text={r.basket} />, <Words key="w" text={r.review} />,
+                  r.refund ? inr(r.refund) : '-'])}
                 empty="No issues reported on this day." />
             : <Fold label={`Every order with an issue on ${dshort}`} count={compT.length} open>
-                <Rows cols={['Store', 'Time', 'Tag on the order', 'What was in the order', 'Refunded']}
+                <Rows cols={['Store', 'Time', 'Tag on the order', 'What was in the order', 'What the customer wrote', 'Refunded']}
                   rows={compT.map(r => [r.code, r.time, <Tag key="t" reason={r.tag ?? ''} />,
-                    <Basket key="b" text={r.basket} />, r.refund ? inr(r.refund) : '-'])} />
+                    <Basket key="b" text={r.basket} />, <Words key="w" text={r.review} />,
+                    r.refund ? inr(r.refund) : '-'])} />
               </Fold>}
         </Period>
         <Period label={wkLabel}>
@@ -166,13 +168,14 @@ export default async function AreaDaily({ params, searchParams }:
             <div className="scroll-x">
               <table id="area-cw" className="tight">
                 <thead><tr><th>Store</th><th>Day</th><th>Time</th><th>Tag on the order</th>
-                  <th>What was in the order</th><th>Refunded</th></tr></thead>
+                  <th>What was in the order</th><th>What the customer wrote</th><th>Refunded</th></tr></thead>
                 <tbody>
                   {compW.map((r, i) => (
                     <tr key={i} data-reason={r.tag ?? ''}>
                       <td className="name">{r.code}</td><td>{r.dlabel}</td><td>{r.time}</td>
                       <td><Tag reason={r.tag ?? ''} /></td>
                       <td><Basket text={r.basket} /></td>
+                      <td><Words text={r.review} /></td>
                       <td>{r.refund ? inr(r.refund) : '-'}</td>
                     </tr>
                   ))}
@@ -187,16 +190,16 @@ export default async function AreaDaily({ params, searchParams }:
       <SecHead num="6">1, 2 and 3-star orders</SecHead>
       <div className="dcard">
         <Period label={dshort}>
-          <Rows cols={['Store', 'Time', 'Stars', 'What was in the order', 'Complaint tag if any']}
+          <Rows cols={['Store', 'Time', 'Stars', 'What was in the order', 'What the customer wrote', 'Complaint tag if any']}
             rows={lowT.map(r => [r.code, r.time, r.rating, <Basket key="b" text={r.basket} />,
-              r.tag ? <Tag key="t" reason={r.tag} /> : '-'])}
+              <Words key="w" text={r.review} />, r.tag ? <Tag key="t" reason={r.tag} /> : '-'])}
             empty="No low-rated orders on this day." />
         </Period>
         <Period label={wkLabel}>
           <Fold label="Low-rated orders earlier this week" count={lowW.length}>
-            <Rows cols={['Store', 'Day', 'Time', 'Stars', 'What was in the order', 'Complaint tag if any']}
+            <Rows cols={['Store', 'Day', 'Time', 'Stars', 'What was in the order', 'What the customer wrote', 'Complaint tag if any']}
               rows={lowW.map(r => [r.code, r.dlabel, r.time, r.rating, <Basket key="b" text={r.basket} />,
-                r.tag ? <Tag key="t" reason={r.tag} /> : '-'])} />
+                <Words key="w" text={r.review} />, r.tag ? <Tag key="t" reason={r.tag} /> : '-'])} />
           </Fold>
           <p className="note">Only a small share of orders get rated, so treat each one as a specific customer, not a percentage.</p>
         </Period>

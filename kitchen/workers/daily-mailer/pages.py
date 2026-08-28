@@ -120,8 +120,10 @@ def store_page(s, det, reasons, all_stores, date):
                    R.kpi("Customers reporting an issue", str(len(comps_day)),
                          "Zomato counts only some as official complaints"))
             + R.tlabel("Every order with an issue yesterday, with its tag")
-            + R.rows(["Time", "Tag on the order", "What was in the order", "Refunded"],
+            + R.rows(["Time", "Tag on the order", "What was in the order", "What the customer wrote",
+                      "Refunded"],
                      [[R.esc(r.get("time") or ""), R.tag(r.get("tag")), R.basket(r.get("basket")),
+                       R.words(r.get("review")),
                        R.money(r["refund"]) if r.get("refund") else "-"] for r in comps_day],
                      "No issues reported yesterday."))
         + R.period(wk_label,
@@ -140,9 +142,11 @@ def store_page(s, det, reasons, all_stores, date):
                        "Click a tag to filter.")
             + f'<div class="rfilters">{chips}</div>'
             + R.fold("Orders with issues earlier this week", len(comps_wk),
-                     R.rows(["Day", "Time", "Tag on the order", "What was in the order", "Refunded"],
+                     R.rows(["Day", "Time", "Tag on the order", "What was in the order",
+                             "What the customer wrote", "Refunded"],
                             [[R.esc(r.get("dlabel") or ""), R.esc(r.get("time") or ""), R.tag(r.get("tag")),
-                              R.basket(r.get("basket")), R.money(r["refund"]) if r.get("refund") else "-"]
+                              R.basket(r.get("basket")), R.words(r.get("review")),
+                              R.money(r["refund"]) if r.get("refund") else "-"]
                              for r in comps_wk],
                             table_id="comp-wk",
                             row_attrs=[f' data-reason="{R.esc(r.get("tag") or "reason not tagged by Zomato")}"'
@@ -214,8 +218,9 @@ def store_page(s, det, reasons, all_stores, date):
         R.period(day_label,
             R.krow(R.kpi("Food rating", (R.n1(day["rating"]) if day.get("rating") else "-") + " <small>/ 5</small>",
                          f"{len(det.get('rated_day') or [])} orders rated; every rating is listed so none hides"))
-            + R.rows(["Time", "Stars", "What was in the order"],
-                     [[R.esc(r.get("time") or ""), R.esc(str(r.get("rating") or "-")), R.basket(r.get("basket"))]
+            + R.rows(["Time", "Stars", "What was in the order", "What the customer wrote"],
+                     [[R.esc(r.get("time") or ""), R.esc(str(r.get("rating") or "-")), R.basket(r.get("basket")),
+                       R.words(r.get("review"))]
                       for r in (det.get("rated_day") or [])], "No orders rated yesterday.")
             + R.tlabel("Network league for this day: top 5 plus this store (bold). Ranked by complaints + "
                        "rejections + offline, lower is better.")
@@ -229,10 +234,11 @@ def store_page(s, det, reasons, all_stores, date):
             R.chart([(t.get("rating") if (t.get("rating") or 0) > 0 else None) for t in trend], tlabels, tips=ttips,
                     title="Average rating per day (few orders are rated, so this swings)", lo=1, hi=5)
             + R.fold("Every 1 and 2-star order of the week", len(det.get("low_ratings_wk") or []),
-                     R.rows(["Day", "Time", "Stars", "What was in the order", "Complaint tag if any"],
+                     R.rows(["Day", "Time", "Stars", "What was in the order", "What the customer wrote",
+                             "Complaint tag if any"],
                             [[R.esc(r.get("dlabel") or ""), R.esc(r.get("time") or ""),
                               R.esc(str(r.get("rating") or "-")), R.basket(r.get("basket")),
-                              R.tag(r["tag"]) if r.get("tag") else "-"]
+                              R.words(r.get("review")), R.tag(r["tag"]) if r.get("tag") else "-"]
                              for r in (det.get("low_ratings_wk") or [])]))))
 
     meal = det.get("mealtime_wk") or {}
@@ -373,25 +379,29 @@ def area_page(am, mine, A, all_stores, areas, date):
     chips = "".join(f'<button class="rfilter" data-reason="{R.esc(t)}" data-target="area-cw" type="button">'
                     f"{R.esc(t)}: <b>{c}</b></button>" for t, c in sorted(tags.items(), key=lambda kv: -kv[1]))
     chips += '<button class="rfilter on" data-reason="" data-target="area-cw" type="button">Show all</button>'
-    comp_cols = ["Store", "Time", "Tag on the order", "What was in the order", "Refunded"]
+    comp_cols = ["Store", "Time", "Tag on the order", "What was in the order",
+                 "What the customer wrote", "Refunded"]
     body += R.sec("5", "Complaints",
         R.period(dshort,
             (R.rows(comp_cols,
                     [[R.store_link(r["code"], date), R.esc(r.get("time") or ""), R.tag(r.get("tag")),
-                      R.basket(r.get("basket")), R.money(r["refund"]) if r.get("refund") else "-"] for r in today],
+                      R.basket(r.get("basket")), R.words(r.get("review")),
+                      R.money(r["refund"]) if r.get("refund") else "-"] for r in today],
                     "No issues reported on this day.")
              if len(today) <= 25 else
              R.fold(f"Every order with an issue on {R.esc(dshort)}", len(today),
                     R.rows(comp_cols,
                            [[R.store_link(r["code"], date), R.esc(r.get("time") or ""), R.tag(r.get("tag")),
-                             R.basket(r.get("basket")), R.money(r["refund"]) if r.get("refund") else "-"]
+                             R.basket(r.get("basket")), R.words(r.get("review")),
+                             R.money(r["refund"]) if r.get("refund") else "-"]
                             for r in today]), open_=True)))
         + R.period(wk_label,
             f'<div class="rfilters">{chips}</div>'
             + R.fold("Complaints earlier this week (newest 60)", len(comp_w),
-                     R.rows(["Store", "Day", "Time", "Tag on the order", "What was in the order", "Refunded"],
+                     R.rows(["Store", "Day", "Time", "Tag on the order", "What was in the order",
+                             "What the customer wrote", "Refunded"],
                             [[R.store_link(r["code"], date), R.esc(r.get("dlabel") or ""), R.esc(r.get("time") or ""),
-                              R.tag(r.get("tag")), R.basket(r.get("basket")),
+                              R.tag(r.get("tag")), R.basket(r.get("basket")), R.words(r.get("review")),
                               R.money(r["refund"]) if r.get("refund") else "-"] for r in comp_w],
                             table_id="area-cw",
                             row_attrs=[f' data-reason="{R.esc(r.get("tag") or "")}"' for r in comp_w]))
@@ -400,16 +410,19 @@ def area_page(am, mine, A, all_stores, areas, date):
     # 6. low ratings
     body += R.sec("6", "1, 2 and 3-star orders",
         R.period(dshort,
-            R.rows(["Store", "Time", "Stars", "What was in the order", "Complaint tag if any"],
+            R.rows(["Store", "Time", "Stars", "What was in the order", "What the customer wrote",
+                    "Complaint tag if any"],
                    [[R.store_link(r["code"], date), R.esc(r.get("time") or ""), R.esc(str(r.get("rating") or "-")),
-                     R.basket(r.get("basket")), R.tag(r["tag"]) if r.get("tag") else "-"] for r in low_t],
+                     R.basket(r.get("basket")), R.words(r.get("review")),
+                     R.tag(r["tag"]) if r.get("tag") else "-"] for r in low_t],
                    "No low-rated orders on this day."))
         + R.period(wk_label,
             R.fold("Low-rated orders earlier this week", len(low_w),
-                   R.rows(["Store", "Day", "Time", "Stars", "What was in the order", "Complaint tag if any"],
+                   R.rows(["Store", "Day", "Time", "Stars", "What was in the order",
+                           "What the customer wrote", "Complaint tag if any"],
                           [[R.store_link(r["code"], date), R.esc(r.get("dlabel") or ""), R.esc(r.get("time") or ""),
                             R.esc(str(r.get("rating") or "-")), R.basket(r.get("basket")),
-                            R.tag(r["tag"]) if r.get("tag") else "-"] for r in low_w]))
+                            R.words(r.get("review")), R.tag(r["tag"]) if r.get("tag") else "-"] for r in low_w]))
             + R.note("Only a small share of orders get rated, so treat each one as a specific customer, not a "
                      "percentage.")))
 
@@ -780,17 +793,20 @@ def central_page(data, D, areas, date):
     body += R.sec("7", "Complaints",
         R.period(dshort,
             R.fold(f"Every order with an issue on {R.esc(dshort)}", len(comp_t),
-                   R.rows(["Store", "AM", "Time", "Tag on the order", "What was in the order", "Refunded"],
+                   R.rows(["Store", "AM", "Time", "Tag on the order", "What was in the order",
+                           "What the customer wrote", "Refunded"],
                           [[R.store_link(r["code"], date), R.esc(r["am"]), R.esc(r.get("time") or ""),
-                            R.tag(r.get("tag")), R.basket(r.get("basket")),
+                            R.tag(r.get("tag")), R.basket(r.get("basket")), R.words(r.get("review")),
                             R.money(r["refund"]) if r.get("refund") else "-"] for r in comp_t]),
                    open_=len(comp_t) <= 40))
         + R.period(wk_label,
             f'<div class="rfilters">{chips}</div>'
             + R.fold(f"Complaints earlier this week (newest {len(comp_w)} of {len(comp_w_all)})", len(comp_w),
-                     R.rows(["Store", "AM", "Day", "Time", "Tag on the order", "What was in the order", "Refunded"],
+                     R.rows(["Store", "AM", "Day", "Time", "Tag on the order", "What was in the order",
+                             "What the customer wrote", "Refunded"],
                             [[R.store_link(r["code"], date), R.esc(r["am"]), R.esc(r.get("dlabel") or ""),
                               R.esc(r.get("time") or ""), R.tag(r.get("tag")), R.basket(r.get("basket")),
+                              R.words(r.get("review")),
                               R.money(r["refund"]) if r.get("refund") else "-"] for r in comp_w],
                             table_id="cent-cw",
                             row_attrs=[f' data-reason="{R.esc(r.get("tag") or "")}"' for r in comp_w]))
@@ -812,17 +828,20 @@ def central_page(data, D, areas, date):
     body += R.sec("8", "1, 2 and 3-star orders",
         R.period(dshort,
             R.fold(f"Low-rated orders on {R.esc(dshort)}", len(low_t),
-                   R.rows(["Store", "AM", "Time", "Stars", "What was in the order", "Complaint tag if any"],
+                   R.rows(["Store", "AM", "Time", "Stars", "What was in the order",
+                           "What the customer wrote", "Complaint tag if any"],
                           [[R.store_link(r["code"], date), R.esc(r["am"]), R.esc(r.get("time") or ""),
                             R.esc(str(r.get("rating") or "-")), R.basket(r.get("basket")),
-                            R.tag(r["tag"]) if r.get("tag") else "-"] for r in low_t]),
+                            R.words(r.get("review")), R.tag(r["tag"]) if r.get("tag") else "-"] for r in low_t]),
                    open_=len(low_t) <= 40))
         + R.period(wk_label,
             R.fold(f"Low-rated orders earlier this week (newest {len(low_w)} of {len(low_w_all)})", len(low_w),
-                   R.rows(["Store", "AM", "Day", "Time", "Stars", "What was in the order", "Complaint tag if any"],
+                   R.rows(["Store", "AM", "Day", "Time", "Stars", "What was in the order",
+                           "What the customer wrote", "Complaint tag if any"],
                           [[R.store_link(r["code"], date), R.esc(r["am"]), R.esc(r.get("dlabel") or ""),
                             R.esc(r.get("time") or ""), R.esc(str(r.get("rating") or "-")),
-                            R.basket(r.get("basket")), R.tag(r["tag"]) if r.get("tag") else "-"] for r in low_w]))
+                            R.basket(r.get("basket")), R.words(r.get("review")),
+                            R.tag(r["tag"]) if r.get("tag") else "-"] for r in low_w]))
             + R.note(f"{R.n0(D.get('low_ratings_total'))} low-rated orders in the 7 days. Only a small share of "
                      "orders are rated at all, so treat each row as one specific customer, never as a percentage.")),
         lead="A rating is the only place the customer speaks in their own time. These are the ones who were unhappy "

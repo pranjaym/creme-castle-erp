@@ -548,3 +548,9 @@ section { margin-bottom: 16px; }
 .chartgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
 .minigrid.funnel3 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 .lead { font-size: 13px; color: var(--muted); margin: 0 0 6px; max-width: 820px; }
+
+/* The customer's own words on a complaint or a low rating (28 Aug 2026). Only
+   about one order in a hundred carries one, so it is styled to stand out when
+   it is there rather than to fill the column when it is not. */
+.words { font-style: italic; color: var(--ink); }
+.dashroot td .muted { color: var(--muted); }

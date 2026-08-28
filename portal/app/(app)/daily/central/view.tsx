@@ -4,7 +4,7 @@ import {
 } from '@/lib/daily';
 import {
   DashHead, DashScript, SecHead, Period, Fold, Rows, Tag, Basket, Chart, DipCard,
-  Lead, VTile, CentralStores, CentralAreas, Funnel, ShutShop, type CentralArea,
+  Lead, VTile, CentralStores, CentralAreas, Funnel, ShutShop, Words, type CentralArea,
 } from '../ui';
 
 // See the store page for why this note exists.
@@ -144,8 +144,10 @@ export default async function CentralView({ date, latest }: { date: string; late
     store of the day: {n0(best.day.orders)} orders, {n0(best.day.comps)} complaints,
     {' '}{best.day.online?.toFixed(2)}% online.</li>);
 
-  const compCols = ['Store', 'AM', 'Time', 'Tag on the order', 'What was in the order', 'Refunded'];
-  const compColsWk = ['Store', 'AM', 'Day', 'Time', 'Tag on the order', 'What was in the order', 'Refunded'];
+  const compCols = ['Store', 'AM', 'Time', 'Tag on the order', 'What was in the order',
+    'What the customer wrote', 'Refunded'];
+  const compColsWk = ['Store', 'AM', 'Day', 'Time', 'Tag on the order', 'What was in the order',
+    'What the customer wrote', 'Refunded'];
 
   return (
     <main className="dashroot central">
@@ -297,7 +299,8 @@ export default async function CentralView({ date, latest }: { date: string; late
           <Fold label={`Every order with an issue on ${dshort}`} count={compT.length} open={compT.length <= 40}>
             <Rows cols={compCols}
               rows={compT.map(r => [r.code, r.am, r.time, <Tag key="t" reason={r.tag ?? ''} />,
-                <Basket key="b" text={r.basket} />, r.refund ? inr(r.refund) : '-'])} />
+                <Basket key="b" text={r.basket} />, <Words key="w" text={r.review} />,
+                r.refund ? inr(r.refund) : '-'])} />
           </Fold>
         </Period>
         <Period label={wkLabel}>
@@ -317,6 +320,7 @@ export default async function CentralView({ date, latest }: { date: string; late
                       <td className="name">{r.code}</td><td>{r.am}</td><td>{r.dlabel}</td><td>{r.time}</td>
                       <td><Tag reason={r.tag ?? ''} /></td>
                       <td><Basket text={r.basket} /></td>
+                      <td><Words text={r.review} /></td>
                       <td>{r.refund ? inr(r.refund) : '-'}</td>
                     </tr>
                   ))}
@@ -354,16 +358,18 @@ export default async function CentralView({ date, latest }: { date: string; late
       <div className="dcard">
         <Period label={dshort}>
           <Fold label={`Low-rated orders on ${dshort}`} count={lowT.length} open={lowT.length <= 40}>
-            <Rows cols={['Store', 'AM', 'Time', 'Stars', 'What was in the order', 'Complaint tag if any']}
+            <Rows cols={['Store', 'AM', 'Time', 'Stars', 'What was in the order', 'What the customer wrote',
+              'Complaint tag if any']}
               rows={lowT.map(r => [r.code, r.am, r.time, r.rating, <Basket key="b" text={r.basket} />,
-                r.tag ? <Tag key="t" reason={r.tag} /> : '-'])} />
+                <Words key="w" text={r.review} />, r.tag ? <Tag key="t" reason={r.tag} /> : '-'])} />
           </Fold>
         </Period>
         <Period label={wkLabel}>
           <Fold label={`Low-rated orders earlier this week (newest ${lowW.length} of ${lowWAll})`} count={lowW.length}>
-            <Rows cols={['Store', 'AM', 'Day', 'Time', 'Stars', 'What was in the order', 'Complaint tag if any']}
+            <Rows cols={['Store', 'AM', 'Day', 'Time', 'Stars', 'What was in the order',
+              'What the customer wrote', 'Complaint tag if any']}
               rows={lowW.map(r => [r.code, r.am, r.dlabel, r.time, r.rating, <Basket key="b" text={r.basket} />,
-                r.tag ? <Tag key="t" reason={r.tag} /> : '-'])} />
+                <Words key="w" text={r.review} />, r.tag ? <Tag key="t" reason={r.tag} /> : '-'])} />
           </Fold>
           <p className="note">{n0(D.low_ratings_total)} low-rated orders in the 7 days. Only a small share of orders
             are rated at all, so treat each row as one specific customer, never as a percentage. Ratings for the

@@ -39,6 +39,9 @@ export interface DashAll {
 }
 export interface Receipt {
   d?: string; dlabel?: string; time?: string; basket?: string | null;
+  // What the customer actually wrote. Zomato leaves about seven complaints in
+  // ten with no reason tag at all, and this is the only place they say why.
+  review?: string | null;
   tag?: string | null; reason?: string | null; refund?: number | null;
   value?: number | null; rating?: string | null;
   ready_secs?: number | null; waited_min?: number | null;
@@ -174,6 +177,7 @@ export function shiftDate(iso: string, days: number): string {
 // every receipt naming its outlet. Shapes mirror dash_area_detail exactly.
 export interface AreaReceipt {
   code: string; dlabel?: string; time?: string; basket?: string | null;
+  review?: string | null;
   reason?: string | null; tag?: string | null; rating?: string | null;
   value?: number | null; refund?: number | null; today?: boolean;
   ready_secs?: number | null; waited_min?: number | null;
