@@ -64,9 +64,16 @@ def is_transport(err):
             or any(w in low for w in TRANSPORT_WORDS))
 
 
-# The business day starts at 04:00 IST. A 01:30 order belongs to the day before, and
-# every comparison in this file is cut on the same rule so both sides match.
-DAY_START_HOUR = 4
+# The business day starts at 07:00 IST, matching cc_spotcheck, so this report and the
+# CC Spot Check cannot disagree. The spine's own rule is 04:00; the two are identical
+# in practice because 04:00 to 06:59 is empty on every day checked (18 to 27 Aug 2026
+# and Raksha Bandhan 2025 all take their first order at 07:00 to the second).
+#
+# SALES MEANS NET SALES, everywhere in this file:
+#     Net Sales = My amount + Container Charge - (Outlet Disc + Agg Disc)
+# NOT the order `total`, which is what the customer paid and runs about 7% higher.
+# Both numbers are defensible; having two of them is not.
+DAY_START_HOUR = 7
 
 
 def load_env():
@@ -315,9 +322,9 @@ def totals_today(conn, business_date, start, end):
     with conn.cursor() as cur:
         cur.execute("""
             select count(*) filter (where status <> 'Cancelled'),
-                   coalesce(sum(order_value) filter (where status <> 'Cancelled'), 0),
+                   coalesce(sum(net_sales) filter (where status <> 'Cancelled'), 0),
                    count(*) filter (where status = 'Cancelled'),
-                   coalesce(sum(order_value) filter (where status = 'Cancelled'), 0)
+                   coalesce(sum(net_sales) filter (where status = 'Cancelled'), 0)
             from intraday.v_orders_now
             where business_date = %s and placed_at >= %s and placed_at <= %s
         """, (business_date, start, end))
@@ -332,11 +339,11 @@ def totals_baseline(conn, days, elapsed):
         cur.execute("""
             select business_date,
                    count(*) filter (where status <> 'Cancelled'),
-                   coalesce(sum(intraday.money(total)) filter (where status <> 'Cancelled'), 0)
-            from landing.petpooja_online_orders
-            where voided_at is null and business_date = any(%s)
-              and intraday.ts(order_date) >= business_date + interval '4 hours'
-              and intraday.ts(order_date) <  business_date + interval '4 hours' + %s
+                   coalesce(sum(net_sales) filter (where status <> 'Cancelled'), 0)
+            from intraday.v_settled_orders
+            where business_date = any(%s)
+              and placed_at >= business_date + interval '7 hours'
+              and placed_at <  business_date + interval '7 hours' + %s
             group by 1 order by 1
         """, (days, elapsed))
         return cur.fetchall()
@@ -379,7 +386,7 @@ def split(conn, business_date, start, end, column, limit=None):
         cur.execute(f"""
             select coalesce(nullif({column}, ''), '(blank)'),
                    count(*) filter (where status <> 'Cancelled'),
-                   coalesce(sum(order_value) filter (where status <> 'Cancelled'), 0),
+                   coalesce(sum(net_sales) filter (where status <> 'Cancelled'), 0),
                    count(*) filter (where status = 'Cancelled')
             from intraday.v_orders_now
             where business_date = %s and placed_at >= %s and placed_at <= %s
@@ -456,7 +463,7 @@ def report(conn, business_date, occasion, now=None, festival_anchor=None):
     b_sales = sum(float(r[2]) for r in base) / len(base) if base else None
     last = base[-1] if base else None
 
-    out += ["", f"TODAY SO FAR   ({start.strftime('%H:%M')} to {end.strftime('%H:%M')})", rule("-")]
+    out += ["", f"TODAY SO FAR   ({start.strftime('%H:%M')} to {end.strftime('%H:%M')}), NET SALES basis", rule("-")]
     out.append(f"  {'Orders':<14}{orders:>12}"
                + (f"   normal {weekday} {b_orders:>8.0f}   {pct(orders, b_orders)}" if b_orders else ""))
     out.append(f"  {'Sales':<14}{'Rs ' + rupees(sales):>12}"
@@ -502,6 +509,20 @@ def report(conn, business_date, occasion, now=None, festival_anchor=None):
     if festival_anchor:
         anchors.append((f"last year's festival ({festival_anchor:%d %b %Y})",
                         [festival_anchor]))
+
+    # WHICH anchor to believe is answerable, not a matter of taste. Today's completed
+    # hours have a shape; so does each reference day. The one today's morning matches
+    # is the one whose remaining-day curve is likely to apply. Only completed hours
+    # count: the hour in progress is part filled and would distort the comparison.
+    last_full = end.hour
+    today_shape = hour_shape(conn, [business_date], DAY_START_HOUR, last_full, True)
+    closest, best = None, None
+    for label, ref in anchors:
+        d = shape_distance(today_shape, hour_shape(conn, ref, DAY_START_HOUR,
+                                                   last_full, False))
+        if d is not None and (best is None or d < best):
+            closest, best = label, d
+
     lines = []
     for label, ref in anchors:
         a = shape_anchor(conn, ref, elapsed)
@@ -517,8 +538,17 @@ def report(conn, business_date, occasion, now=None, festival_anchor=None):
                        f"and finished at Rs {rupees(whole)})")
         lo, hi = min(l[3] for l in lines), max(l[3] for l in lines)
         if hi > lo * 1.15:
-            out.append(f"  So: somewhere between Rs {rupees(lo)} and Rs {rupees(hi)}. "
-                       f"The spread is the point.")
+            out.append(f"  So: somewhere between Rs {rupees(lo)} and Rs {rupees(hi)}.")
+        if closest and len(lines) > 1:
+            pick = [l for l in lines if l[0] == closest]
+            out.append("")
+            out.append(f"  SHAPE TEST on the completed hours {DAY_START_HOUR:02d}:00 to "
+                       f"{last_full:02d}:00: today is behaving MOST like")
+            out.append(f"  {closest} (shape distance {best:.0f} points, "
+                       f"lower is closer).")
+            if pick:
+                out.append(f"  So the working number is its projection, "
+                           f"Rs {rupees(pick[0][3])}, not the middle of the range.")
         out.append("  A festival front loads: gifting is bought in the morning, dinner is not.")
         out.append("  Every figure ABOVE this block is measured. Only this block is estimated.")
 
@@ -569,6 +599,35 @@ def report(conn, business_date, occasion, now=None, festival_anchor=None):
     return "\n".join(out)
 
 
+def hour_shape(conn, days, start_h, end_h, live):
+    """The within-morning distribution: what share of the window's sales fell in each
+    clock hour. Size is divided out, so this compares SHAPE only, which is the thing
+    that decides which projection to believe."""
+    view = "intraday.v_orders_now" if live else "intraday.v_settled_orders"
+    with conn.cursor() as cur:
+        cur.execute(f"""
+            select extract(hour from placed_at)::int, coalesce(sum(net_sales), 0)
+            from {view}
+            where business_date = any(%s) and status <> 'Cancelled'
+              and extract(hour from placed_at) >= %s
+              and extract(hour from placed_at) < %s
+            group by 1
+        """, (days, start_h, end_h))
+        d = {r[0]: float(r[1]) for r in cur.fetchall()}
+    tot = sum(d.values())
+    if tot <= 0:
+        return None
+    return {h: d.get(h, 0) / tot * 100 for h in range(start_h, end_h)}
+
+
+def shape_distance(a, b):
+    """Total absolute difference between two shapes, in percentage points. Small
+    means today is behaving like that reference day."""
+    if not a or not b:
+        return None
+    return sum(abs(a[h] - b.get(h, 0)) for h in a)
+
+
 def shape_anchor(conn, days, elapsed):
     """How much of a finished day was already done at this same point in it.
 
@@ -586,14 +645,14 @@ def shape_anchor(conn, days, elapsed):
         return None
     with conn.cursor() as cur:
         cur.execute("""
-            select coalesce(sum(intraday.money(total)) filter (
+            select coalesce(sum(net_sales) filter (
                      where status <> 'Cancelled'
-                       and intraday.ts(order_date) >= business_date + interval '4 hours'
-                       and intraday.ts(order_date) <  business_date + interval '4 hours' + %s), 0),
-                   coalesce(sum(intraday.money(total)) filter (where status <> 'Cancelled'), 0),
+                       and placed_at >= business_date + interval '7 hours'
+                       and placed_at <  business_date + interval '7 hours' + %s), 0),
+                   coalesce(sum(net_sales) filter (where status <> 'Cancelled'), 0),
                    count(distinct business_date)
-            from landing.petpooja_online_orders
-            where voided_at is null and business_date = any(%s)
+            from intraday.v_settled_orders
+            where business_date = any(%s)
         """, (elapsed, days))
         so_far, whole, n = cur.fetchone()
     if not whole or not n:
