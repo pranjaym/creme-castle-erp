@@ -42,6 +42,16 @@ class FakeSMTP:
 LEAKS = [">None<", "None%", "&#8377;None", "None min", "None sec", "None of",
          "nan", "undefined", "&amp;middot;", "&amp;rsquo;", "&amp;#8377;"]
 
+# The cell right after a reason chip is the order's item basket on every
+# receipt table, so this counts how many of those say something.
+BASKET = re.compile(r"<td>(?:<span[^>]*rchip[^>]*>[^<]*</span>)</td><td>(.*?)</td>")
+
+
+def basket_counts(body):
+    vals = [m.group(1).strip() for m in BASKET.finditer(body)]
+    empty = len([v for v in vals if v in ("-", "")])
+    return len(vals) - empty, empty
+
 
 def main():
     M.smtp_connect = lambda host, port: FakeSMTP()
@@ -75,6 +85,15 @@ def main():
                     problems.append(f"{m['Subject']}: {part.get_filename()} contains {leak!r}")
             if body.count("<table") != body.count("</table>"):
                 problems.append(f"{m['Subject']}: {part.get_filename()} has unbalanced tables")
+            # A receipt whose item list is a dash is a broken row, not missing
+            # data: "items out of stock" with no item tells a store nothing.
+            # This went unnoticed for three days in Aug 2026 because a dash is
+            # valid HTML and nothing looked for it (F31, fixed by migration
+            # 193's fallback to the evening feed).
+            filled, empty = basket_counts(body)
+            if filled + empty >= 5 and empty > 0.25 * (filled + empty):
+                problems.append(f"{m['Subject']}: {part.get_filename()} has {empty} of "
+                                f"{filled + empty} item baskets empty; is the item feed broken?")
 
     print(f"assembled {len(sent)} mails, {atts} attachments "
           f"({n_store} store, {n_area} area, {n_net} network, {n_all} all-stores). Nothing was sent.")
