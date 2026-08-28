@@ -17,8 +17,9 @@ What it does, in order (per Pranjay, 23 Jul 2026):
      2026 so the dashboard, the spine and the ERP portal share one definition. It
      is a no-op on the numbers: across 1 Apr to 27 Jul the 03:00 to 07:00 window
      holds 1 order out of 333,905 and 0 item lines, because the outlets are shut.)
-  4. Report any item_name missing from the glossary so a human can add the mapping
-     before the dashboard is built (never guess an alias).
+  4. Report any item_name missing from the glossary, AND any restaurant_name missing
+     from the outlet glossaries, so a human can add the mapping before the dashboard is
+     built (never guess an alias, never guess a city).
 
 Glossaries live as editable CSVs in ./glossary and are extended when a new item is
 mapped, so the mapping is a growing, owned asset.
@@ -77,8 +78,9 @@ def _to_ts(x):
 
 def enrich(raw_df, glossary=None):
     """raw_df: an order_summary_item DataFrame (raw Petpooja columns). Returns
-    (enriched_df, unmapped_items) where unmapped_items is the sorted list of item
-    names with no glossary alias (the caller should ask a human, then add them)."""
+    (enriched_df, unmapped_items, unmapped_outlets): the sorted lists of item names with
+    no glossary alias and of outlet names with no city mapping. The caller should ask a
+    human and add them; never guess either one."""
     g = glossary or load_glossary()
     df = raw_df.copy()
 
@@ -105,10 +107,15 @@ def enrich(raw_df, glossary=None):
     df["Location Code"] = out_key.map(g["out_loc"])
 
     unmapped = sorted(set(key[df["Alias Name"].isna()]))
+    # Outlets, which this step never reported until 28 Aug 2026 (F39). A store missing
+    # from the outlet glossaries gets no City, no Store Type and no Location Code, so it
+    # silently drops out of every city and store-type view. CC-DL-South Campus and
+    # CC-PB-Ludhiana sat like that for 40 and 17 days with nothing ever saying so.
+    unmapped_outlets = sorted(set(out_key[df["City"].isna()]))
     df = df.drop(columns=["_ts"])
     if dropped:
         print(f"  enrich: skipped {dropped} rows with an unparseable date")
-    return df, unmapped
+    return df, unmapped, unmapped_outlets
 
 
 def add_item_mappings(mappings):

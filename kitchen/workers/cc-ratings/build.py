@@ -24,8 +24,16 @@ for _l in ENV.read_text().splitlines():
         os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
 
 # ---------------------------------------------------------------- categories
+# These rules are MATCHES on the item name, not guesses: "cheesecake" in the name
+# genuinely means a cheesecake. What used to be a guess was the final fallback, which
+# silently returned "Desserts" for anything unrecognised, so a Rs 99 Evil Eye Rakhi was
+# counted as a dessert and nobody was told. It now returns "Uncategorised" and the names
+# are listed at the foot of the mail (Pranjay's decision, 28 Aug 2026). This whole
+# function is temporary: it retires when the shared item glossary lands and every
+# consumer reads one category from one owned table.
 ACCESSORY = re.compile(r"candle|teddy|balloon|banner|cap-|party popper|hamper", re.I)
 SAVOURY   = re.compile(r"lavash|grissini", re.I)
+UNCATEGORISED = "Uncategorised"
 def category_of(name):
     n = name.lower()
     if "cheesecake" in n: return "Cheesecakes"
@@ -36,7 +44,7 @@ def category_of(name):
     if "bento" in n: return "Bento Cakes"
     if re.search(r"cake\s*\(|cake$|cake &|tea cake", n): return "Cakes"
     if re.search(r"\btub\b|\bjar\b", n): return "Tubs & Jars"
-    return "Desserts"
+    return UNCATEGORISED
 
 # ---------------------------------------------------------------- themes
 # TIER 1 only: a physical contaminant, an illness, or a labelling/compliance
@@ -153,11 +161,15 @@ def build(days=45):
                       "e": 1 if tier1_of(rev) else 0, "q": 1 if tier2_of(rev) else 0})
     RATED.sort(key=lambda x: (x["d"], x["t"]))
     CAT = {n: category_of(n) for n in sorted({n for row in RATED for n in row["i"]})}
+    uncat = sorted(n for n, c in CAT.items() if c == UNCATEGORISED)
+    if uncat:
+        print(f"  {len(uncat)} item name(s) could not be categorised (listed in the mail): "
+              + ", ".join(uncat[:8]) + (" ..." if len(uncat) > 8 else ""))
     OUTLETS = {o: city_of[o] for o in sorted(city_of)}
     meta = {"days": len({d[0] for d in DAILY}), "outlets": len(OUTLETS),
             "orders": sum(d[2] for d in DAILY), "delivered": sum(d[3] for d in DAILY),
             "rated": len(RATED), "from": min(d[0] for d in DAILY), "to": max(d[0] for d in DAILY),
-            "unmapped": gaps, "source": "landing.zomato_order_details"}
+            "unmapped": gaps, "uncategorised": uncat, "source": "landing.zomato_order_details"}
     return DAILY, RATED, CAT, OUTLETS, meta
 
 def render(tpl, out, DAILY, RATED, CAT, OUTLETS, meta):

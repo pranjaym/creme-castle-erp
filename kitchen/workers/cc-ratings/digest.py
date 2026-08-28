@@ -158,6 +158,25 @@ def build_digest(DAILY, RATED, OUTLETS, meta, day=None, dash_name="", pdf_name="
       +"</tr>")
     A("</table></td></tr>")
 
+    # Items whose category is not known. Shown, never guessed (Pranjay, 28 Aug 2026):
+    # the old code silently filed anything unrecognised under "Desserts".
+    uncat = meta.get("uncategorised") or []
+    unmapped_outlets = meta.get("unmapped") or []
+    if uncat or unmapped_outlets:
+        bits = []
+        if uncat:
+            bits.append(f"<b>{len(uncat)} item{'s' if len(uncat)!=1 else ''} with no category.</b> "
+                        "They are counted in every total on this page, but they sit under "
+                        "&#8220;Uncategorised&#8221; in the item view until someone assigns them a "
+                        "category:<br>" + esc(", ".join(uncat)))
+        if unmapped_outlets:
+            bits.append(f"<b>{len(unmapped_outlets)} outlet{'s' if len(unmapped_outlets)!=1 else ''} "
+                        "not in the outlet master.</b> Shown as UNMAPPED plus the Zomato ID: "
+                        + esc(", ".join(unmapped_outlets)))
+        A(f"<tr><td style='padding:6px 20px 0'><div style='border:1px solid {LINE};border-radius:6px;"
+          f"padding:12px 14px;font-size:12px;color:{MUT};line-height:1.6;background:{CARD}'>"
+          + "<br><br>".join(bits) + "</div></td></tr>")
+
     links=[]
     if dash_name: links.append(f"<b>{esc(dash_name)}</b> is attached: download and open it in a browser for the full interactive dashboard, any day, any window.")
     if pdf_name: links.append(f"<b>{esc(pdf_name)}</b> is the printable version.")

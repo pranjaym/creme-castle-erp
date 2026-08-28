@@ -107,7 +107,7 @@ def scrape_orders_today(scrape):
 
 def scrape_and_append(days):
     """Pull the last `days` days of both reports, enrich items, append to history.
-    Returns (unmapped_item_names, downloaded_files) where downloaded_files is a list
+    Returns (unmapped_item_names, unmapped_outlet_names, downloaded_files) where the last is a list
     of (report, path) pairs: the order report is pulled TWICE under two different
     Petpooja scopes (see scrape_orders_today), so a dict keyed by report would lose
     one of them. The paths are kept so the spine sync can reuse the SAME downloads:
@@ -133,14 +133,14 @@ def scrape_and_append(days):
     print(f"\n[3/3] scraping item report {frm}..{to} ...")
     ifile = scrape.scrape_and_download("order_summary_item", from_date=frm, to_date=to, max_retries=1)
     items_raw = pd.read_csv(ifile)
-    enriched, unmapped = enrich.enrich(items_raw)
+    enriched, unmapped, unmapped_outlets = enrich.enrich(items_raw)
     if unmapped:
         # keep the dashboard buildable: fall back to the raw name so the item still counts
         enriched["Alias Name"] = enriched["Alias Name"].fillna(enriched["item_name"])
         enriched["Alias Category"] = enriched["Alias Category"].fillna("Unmapped")
     hist.append_items(enriched)
     files.append(("order_summary_item", ifile))
-    return unmapped, files
+    return unmapped, unmapped_outlets, files
 
 
 def load_sub_order_wise():
@@ -400,7 +400,52 @@ def archive_dashboard(html_path, focal):
         return False
 
 
-def send_email(html_path, focal, unmapped, spine_line=None, spine_material=None):
+def outlet_watch():
+    """Spine-side outlet detection (F39/F40, step 3). Returns a short block for the mail,
+    or "" when there is nothing to say.
+
+    The point: an outlet name that APPEARS, or a known one that goes QUIET, must ask a
+    human a question. CC-GGN-Udyog Vihar was renamed to CC-DL-South Campus in one of
+    Petpooja's two exports and not the other, and nothing noticed for five months, which
+    is how 2,673 phantom orders were minted (F40).
+
+    Reads public.outlet_watch. That view ships as staged migration 199; until it is
+    applied this returns "" and the mail is unchanged. Never raises: a detection aid must
+    not be able to break the dashboard.
+    """
+    if not os.environ.get("SPINE_DATABASE_URL"):
+        return ""
+    try:
+        import psycopg2
+        conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+        try:
+            cur = conn.cursor()
+            cur.execute("""select to_regclass('public.outlet_watch')""")
+            if cur.fetchone()[0] is None:
+                return ""
+            cur.execute("""select status, outlet_raw, first_seen, last_seen, orders_30d
+                             from public.outlet_watch where status <> 'ok'
+                            order by status, orders_30d desc""")
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"outlet watch skipped: {str(e)[:120]}")
+        return ""
+    if not rows:
+        return ""
+    say = {"new": "NEW outlet name, tell me if this is a new store, a rename or a relocation",
+           "quiet": "GONE QUIET, no orders lately. Closed, renamed, or a feed problem?",
+           "unmapped": "NOT IN THE LOCATION MASTER, so its orders belong to no store"}
+    out = ["OUTLET WATCH (the spine's own check on outlet names):"]
+    for status, name, first, last, n30 in rows:
+        out.append(f"- {name}: {say.get(status, status)} "
+                   f"[first seen {first}, last seen {last}, {n30} orders in 30 days]")
+    return "\n".join(out)
+
+
+def send_email(html_path, focal, unmapped, spine_line=None, spine_material=None,
+               unmapped_outlets=None, outlet_watch=None):
     host = os.environ.get("DASH_SMTP_HOST", "smtp.gmail.com")
     port = int(os.environ.get("DASH_SMTP_PORT", "587"))
     sender = os.environ.get("DASH_EMAIL_SENDER")
@@ -411,7 +456,7 @@ def send_email(html_path, focal, unmapped, spine_line=None, spine_material=None)
         return False
     focal_nice = dt.datetime.strptime(focal, "%Y-%m-%d").strftime("%d %b %Y (%A)")
     msg = EmailMessage()
-    msg["Subject"] = f"CC Daily Dashboard — {focal_nice}"
+    msg["Subject"] = f"CC Daily Dashboard, {focal_nice}"
     msg["From"] = sender
     msg["To"] = ", ".join(recips)
     body = (f"Attached: the Creme Castle sales dashboard for {focal_nice} "
@@ -424,6 +469,16 @@ def send_email(html_path, focal, unmapped, spine_line=None, spine_material=None)
     if unmapped:
         body += ("\n\nNOTE: new items with no glossary mapping (counted under their raw "
                  "name for now, please add an Alias + Category):\n- " + "\n- ".join(unmapped))
+    # Outlets. Never reported before 28 Aug 2026 (F39): an outlet missing from the
+    # glossary has no City, no Store Type and no Location Code, so it vanishes from
+    # every city and store-type view without a word.
+    if unmapped_outlets:
+        body += ("\n\nACTION: outlet(s) with no glossary mapping. Until these are added "
+                 "they have no City, no Store Type and no Location Code, so they are "
+                 "MISSING from every city and store-type breakdown on the dashboard:\n- "
+                 + "\n- ".join(unmapped_outlets))
+    if outlet_watch:
+        body += "\n\n" + outlet_watch
     # Only surface the spine check when something MEANINGFUL moved (an order status,
     # an amount, a charge). Routine confirmations and cosmetic label changes stay in
     # the log: measured on real data, raw comparison shouts about ~292 rows a day
@@ -465,15 +520,22 @@ def main():
     if cloud:
         hist.pull_history()
 
-    unmapped, files = [], []
+    unmapped, unmapped_outlets, files = [], [], []
     if not args.no_scrape:
-        unmapped, files = scrape_and_append(args.days)
-        if unmapped and not args.allow_unmapped:
-            print("\nSTOP: these items have no glossary mapping. Add them to "
-                  "glossary/item_glossary.csv (Alias + Category), or re-run with "
-                  "--allow-unmapped:")
-            for u in unmapped:
-                print("   -", u)
+        unmapped, unmapped_outlets, files = scrape_and_append(args.days)
+        if (unmapped or unmapped_outlets) and not args.allow_unmapped:
+            if unmapped:
+                print("\nSTOP: these items have no glossary mapping. Add them to "
+                      "glossary/item_glossary.csv (Alias + Category), or re-run with "
+                      "--allow-unmapped:")
+                for u in unmapped:
+                    print("   -", u)
+            if unmapped_outlets:
+                print("\nSTOP: these outlets have no glossary mapping. Add them to "
+                      "glossary/city_glossary.csv, outlet_glossary.csv and "
+                      "location_codes.csv, or re-run with --allow-unmapped:")
+                for u in unmapped_outlets:
+                    print("   -", u)
             sys.exit(2)
 
     # Land this morning's reports in the spine and verify the recent days against
@@ -492,7 +554,8 @@ def main():
     html, focal = build_dashboard()
     archive_dashboard(html, focal)          # push to the portal's archive bucket
     if not args.no_email:
-        send_email(html, focal, unmapped, spine_line, spine_material)
+        send_email(html, focal, unmapped, spine_line, spine_material,
+                   unmapped_outlets, outlet_watch())
     # After the deliverables on purpose: the dashboard and email must never wait on,
     # or die with, the alert path.
     if spine_errors:

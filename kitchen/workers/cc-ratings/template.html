@@ -675,7 +675,7 @@ function itemData(){
   const rows=ratedIn(days).filter(r=>!scope||scope.has(r.o));
   const m={};
   rows.forEach(r=>r.i.forEach(it=>{
-    const x=m[it]=m[it]||{k:it,cat:CAT[it]||'Desserts',n:0,sum:0,bad:0,good:0,
+    const x=m[it]=m[it]||{k:it,cat:CAT[it]||'Uncategorised',n:0,sum:0,bad:0,good:0,
       withText:0,esc:0,outs:new Set(),rows:[]};
     x.n++;x.sum+=r.r;x.outs.add(r.o);x.rows.push(r);
     if(r.r<=3)x.bad++;else x.good++;
