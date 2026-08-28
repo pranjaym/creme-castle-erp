@@ -165,12 +165,41 @@ def close_run(conn, run_id, status, parsed=0, skipped=0, new=0, max_ts=None,
 def store(conn, report, records, run_id):
     """Insert what this run saw. A row identical to one already stored is not stored
     again: it only has its last_seen marker moved forward, which is how the schema
-    records 'this order still looked exactly like this an hour later'. Returns the
-    count of genuinely new rows."""
+    records 'this order still looked exactly like this an hour later'. Returns
+    (new_rows, collapsed_duplicates).
+
+    THE IN-BATCH DUPLICATE TRAP (found live, 15:03 on 28 Aug 2026, first failure of
+    the day). Petpooja will happily report two byte-identical rows in one file: the
+    same item, same price, same quantity, on the same invoice. Identical rows hash
+    identically, so one INSERT carried the same (business_date, row_hash) twice, and
+    Postgres refuses that under ON CONFLICT DO UPDATE with
+
+        CardinalityViolation: ON CONFLICT DO UPDATE command cannot affect row a
+        second time
+
+    which failed the entire item pull and left the item side an hour stale while the
+    order side kept updating. Note the landing loader never hit this, because it uses
+    ON CONFLICT DO NOTHING, and Postgres tolerates in-batch duplicates there. So the
+    trap was created by this worker choosing DO UPDATE in order to keep seen_count.
+
+    Deduplicating here rather than switching to DO NOTHING is deliberate: it keeps
+    the seen_count audit trail AND it matches what landing does with the same file,
+    which is to keep one row. Matching matters, because tomorrow these same orders
+    arrive in landing and the two must agree."""
     from psycopg2.extras import execute_values
     table, cols = TARGET[report]
     if not records:
-        return 0
+        return 0, 0
+
+    seen, deduped = set(), []
+    for r in records:
+        key = (r["business_date"], r["row_hash"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(r)
+    collapsed = len(records) - len(deduped)
+
     sql = (
         f"insert into {table} (first_seen_run_id, last_seen_run_id, business_date, "
         f"{', '.join(cols)}, row_hash) values %s "
@@ -180,12 +209,15 @@ def store(conn, report, records, run_id):
         f"      seen_count = {table}.seen_count + 1 "
         f"returning (xmax = 0) as is_new")
     payload = [[run_id, run_id, r["business_date"], *r["values"], r["row_hash"]]
-               for r in records]
+               for r in deduped]
     with conn.cursor() as cur:
-        execute_values(cur, sql, payload, page_size=500)
-        new = sum(1 for row in cur.fetchall() if row[0])
+        # fetch=True, because execute_values sends one statement PER PAGE and a bare
+        # cur.fetchall() then returns only the last page's rows. That is why every
+        # run up to now reported "0 new" while rows were plainly landing.
+        rows = execute_values(cur, sql, payload, page_size=500, fetch=True)
+        new = sum(1 for row in rows if row[0])
     conn.commit()
-    return new
+    return new, collapsed
 
 
 # ---------------------------------------------------------------------- pulling --
@@ -234,11 +266,14 @@ def pull(conn, report, business_date, occasion):
             receipt = None
             print(f"  receipt not stored ({type(e).__name__}), rows loaded anyway")
 
-        new = store(conn, report, records, run_id)
+        new, collapsed = store(conn, report, records, run_id)
+        note = (f"{collapsed} byte-identical duplicate row(s) in the source file, "
+                f"collapsed to one each (the same thing landing does)") if collapsed else None
         close_run(conn, run_id, "ok", len(records), skipped, new, max_ts,
-                  receipt if isinstance(receipt, str) else None)
-        print(f"  {report}: {len(records)} rows parsed, {new} new, "
-              f"fresh to {max_ts}, {round(time.time() - t0, 1)}s")
+                  receipt if isinstance(receipt, str) else None, note)
+        print(f"  {report}: {len(records)} rows parsed, {new} new"
+              + (f", {collapsed} in-file duplicate(s) collapsed" if collapsed else "")
+              + f", fresh to {max_ts}, {round(time.time() - t0, 1)}s")
         return new, max_ts, None
     except (Exception, SystemExit) as e:
         err = f"{type(e).__name__}: {str(e)[:200]}"
