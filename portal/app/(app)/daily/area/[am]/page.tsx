@@ -246,7 +246,17 @@ export default async function AreaDaily({ params, searchParams }:
       </Period></div>
 
       <SecHead num="10">Area versus area</SecHead>
-      <div className="dcard"><AreasTables areas={areas} date={date} /></div>
+      <div className="dcard">
+        <Period label={dshort}>
+          <AreasTables areas={areas} date={date} view="day" />
+          <p className="note">Ranked by complaint rate for this day, best first. Money lost and false-ready are
+            always the 7-day figures, because a single day of either is too small to read.</p>
+        </Period>
+        <Period label={wkLabel}>
+          <AreasTables areas={areas} date={date} view="wk" />
+          <p className="note">Area manager names open that area&apos;s page.</p>
+        </Period>
+      </div>
 
       <div className="dfoot">
         <p>This page reads the live database and each morning&apos;s pull refreshes recent days, so late ratings and

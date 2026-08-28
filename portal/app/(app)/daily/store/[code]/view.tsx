@@ -4,7 +4,7 @@ import {
   inr, n0, n1, type Receipt,
 } from '@/lib/daily';
 import {
-  DashHead, DashScript, SecHead, StoresTables, HBar,
+  DashHead, DashScript, SecHead, HBar,
   Chart, Verdict, Period, Fold, Rows, Tag, Words,
 } from '../../ui';
 

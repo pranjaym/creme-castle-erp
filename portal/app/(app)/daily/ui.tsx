@@ -171,8 +171,8 @@ export function StoresTables({ stores, date, highlight }:
   );
 }
 
-export function AreasTables({ areas, date }:
-  { areas: import('@/lib/daily').AreaAgg[]; date: string; }) {
+export function AreasTables({ areas, date, view }:
+  { areas: import('@/lib/daily').AreaAgg[]; date: string; view?: 'day' | 'wk' }) {
   const wkSorted = [...areas].sort((a, b) => (a.wk.cpct ?? 99) - (b.wk.cpct ?? 99));
   const head = (
     <thead><tr>
@@ -193,6 +193,15 @@ export function AreasTables({ areas, date }:
       <td>{inr(a.wk.stockout + a.wk.refunds)}</td>
     </tr>
   );
+  // A page WITHOUT the day/week toggle asks for one view and labels it itself.
+  if (view) {
+    const rows = view === 'day' ? areas : wkSorted;
+    return (
+      <div className="scroll-x"><table className="sheet sortable">{head}<tbody>
+        {rows.map((a, i) => row(a, i, view))}
+      </tbody></table></div>
+    );
+  }
   return (
     <>
       <div className="scroll-x only-y"><table className="sheet sortable">{head}<tbody>
