@@ -2,17 +2,18 @@ import Link from 'next/link';
 import { requireUser } from '@/lib/session';
 import { spine } from '@/lib/supabase/service';
 
-// D2C items, kept out of the item queue on purpose.
+// Items on channels Pranjay does not track. Kept out of the item queue on purpose.
 //
 // Pranjay, 28 Aug 2026: "I don't track them anyway, and it is not part of my analysis
-// anymore, but it shows up in bulk in my unmapped item glossary. We need to remove it
-// and show it separately."
+// anymore, but it shows up in bulk in my unmapped item glossary."
 //
-// So: removed from the queue, NOT hidden. 4,273 names against a few dozen real
-// decisions would bury the ones that matter, but silently dropping a crore of revenue
-// out of sight is how the original problem happened. This page is the middle: the
-// number is always one click away, and the switch that put it here is a row in
-// public.item_source_tracking, not a hard-coded filter.
+// The first attempt at this filtered on item_source (which FILE the row arrived in) and
+// missed the biggest part of it: the D2C custom-cake business is booked on the Petpooja
+// POS as order type "Pick Up", so it looked like a Petpooja row and stayed in the queue.
+// The switch is now on CHANNEL, held in public.item_channel_tracking (migration 203).
+//
+// Removed from the queue, NOT hidden. Silently dropping crores out of sight is how the
+// original problem happened, so every number stays one click away.
 export const dynamic = 'force-dynamic';
 
 function rs(n: number | null | undefined): string {
@@ -20,39 +21,49 @@ function rs(n: number | null | undefined): string {
   return Math.round(n).toLocaleString('en-IN');
 }
 
-export default async function D2CItemsPage({ searchParams }:
+export default async function UntrackedItemsPage({ searchParams }:
   { searchParams: Promise<{ n?: string }> }) {
   await requireUser();
   const sp = await searchParams;
   const limit = Math.min(Math.max(Number(sp.n ?? 100), 25), 2000);
 
   const db = spine();
-  const [rowsRes, allRes, srcRes] = await Promise.all([
+  const [rowsRes, allRes, chRes] = await Promise.all([
     db.from('item_glossary_gaps').select('*')
       .eq('tracked', false).order('revenue', { ascending: false }).limit(limit),
-    db.from('item_glossary_gaps').select('item_name, revenue, revenue_30d').eq('tracked', false),
-    db.from('item_source_tracking').select('*').eq('tracked', false),
+    db.from('item_glossary_gaps').select('item_name, revenue, revenue_30d, channels')
+      .eq('tracked', false),
+    db.from('item_channel_tracking').select('*').order('tracked', { ascending: false }),
   ]);
   const rows = rowsRes.data ?? [];
   const all = allRes.data ?? [];
-  const sources = srcRes.data ?? [];
+  const channels = chRes.data ?? [];
 
   const total = all.length;
   const rev180 = all.reduce((s, r) => s + Number(r.revenue ?? 0), 0);
   const rev30 = all.reduce((s, r) => s + Number(r.revenue_30d ?? 0), 0);
 
+  // Which channels these items came through, by how many item names each covers.
+  const byChannel = new Map<string, number>();
+  for (const r of all) {
+    for (const c of String(r.channels ?? '').split(', ').filter(Boolean)) {
+      byChannel.set(c, (byChannel.get(c) ?? 0) + 1);
+    }
+  }
+  const channelRows = Array.from(byChannel.entries()).sort((a, b) => b[1] - a[1]);
+
   return (
     <>
       <p className="note" style={{ marginTop: 0 }}>
-        Glossary / <Link href="/glossary/items">Items</Link> / <b>D2C</b>
+        Glossary / <Link href="/glossary/items">Items</Link> / <b>Not tracked</b>
         &nbsp;·&nbsp; <Link href="/glossary/outlets">Outlets</Link>
       </p>
-      <h1 className="page">D2C items, not tracked</h1>
+      <h1 className="page">Items on channels you do not track</h1>
       <p className="hint">
-        These come from the website and are <b>deliberately kept out of the item queue</b>,
-        because you do not analyse them. Nothing is deleted and nothing is hidden: they
-        are stored, counted and listed here. If you ever want them back in the queue it
-        is one row in <code>item_source_tracking</code>, not a code change.
+        Pick up (the custom cake business), the website, WhatsApp, B2B and dine in.
+        These are <b>deliberately kept out of the item queue</b>, because they are not
+        part of your analysis. Nothing is deleted and nothing is hidden: they are stored,
+        counted and listed here.
       </p>
 
       <div className="tiles" style={{ marginBottom: 18 }}>
@@ -73,23 +84,54 @@ export default async function D2CItemsPage({ searchParams }:
         </div>
       </div>
 
-      {sources.map(s => (
-        <p key={s.item_source} className="callout">
-          <b>{s.label}</b> ({s.item_source}): {s.note}
-        </p>
-      ))}
+      <h2 className="sec-head">Which channels these came through</h2>
+      <div className="scroll-x">
+        <table className="sheet">
+          <thead><tr><th>Channel</th><th>Unmapped item names</th></tr></thead>
+          <tbody>
+            {channelRows.map(([c, n]) => (
+              <tr key={c}><td>{c}</td><td>{n.toLocaleString('en-IN')}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-      <h2 className="sec-head">The biggest {Math.min(limit, total)} by revenue</h2>
+      <h2 className="sec-head" style={{ marginTop: 26 }}>What counts as tracked</h2>
+      <p className="hint">
+        This is a setting, not something buried in code. A channel with no row here is
+        treated as <b>tracked</b> on purpose, so a new way of selling shows up in your
+        queue instead of disappearing.
+      </p>
+      <div className="scroll-x">
+        <table className="sheet">
+          <thead><tr><th>Channel</th><th>Shown as</th><th>Tracked</th><th>Why</th></tr></thead>
+          <tbody>
+            {channels.map(c => (
+              <tr key={c.channel_key}>
+                <td>{c.channel_key}</td>
+                <td>{c.label}</td>
+                <td>{c.tracked ? 'Yes' : 'No'}</td>
+                <td style={{ whiteSpace: 'normal', maxWidth: 460 }} className="muted">{c.note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h2 className="sec-head" style={{ marginTop: 26 }}>
+        The biggest {Math.min(limit, total)} items by revenue
+      </h2>
       <div className="scroll-x">
         <table className="sheet">
           <thead><tr>
-            <th>Item</th><th>Revenue, 180d</th><th>Revenue, 30d</th>
+            <th>Item</th><th>Channels</th><th>Revenue, 180d</th><th>Revenue, 30d</th>
             <th>Sold</th><th>Outlets</th><th>First sold</th><th>Last sold</th>
           </tr></thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.item_name}>
                 <td>{r.item_name}</td>
+                <td className="muted">{r.channels}</td>
                 <td>Rs {rs(Number(r.revenue))}</td>
                 <td>Rs {rs(Number(r.revenue_30d))}</td>
                 <td>{Math.round(Number(r.qty ?? 0)).toLocaleString('en-IN')}</td>
@@ -112,7 +154,7 @@ export default async function D2CItemsPage({ searchParams }:
       ) : null}
 
       <p className="hint" style={{ marginTop: 18 }}>
-        If these are ever worth mapping, the right way is from the OMS product catalogue
+        If any of this is ever worth mapping, the right way is from the source catalogue
         in one pass, not by typing {total.toLocaleString('en-IN')} rows by hand.
       </p>
     </>

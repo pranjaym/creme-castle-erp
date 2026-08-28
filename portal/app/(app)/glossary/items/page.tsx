@@ -29,23 +29,24 @@ export default async function ItemGlossaryPage({ searchParams }:
   const db = spine();
   const [gapsRes, allRes] = await Promise.all([
     db.from('item_glossary_gaps').select('*')
-      .eq('tracked', true).order('revenue', { ascending: false }).limit(200),
+      .eq('tracked', true).order('revenue_tracked', { ascending: false }).limit(200),
     db.from('item_glossary').select('*').order('item_name').limit(2000),
   ]);
   const gaps = gapsRes.data ?? [];
   const all = allRes.data ?? [];
 
-  // Untracked sources (currently the D2C website) get their own screen. Pranjay does
-  // not analyse them, and 4,273 rows in this queue would bury the few dozen decisions
-  // that do need a person. Counted here only so the number is never hidden.
+  // Channels Pranjay does not analyse get their own screen. Thousands of rows in this
+  // queue would bury the few decisions that do need a person. Counted here only so the
+  // number is never hidden. Tracked is by CHANNEL, not by which file the row arrived in:
+  // the D2C custom-cake business is booked on the Petpooja POS, so a source-based filter
+  // missed it entirely (migration 203).
   const { data: untrackedRows } = await db.from('item_glossary_gaps')
-    .select('item_name, revenue, source_label').eq('tracked', false);
+    .select('item_name, revenue').eq('tracked', false);
   const untrackedCount = untrackedRows?.length ?? 0;
-  const untrackedLabel = untrackedRows?.[0]?.source_label ?? 'D2C website';
 
   const categories = Array.from(new Set(all.map(r => r.category as string).filter(Boolean))).sort();
   const aliases = Array.from(new Set(all.map(r => r.alias as string).filter(Boolean))).sort();
-  const queueRevenue = gaps.reduce((s, r) => s + Number(r.revenue_30d ?? 0), 0);
+  const queueRevenue = gaps.reduce((s, r) => s + Number(r.revenue_tracked_30d ?? 0), 0);
 
   return (
     <>
@@ -83,13 +84,17 @@ export default async function ItemGlossaryPage({ searchParams }:
 
       <h2 className="sec-head">Needs your attention</h2>
       <p className="hint">
-        Sold in the last 180 days with no mapping, biggest first. Until an item is
-        mapped it still counts in every total, but it never joins its category and never
-        merges with its other spellings.
+        Sold on <b>Zomato or Swiggy</b> in the last 180 days with no mapping, biggest
+        first. Until an item is mapped it still counts in every total, but it never joins
+        its category and never merges with its other spellings. Channels you do not
+        track are not listed here.
       </p>
 
       {gaps.length === 0 ? (
-        <p className="empty">Nothing waiting. Every item sold in the last 180 days is mapped.</p>
+        <p className="empty">
+          Nothing waiting. Every item sold on Zomato or Swiggy in the last 180 days is
+          mapped. New menu items will appear here as they sell.
+        </p>
       ) : (
         <div className="scroll-x">
           <table className="sheet">
@@ -108,8 +113,9 @@ export default async function ItemGlossaryPage({ searchParams }:
                   back="/glossary/items"
                   context={
                     <>
-                      Rs {rs(Number(g.revenue))} since {g.first_sold} · {Math.round(Number(g.qty))} sold
-                      {' '}· {g.outlets} outlets
+                      Rs {rs(Number(g.revenue_tracked))} on tracked channels since {g.first_sold}
+                      {' '}· {Math.round(Number(g.qty))} sold · {g.outlets} outlets
+                      {g.channels ? <> · {g.channels}</> : null}
                       {g.petpooja_category ? <> · Petpooja files it under &ldquo;{g.petpooja_category}&rdquo;</> : null}
                     </>
                   }
@@ -122,7 +128,8 @@ export default async function ItemGlossaryPage({ searchParams }:
 
       {untrackedCount > 0 ? (
         <p className="hint" style={{ marginTop: 14 }}>
-          {untrackedLabel} items are not tracked and are kept out of this queue.{' '}
+          Items sold only on channels you do not track (pick up, website, WhatsApp,
+          B2B, dine in) are kept out of this queue.{' '}
           <Link className="linkbtn" href="/glossary/items/d2c">
             See them separately ({untrackedCount.toLocaleString('en-IN')})
           </Link>
