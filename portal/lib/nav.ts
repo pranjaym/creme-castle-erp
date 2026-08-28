@@ -33,7 +33,11 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
     });
     sections.push({
       title: 'Data',
-      items: [{ href: '/reports', label: 'Reports & Downloads' }],
+      items: [
+        { href: '/reports', label: 'Reports & Downloads' },
+        { href: '/glossary/items', label: 'Item Glossary' },
+        { href: '/glossary/outlets', label: 'Outlet Glossary' },
+      ],
     });
   } else if (user.role === 'area_manager') {
     sections.push({

@@ -423,7 +423,8 @@ def outlet_watch():
             cur.execute("""select to_regclass('public.outlet_watch')""")
             if cur.fetchone()[0] is None:
                 return ""
-            cur.execute("""select status, outlet_raw, first_seen, last_seen, orders_30d
+            cur.execute("""select status, outlet_raw, first_seen, last_seen, orders_30d,
+                                  expected_reopen_on
                              from public.outlet_watch where status <> 'ok'
                             order by status, orders_30d desc""")
             rows = cur.fetchall()
@@ -436,10 +437,13 @@ def outlet_watch():
         return ""
     say = {"new": "NEW outlet name, tell me if this is a new store, a rename or a relocation",
            "quiet": "GONE QUIET, no orders lately. Closed, renamed, or a feed problem?",
-           "unmapped": "NOT IN THE LOCATION MASTER, so its orders belong to no store"}
+           "unmapped": "NOT IN THE LOCATION MASTER, so its orders belong to no store",
+           "reopening": "shut, due back by {reopen}. Nothing to do unless that slips",
+           "overdue": "was due back by {reopen} and is STILL not trading"}
     out = ["OUTLET WATCH (the spine's own check on outlet names):"]
-    for status, name, first, last, n30 in rows:
-        out.append(f"- {name}: {say.get(status, status)} "
+    for status, name, first, last, n30, reopen in rows:
+        msg = say.get(status, status).format(reopen=reopen)
+        out.append(f"- {name}: {msg} "
                    f"[first seen {first}, last seen {last}, {n30} orders in 30 days]")
     return "\n".join(out)
 

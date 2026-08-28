@@ -45,7 +45,49 @@ BUSINESS_DAY_CUTOFF_HOUR = 4
 
 
 def load_glossary():
-    """Return the mapping dicts built from the CSVs in ./glossary."""
+    """Return the mapping dicts. THE SPINE IS THE SOURCE OF TRUTH from 28 Aug 2026
+    (F39): public.item_glossary and public.outlets are what the portal's glossary
+    screens write to, so the dashboard must read the same thing or the screens would be
+    decorative. The CSVs remain only as a fallback for a run with no database, and as
+    the record of where the mapping originally came from."""
+    try:
+        return _load_glossary_from_spine()
+    except Exception as e:
+        print(f"  glossary: spine unavailable ({str(e)[:90]}), falling back to the CSVs")
+        return _load_glossary_from_csv()
+
+
+def _load_glossary_from_spine():
+    import psycopg2
+    dsn = os.environ.get("SPINE_DATABASE_URL")
+    if not dsn:
+        raise RuntimeError("SPINE_DATABASE_URL not set")
+    conn = psycopg2.connect(dsn)
+    try:
+        cur = conn.cursor()
+        cur.execute("select item_name, alias, category from public.item_glossary")
+        items = cur.fetchall()
+        cur.execute("""select internal_code, city, store_type, location_code
+                         from public.outlets""")
+        outs = cur.fetchall()
+    finally:
+        conn.close()
+    if not items:
+        raise RuntimeError("public.item_glossary is empty")
+    strip = lambda x: str(x).strip() if x is not None else None
+    g = {
+        "item_alias": {strip(a): b for a, b, _ in items},
+        "item_cat":   {strip(a): c for a, _, c in items},
+        "out_city":   {strip(a): b for a, b, _, _ in outs if b},
+        "out_type":   {strip(a): c for a, _, c, _ in outs if c},
+        "out_loc":    {strip(a): d for a, _, _, d in outs if d},
+    }
+    print(f"  glossary: {len(items)} items and {len(outs)} outlets read from the spine")
+    return g
+
+
+def _load_glossary_from_csv():
+    """The pre-28-Aug-2026 path. Kept as a fallback only."""
     g_item = pd.read_csv(os.path.join(GLOSSARY_DIR, "item_glossary.csv"))
     g_city = pd.read_csv(os.path.join(GLOSSARY_DIR, "city_glossary.csv"))
     g_out = pd.read_csv(os.path.join(GLOSSARY_DIR, "outlet_glossary.csv"))
