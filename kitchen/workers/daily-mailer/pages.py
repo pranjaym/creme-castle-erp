@@ -169,7 +169,8 @@ def store_page(s, det, reasons, all_stores, date):
                                    "riders picked up fast (goal: under 1.5 min)"
                                    if (day.get("wait") if day.get("wait") is not None else 9) < 1.5
                                    else "riders waited too long (goal: under 1.5 min)")),
-                   R.kpi("Rider waited 3+ min", f"{R.n0(w3d)} <small>of {R.n0(dd)}</small>", "",
+                   R.kpi("Rider waited 3+ min", f"{R.n0(w3d)} <small>of {R.n0(dd)} timed</small>",
+                         "counted only on orders where Zomato timestamped the rider",
                          R.verdict(w3d <= max(2, dd * 0.03), "within the normal 3%"
                                    if w3d <= max(2, dd * 0.03) else "above the normal 3% of orders")),
                    R.kpi("&quot;Ready&quot; pressed early, rider left waiting", str(len(fr_day)), "",

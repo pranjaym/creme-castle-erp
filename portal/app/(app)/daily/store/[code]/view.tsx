@@ -211,7 +211,8 @@ export default async function StoreView({ code, date, latest }:
               <Verdict ok={(day.wait ?? 9) < 1.5} good="riders picked up fast (goal: under 1.5 min)"
                 bad="riders waited too long (goal: under 1.5 min)" /></div>
             <div className="kpi"><div className="dlabel">Rider waited 3+ min</div>
-              <div className="dvalue">{n0(det.waits3_day)} <small>of {n0(det.delivered_day)}</small></div>
+              <div className="dvalue">{n0(det.waits3_day)} <small>of {n0(det.delivered_day)} timed</small></div>
+              <div className="ddelta">counted only on orders where Zomato timestamped the rider</div>
               <Verdict ok={det.waits3_day <= Math.max(2, det.delivered_day * 0.03)}
                 good="within the normal 3%" bad="above the normal 3% of orders" /></div>
             <div className="kpi"><div className="dlabel">&quot;Ready&quot; pressed early, rider left waiting</div>
