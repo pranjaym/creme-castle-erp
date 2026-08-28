@@ -1,0 +1,12 @@
+{
+  "_comment": [
+    "Days worth watching hour by hour, and the past day whose SHAPE is the second",
+    "projection anchor. Keeping this here rather than in the launchd job means a",
+    "future festival needs one line in this file and nothing else touched.",
+    "'anchor' should be the SAME festival last year, not a normal day: the whole",
+    "point is that a festival's sales curve is front loaded and a normal day's is not.",
+    "A date not listed still works: the pulse just runs with no occasion label and",
+    "projects on the normal-weekday shape alone."
+  ],
+  "2026-08-28": { "occasion": "Raksha Bandhan", "anchor": "2025-08-09" }
+}

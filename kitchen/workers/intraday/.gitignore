@@ -1,0 +1,7 @@
+# Run artefacts, all reproducible by running a pulse. Never committed.
+pulse.log
+launchd.log
+latest.txt
+.last_success
+.run.lock/
+__pycache__/

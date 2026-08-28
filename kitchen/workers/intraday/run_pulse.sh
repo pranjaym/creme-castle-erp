@@ -1,0 +1,140 @@
+#!/bin/bash
+# The hourly wrapper for the intraday pulse. Everything the plain python script does
+# not do: keep out of the morning job's way, hold the Mac awake, keep a log, keep the
+# latest report where a human (or Claude) can read it instantly, and stay QUIET about
+# a single failed hour while still speaking up when the feed has actually gone dark.
+#
+# Built 28 August 2026 (Raksha Bandhan). Run it by hand any time:
+#     ~/creme-castle-erp/kitchen/workers/intraday/run_pulse.sh
+#
+# Alerting posture, and it is deliberately different from the daily jobs. A daily job
+# that fails has lost the day. An hourly job that fails has lost an hour and the next
+# slot heals it, so one failure must NOT raise an alarm (F23). The alarm here is not
+# "a run failed", it is "the newest data is more than STALE_MINUTES old while the
+# shops are trading", which is the thing that actually costs Pranjay something.
+
+set -u
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$HERE/../../.." && pwd)"
+# The same interpreter the other workers use. /usr/bin/python3 is Apple's and has
+# none of the packages, so naming it explicitly is not optional.
+PYTHON="${PULSE_PYTHON:-/Library/Frameworks/Python.framework/Versions/3.14/bin/python3}"
+[ -x "$PYTHON" ] || PYTHON="$(command -v python3)"
+LOG="$HERE/pulse.log"
+LATEST="$HERE/latest.txt"
+STAMP="$HERE/.last_success"
+LOCK="$HERE/.run.lock"
+DASH_LOCK="$REPO/dashboard/auto/.run.lock"
+
+# Trading hours in IST. Outside these the shops are shut, so a stale feed is correct
+# and must not alarm. 07:00 is the earliest order seen; 02:00 is the last.
+OPEN_HOUR="${PULSE_OPEN_HOUR:-7}"
+CLOSE_HOUR="${PULSE_CLOSE_HOUR:-2}"
+STALE_MINUTES="${PULSE_STALE_MINUTES:-150}"
+
+log() { echo "$@" | tee -a "$LOG"; }
+
+hour=$(date +%-H)
+in_hours() {
+  if [ "$OPEN_HOUR" -le "$CLOSE_HOUR" ]; then
+    [ "$hour" -ge "$OPEN_HOUR" ] && [ "$hour" -le "$CLOSE_HOUR" ]
+  else   # the window wraps past midnight
+    [ "$hour" -ge "$OPEN_HOUR" ] || [ "$hour" -le "$CLOSE_HOUR" ]
+  fi
+}
+
+if ! in_hours; then
+  log "===== slot at $(date): outside trading hours (${OPEN_HOUR}:00 to ${CLOSE_HOUR}:59), skipped ====="
+  exit 0
+fi
+
+# The morning dashboard job drives the SAME Petpooja session through the same
+# browser. Two of them at once is how a saved session gets corrupted, so the pulse
+# always yields to it. It loses one hour and picks up at the next slot.
+if [ -d "$DASH_LOCK" ]; then
+  dash_pid="$(cat "$DASH_LOCK/pid" 2>/dev/null)"
+  if [ -n "$dash_pid" ] && kill -0 "$dash_pid" 2>/dev/null; then
+    log "===== slot at $(date): the morning dashboard job is running (pid $dash_pid), yielding ====="
+    exit 0
+  fi
+fi
+
+# Our own lock, so a slow hour cannot be overtaken by the next slot.
+if ! mkdir "$LOCK" 2>/dev/null; then
+  lock_pid="$(cat "$LOCK/pid" 2>/dev/null)"
+  if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
+    log "===== slot at $(date): previous pulse still running (pid $lock_pid), skipped ====="
+    exit 0
+  fi
+  # No live pid: a killed run or a reboot mid-run. A pulse takes well under a minute,
+  # so anything older than 15 minutes is certainly dead.
+  if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +15 2>/dev/null)" ]; then
+    log "===== slot at $(date): clearing a stale lock ====="
+    rm -rf "$LOCK"; mkdir "$LOCK" 2>/dev/null || exit 0
+  else
+    exit 0
+  fi
+fi
+echo $$ > "$LOCK/pid"
+CAFFEINATE_PID=""
+trap 'rm -rf "$LOCK"; [ -n "$CAFFEINATE_PID" ] && kill "$CAFFEINATE_PID" 2>/dev/null' EXIT
+
+if command -v caffeinate >/dev/null 2>&1; then
+  caffeinate -imsw $$ & CAFFEINATE_PID=$!
+fi
+
+log "===== pulse at $(date) ====="
+cd "$HERE" || exit 1
+OUT="$("$PYTHON" run_pulse.py ${PULSE_ARGS:-} 2>&1)"
+rc=$?
+echo "$OUT" >> "$LOG"
+
+if [ $rc -eq 0 ]; then
+  date +%Y-%m-%dT%H:%M >"$STAMP"
+  # The report as a plain file, so the latest picture is one `cat` away and does not
+  # need the database, a browser or a scrape to read.
+  printf '%s\n' "$OUT" | sed -n '/CREME CASTLE, INTRADAY PULSE/,$p' >"$LATEST"
+  log "pulse ok."
+elif [ $rc -eq 75 ]; then
+  log "pulse deferred on transport; the next slot heals it. Not alerting (F23)."
+else
+  log "pulse FAILED hard (exit $rc)."
+fi
+
+# The only thing worth waking a person for: the feed has actually gone dark. Judged
+# on the age of the last SUCCESS, never on this one run, so a single flap is silent
+# and a genuinely dead feed is not.
+if [ -f "$STAMP" ]; then
+  last_epoch=$(date -j -f "%Y-%m-%dT%H:%M" "$(cat "$STAMP")" +%s 2>/dev/null || echo 0)
+  now_epoch=$(date +%s)
+  age=$(( (now_epoch - last_epoch) / 60 ))
+  if [ "$last_epoch" -gt 0 ] && [ "$age" -gt "$STALE_MINUTES" ]; then
+    log "STALE: the last successful pulse was ${age} minutes ago (limit ${STALE_MINUTES})."
+    "$PYTHON" - "$age" <<'PY' >>"$LOG" 2>&1 || log "stale alert could not be sent"
+import sys, os
+sys.path.insert(0, os.path.expanduser("~/creme-castle-erp/dashboard/auto"))
+os.chdir(os.path.expanduser("~/creme-castle-erp/dashboard/auto"))
+import alert_failure
+age = sys.argv[1]
+alert_failure.send_alert(
+    f"CC intraday pulse has gone dark ({age} min)",
+    "The hourly sales pulse has not completed successfully for "
+    f"{age} minutes while the shops are trading.\n\n"
+    "The last good picture is still readable and is that old:\n"
+    "  cat ~/creme-castle-erp/kitchen/workers/intraday/latest.txt\n\n"
+    "To see what is wrong, run one by hand:\n"
+    "  ~/creme-castle-erp/kitchen/workers/intraday/run_pulse.sh\n\n"
+    "The most likely cause by far is an expired Petpooja login, which only a hand "
+    "OTP re-login fixes (F24):\n"
+    "  cd ~/creme-castle-erp/kitchen/workers/petpooja-ingest && python3 scrape.py bootstrap\n\n"
+    "Nothing is lost either way: this feed is a live view, and the settled record of "
+    "today still arrives in the spine through the normal 08:00 job tomorrow.")
+PY
+  fi
+fi
+
+# Keep the log from growing without bound over a long festival day.
+if [ -f "$LOG" ] && [ "$(wc -c <"$LOG")" -gt 5000000 ]; then
+  tail -c 2000000 "$LOG" >"$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi
+exit 0
