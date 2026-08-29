@@ -43,6 +43,12 @@ EVENING_JOBS = [
     ("OMS to spine feed (D2C orders and customers, 09:05 morning ladder)",
      os.path.join(WORKERS, "oms-feed", ".last_success"),
      "bash ~/creme-castle-erp/kitchen/workers/oms-feed/run_oms_feed.sh --force"),
+    # Swiggy stamps on the day its target report loads, usually the afternoon
+    # slot; the ok_dates yesterday-or-today rule handles the morning check
+    # seeing yesterday's stamp before today's 14:00 slot has had a chance.
+    ("Swiggy Daily-MTD pull (mail feed, 14:00/18:00/21:30 + 07:15)",
+     os.path.join(WORKERS, "swiggy-ingest", ".last_success"),
+     "bash ~/creme-castle-erp/kitchen/workers/swiggy-ingest/run_swiggy.sh --force"),
 ]
 
 
