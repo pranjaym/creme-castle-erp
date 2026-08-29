@@ -116,7 +116,24 @@ if [ -f "$STAMP" ]; then
   last_epoch=$(date -j -f "%Y-%m-%dT%H:%M" "$(cat "$STAMP")" +%s 2>/dev/null || echo 0)
   now_epoch=$(date +%s)
   age=$(( (now_epoch - last_epoch) / 60 ))
-  if [ "$last_epoch" -gt 0 ] && [ "$age" -gt "$STALE_MINUTES" ]; then
+  # Staleness is counted in TRADING minutes, not wall clock. 29 Aug 2026: a failure
+  # at 02:05 plus the 07:05 slot failing produced "gone dark for 365 minutes", of
+  # which four hours were the closed window 03:00 to 06:59 when this job does not
+  # even run. Wall clock therefore turns any late-night blip into an alarming
+  # six-hour number the next morning, every time. Only the hours the shops trade
+  # count towards being dark.
+  closed_h=$(( CLOSE_HOUR >= OPEN_HOUR ? 0 : OPEN_HOUR - CLOSE_HOUR - 1 ))
+  trading_age="$age"
+  if [ "$closed_h" -gt 0 ] && [ "$age" -gt $(( closed_h * 60 )) ]; then
+    last_h=$(date -j -f "%s" "$last_epoch" +%-H 2>/dev/null || echo 0)
+    # The overnight gap is only crossed if the last success was before it started.
+    if [ "$last_h" -le "$CLOSE_HOUR" ] || [ "$last_h" -ge "$OPEN_HOUR" ]; then
+      trading_age=$(( age - closed_h * 60 ))
+      [ "$trading_age" -lt 0 ] && trading_age=0
+    fi
+  fi
+  if [ "$last_epoch" -gt 0 ] && [ "$trading_age" -gt "$STALE_MINUTES" ]; then
+    age="$trading_age"
     log "STALE: the last successful pulse was ${age} minutes ago (limit ${STALE_MINUTES})."
     "$PYTHON" - "$age" <<'PY' >>"$LOG" 2>&1 || log "stale alert could not be sent"
 import sys, os
@@ -124,6 +141,16 @@ sys.path.insert(0, os.path.expanduser("~/creme-castle-erp/dashboard/auto"))
 os.chdir(os.path.expanduser("~/creme-castle-erp/dashboard/auto"))
 import alert_failure
 age = sys.argv[1]
+# include_log_tail=False on purpose: alert_failure defaults to attaching the DAILY
+# DASHBOARD's run.log, which for a pulse alarm is a completely unrelated file. On
+# 29 Aug 2026 that shipped 60 lines about yesterday's 08:00 dashboard run to explain
+# a pulse outage, and cost real time in diagnosis. The pulse's own log goes in below.
+def _tail(path, n=25):
+    try:
+        return "".join(open(path, encoding="utf-8", errors="replace").readlines()[-n:])
+    except Exception as e:
+        return f"(could not read {path}: {e})"
+PULSE_LOG = os.path.expanduser("~/creme-castle-erp/kitchen/workers/intraday/pulse.log")
 alert_failure.send_alert(
     f"CC intraday pulse has gone dark ({age} min)",
     "The hourly sales pulse has not completed successfully for "
