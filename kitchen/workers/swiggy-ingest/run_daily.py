@@ -198,6 +198,20 @@ def main():
             status = load_path(path, raw_file_path=storage_path, log=log)
             loaded_any = loaded_any or (status == "loaded")
 
+        if loaded_any:
+            # The merged daily pages read the outlet map from a materialized
+            # view (migration 215); refresh it so a new outlet maps itself
+            # the day its first orders load.
+            conn = L.connect()
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute("set local statement_timeout = 0")
+                        cur.execute("refresh materialized view concurrently core.mv_swiggy_outlet_codes")
+                log("outlet map refreshed")
+            finally:
+                conn.close()
+
         newest = newest_loaded_window_to()
         log(f"newest loaded report day: {newest}")
         if newest is not None and newest >= yesterday:

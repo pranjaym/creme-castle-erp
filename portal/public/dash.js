@@ -121,3 +121,50 @@
     });
   });
 })();
+
+// ---- merged Zomato + Swiggy pages (30 Aug 2026) ----
+// App-tab toggle (the approved section 1 design: one table per app).
+(function () {
+  document.querySelectorAll('.s1tab').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var group = b.dataset.group || 'g1';
+      document.querySelectorAll('.s1tab[data-group="' + group + '"]').forEach(function (x) {
+        x.classList.toggle('on', x === b);
+      });
+      document.querySelectorAll('.s1view[data-group="' + group + '"]').forEach(function (v) {
+        v.classList.toggle('off', v.dataset.view !== b.dataset.view);
+      });
+    });
+  });
+  // Both apps / Zomato only / Swiggy only filters. They cooperate with the
+  // complaint-tag filters: a row must satisfy BOTH the chosen tag and app.
+  var want = {};
+  function apply(target) {
+    var w = want[target] || {};
+    document.querySelectorAll('#' + target + ' tbody tr').forEach(function (tr) {
+      var okTag = !w.tag || tr.dataset.reason === w.tag;
+      var okApp = !w.app || tr.dataset.app === w.app;
+      tr.style.display = (okTag && okApp) ? '' : 'none';
+    });
+  }
+  document.querySelectorAll('.appfilter').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var target = b.dataset.target;
+      document.querySelectorAll('.appfilter[data-target="' + target + '"]').forEach(function (x) {
+        x.classList.toggle('on', x === b);
+      });
+      want[target] = want[target] || {};
+      want[target].app = b.dataset.app;
+      apply(target);
+    });
+  });
+  // Let the existing tag filters keep working alongside the app filter.
+  document.querySelectorAll('.rfilter[data-reason]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var target = b.dataset.target || 'comp-wk';
+      want[target] = want[target] || {};
+      want[target].tag = b.dataset.reason;
+      apply(target);
+    });
+  });
+})();

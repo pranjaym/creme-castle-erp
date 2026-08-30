@@ -260,3 +260,84 @@ export interface CentralDetail extends ShutBlock {
 export async function getCentralDetail(date: string): Promise<CentralDetail> {
   return rpc<CentralDetail>('dash_central_detail', { p_date: date });
 }
+
+// ---- the Swiggy half of the merged pages (migration 213, 30 Aug 2026).
+// Same contract as the Zomato functions: the definitions live in the
+// database, the page only renders. Conventions locked with Pranjay:
+// cancellations charged to the store exclude Swiggy-side tech reasons;
+// values and baskets come from the billed Petpooja order matched on
+// Swiggy's own order number; ratings are one row per rated ORDER.
+export interface SwiggyCanc {
+  code?: string; am?: string | null; d?: string; t: string | null; why: string;
+  prep?: boolean; val: number | null; basket: string | null;
+}
+export interface SwiggyRated {
+  code?: string; am?: string | null; d?: string; t: string | null;
+  rating: number | null; basket: string | null; words: string | null;
+}
+export interface SwiggyStoreRow {
+  code: string; am?: string | null; orders: number | null; orders_wk: number | null;
+  open_pct: number | null; short: number | null; canc: number; low: number;
+  rating: number | null; rank: number | null;
+}
+export interface SwiggyShortSeries {
+  code: string; am?: string | null; wk_short: number; day_short?: number | null;
+  series: { d: string; short: number }[];
+}
+export interface StoreSwiggy {
+  mapped: boolean;
+  day: { orders: number | null; gmv: number | null; ih: number | null; short: number | null;
+         open_pct: number | null; rating: number | null; avg7: number | null } | null;
+  trend: { d: string; orders: number | null; gmv: number | null; short: number | null;
+           rating: number | null }[] | null;
+  canc_day: SwiggyCanc[]; canc_wk: SwiggyCanc[];
+  rated_day: SwiggyRated[]; comments_wk: SwiggyRated[]; low_wk: SwiggyRated[];
+  slot_wk: Record<string, number>;
+  rank: number | null; rank_of: number | null;
+  league: { rank: number; code: string; orders: number; cancels: number;
+            short: number; rating: number | null }[];
+}
+export interface AreaSwiggy {
+  stores: SwiggyStoreRow[]; unmapped: string[];
+  short_series: SwiggyShortSeries[];
+  canc_day: SwiggyCanc[]; canc_wk: SwiggyCanc[];
+  low_day: SwiggyRated[]; low_wk: SwiggyRated[];
+  money_stores: { code: string; am?: string | null; canc_val_wk: number }[];
+}
+export interface CentralSwiggy extends AreaSwiggy {
+  trend: { d: string; orders: number | null; gmv: number | null }[];
+  levers: {
+    gmv_day: number | null; gmv_wk: number | null;
+    cd_day: number | null; rtd_day: number | null; std_day: number | null;
+    cd_wk: number | null; rtd_wk: number | null; std_wk: number | null;
+    burn_day: number | null; adsg_day: number | null;
+    burn_wk: number | null; adsg_wk: number | null;
+    conv_day: number | null; ntr_day: number | null; rtr_day: number | null;
+    top_coupons: { code: string; n: number; cd: number }[];
+    store_levers: { code: string; am?: string | null; gmv_wk: number;
+                    burn_wk: number; adsg_wk: number }[];
+    bridge: { pp_n: number; pp_g: number | null };
+  };
+}
+export async function getStoreSwiggy(code: string, date: string): Promise<StoreSwiggy> {
+  return rpc<StoreSwiggy>('dash_store_swiggy', { p_code: code, p_date: date });
+}
+export async function getAreaSwiggy(am: string, date: string): Promise<AreaSwiggy> {
+  return rpc<AreaSwiggy>('dash_area_swiggy', { p_am: am, p_date: date });
+}
+export async function getCentralSwiggy(date: string): Promise<CentralSwiggy> {
+  return rpc<CentralSwiggy>('dash_central_swiggy', { p_date: date });
+}
+
+// Swiggy timestamps arrive as ISO strings; the pages show clock time only
+// (locked rule 3) and the short day label.
+export function clockTime(t: string | null | undefined): string {
+  if (!t) return '-';
+  const d = new Date(t);
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
+}
+export function dShort(iso: string | null | undefined): string {
+  if (!iso) return '-';
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' });
+}
