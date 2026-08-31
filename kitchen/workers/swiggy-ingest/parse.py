@@ -129,7 +129,9 @@ SHEETS = {
 }
 
 # Columns that may legitimately be absent in older files (contract 5).
-OPTIONAL_COLS = {"coupon_orders": {"swiggy_trade_discount"}}
+# Files before Feb 2026 lack swiggy_trade_discount; some 2025 files lack
+# restaurant_trade_discount as well (found in the 31 Aug 2026 backfill).
+OPTIONAL_COLS = {"coupon_orders": {"swiggy_trade_discount", "restaurant_trade_discount"}}
 
 
 def to_text(v):
