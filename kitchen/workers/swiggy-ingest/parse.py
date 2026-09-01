@@ -186,9 +186,20 @@ def parse_file(path):
                 continue
             ws = wb[sheet_name]
             it = ws.iter_rows(values_only=True)
-            try:
-                header = [str(h).strip() if h is not None else "" for h in next(it)]
-            except StopIteration:
+            # The header is not always row 1: hand-forwarded month-end files
+            # sometimes carry a SUM row above it (found 31 Aug 2026). The
+            # header row is the one naming the sheet's date column.
+            header = None
+            for _ in range(5):
+                try:
+                    row = next(it)
+                except StopIteration:
+                    break
+                cells = [str(h).strip() if h is not None else "" for h in row]
+                if spec["date_col"] in cells:
+                    header = cells
+                    break
+            if header is None:
                 continue
             colmap = spec["cols"]
             known = [h for h in header if h in colmap]
@@ -205,6 +216,9 @@ def parse_file(path):
                 if all(v is None for v in raw):
                     continue
                 src = dict(zip(header, raw))
+                # A row with no date is a hand-added totals row, not data.
+                if src.get(spec["date_col"]) is None:
+                    continue
                 out = {}
                 for src_col, dst_col in colmap.items():
                     if dst_col is None or src_col not in src:
