@@ -134,6 +134,37 @@ def fetch_log(s: requests.Session, flag: int, rest_id: str, day: date, max_pages
 
 # ------------------------------------------------------------------ activity
 
+SHOT_DIR = os.path.expanduser(os.environ.get("PETPOOJA_LOGS_SHOTS", "~/Downloads/petpooja-probe"))
+
+
+def _shot(page, name: str) -> str:
+    """Save a full-page screenshot for a click that failed; returns the path or ''."""
+    try:
+        os.makedirs(SHOT_DIR, exist_ok=True)
+        path = os.path.join(SHOT_DIR, f"{name}.png")
+        page.screenshot(path=path, full_page=True)
+        return path
+    except Exception:
+        return ""
+
+
+def _dismiss_overlays(page):
+    """Close the usual suspects that sit over a Petpooja page: modals, toasts,
+    announcement banners. Best effort, never raises."""
+    try:
+        page.keyboard.press("Escape")
+        page.evaluate("""() => {
+            for (const sel of ['.modal.show .close', '.modal.show [data-dismiss=modal]', '.modal.show .btn-close',
+                               '.swal2-confirm', '.swal2-close', '.toast .close', '.announcement .close', '.popup .close']) {
+                document.querySelectorAll(sel).forEach(el => { try { el.click(); } catch (e) {} });
+            }
+            document.querySelectorAll('.modal-backdrop, .swal2-container').forEach(el => el.remove());
+        }""")
+        page.wait_for_timeout(300)
+    except Exception:
+        pass
+
+
 def _scope(page, rest_id: int, attempts: int = 3):
     """Point the session at one outlet and VERIFY it took (the dashboard's
     hidden header_changed_rest_id field). change_restaurant() posts and then
@@ -233,12 +264,19 @@ def fetch_activity(state: dict, outlets: list[tuple[str, str]], want_days: set[d
                                 page.evaluate("""(v) => { const s = Array.from(document.querySelectorAll('select'))
                                     .find(s => Array.from(s.options).some(o => o.value === v));
                                     if (s) { s.value = v; s.dispatchEvent(new Event('change', {bubbles: true})); } }""", val)
-                                btn = page.get_by_role("button", name=re.compile(r"^Search$", re.I))
-                                if btn.count():
-                                    btn.first.click(timeout=8000)
+                                # click through the page's own script: an overlay (popup, banner)
+                                # on some outlets' pages blocked every normal click on 9 Sep
+                                _dismiss_overlays(page)
+                                clicked = page.evaluate("""() => { const b = Array.from(document.querySelectorAll('button, input[type=submit]'))
+                                    .find(x => /^\\s*search\\s*$/i.test(x.innerText || x.value || '')); if (b) { b.click(); return true; } return false; }""")
+                                if not clicked:
+                                    btn = page.get_by_role("button", name=re.compile(r"^Search$", re.I))
+                                    if btn.count():
+                                        btn.first.click(timeout=8000, force=True)
                                 page.wait_for_timeout(4000)
                             except Exception as e:
-                                log(f"  record type {val}: search click skipped ({type(e).__name__})")
+                                shot = _shot(page, f"activity_{rid}_search")
+                                log(f"  record type {val}: search click skipped ({type(e).__name__}); screenshot {shot}")
                         seen_pages = 0
                         while True:
                             headers, rows = _read_table(page)
@@ -265,13 +303,15 @@ def fetch_activity(state: dict, outlets: list[tuple[str, str]], want_days: set[d
                                 if "disabled" in (nxt.get_attribute("class") or "") or "disabled" in parent_cls:
                                     break
                                 before = page.evaluate("() => document.querySelector('table tbody') ? document.querySelector('table tbody').innerText.slice(0,200) : ''")
-                                nxt.click(timeout=8000)
+                                _dismiss_overlays(page)
+                                nxt.evaluate("e => e.click()")
                                 page.wait_for_timeout(2500)
                                 after = page.evaluate("() => document.querySelector('table tbody') ? document.querySelector('table tbody').innerText.slice(0,200) : ''")
                                 if after == before:
                                     break                  # the click changed nothing: last page
                             except Exception as e:
-                                log(f"  pager stopped on page {seen_pages} ({type(e).__name__})")
+                                shot = _shot(page, f"activity_{rid}_pager")
+                                log(f"  pager stopped on page {seen_pages} ({type(e).__name__}); screenshot {shot}")
                                 break
                     result[rid] = list(rows_all.values())
                     diag.setdefault("reach", {})[rid] = (str(seen_min), str(seen_max))
