@@ -48,7 +48,7 @@ two logs, a few minutes. Spine growth about 5,000 rows a day.
 
 ## The activity half, tested 9 Sep 2026 17:57 by Pranjay from Terminal
 
-Janakpuri, 8 Sep: 124 orders read, record types 1 = Latest current days records and 2 = Get old records, scope verified back on All Outlets. To re-test one outlet by hand:
+Janakpuri, 8 Sep: 124 orders read, record types 1 = Latest current days records and 2 = Get old records, scope verified back on All Outlets. All-outlet run the same evening: 4,165 orders for 38 outlets. REACH: the two record types together cover only today and yesterday (calendar), so the daily pull must never miss a day: a day not pulled by the next evening is gone from this source. Outlets with no online orders (Lucknow, SK, Central Kitchen) show no table and are zero, not errors. To re-test one outlet by hand:
 
 The outlet switch and the report page cannot be driven from Claude's sandbox,
 so the first activity run is done by hand once:

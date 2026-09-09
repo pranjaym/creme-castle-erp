@@ -235,13 +235,15 @@ def fetch_activity(state: dict, outlets: list[tuple[str, str]], want_days: set[d
                                     if (s) { s.value = v; s.dispatchEvent(new Event('change', {bubbles: true})); } }""", val)
                                 btn = page.get_by_role("button", name=re.compile(r"^Search$", re.I))
                                 if btn.count():
-                                    btn.first.click()
+                                    btn.first.click(timeout=8000)
                                 page.wait_for_timeout(4000)
                             except Exception as e:
-                                log(f"  record type {val}: {str(e)[:80]}")
+                                log(f"  record type {val}: search click skipped ({type(e).__name__})")
                         seen_pages = 0
                         while True:
                             headers, rows = _read_table(page)
+                            if not headers:
+                                break                      # no table at all: an outlet with no online orders
                             for rec in P.parse_activity_rows(headers, rows, rid, min(want_days).year):
                                 bd = rec["business_date"]
                                 seen_min = bd if seen_min is None or bd < seen_min else seen_min
@@ -249,14 +251,27 @@ def fetch_activity(state: dict, outlets: list[tuple[str, str]], want_days: set[d
                                 if bd in want_days:
                                     rows_all[rec["order_id"]] = rec
                             seen_pages += 1
-                            nxt = page.locator("a:has-text('Next'), a[rel='next'], li.next a, a.next").first
-                            if nxt.count() and nxt.is_visible() and seen_pages < 200:
-                                cls = (nxt.get_attribute("class") or "") + " " + (page.locator("li.next").first.get_attribute("class") or "" if page.locator("li.next").count() else "")
-                                if "disabled" in cls:
+                            if seen_pages >= 200:
+                                break
+                            # pager: a live "Next" that is not disabled. Petpooja renders the
+                            # link even on the last page (found 9 Sep: three outlets timed out
+                            # clicking a Next that could not be clicked), so check its state and
+                            # never let one click kill the outlet.
+                            nxt = page.locator("li.next:not(.disabled) a, a.next:not(.disabled), a[rel='next']:not(.disabled)").first
+                            try:
+                                if not nxt.count() or not nxt.is_visible():
                                     break
-                                nxt.click()
+                                parent_cls = nxt.evaluate("e => (e.parentElement && e.parentElement.className) || ''")
+                                if "disabled" in (nxt.get_attribute("class") or "") or "disabled" in parent_cls:
+                                    break
+                                before = page.evaluate("() => document.querySelector('table tbody') ? document.querySelector('table tbody').innerText.slice(0,200) : ''")
+                                nxt.click(timeout=8000)
                                 page.wait_for_timeout(2500)
-                            else:
+                                after = page.evaluate("() => document.querySelector('table tbody') ? document.querySelector('table tbody').innerText.slice(0,200) : ''")
+                                if after == before:
+                                    break                  # the click changed nothing: last page
+                            except Exception as e:
+                                log(f"  pager stopped on page {seen_pages} ({type(e).__name__})")
                                 break
                     result[rid] = list(rows_all.values())
                     diag.setdefault("reach", {})[rid] = (str(seen_min), str(seen_max))

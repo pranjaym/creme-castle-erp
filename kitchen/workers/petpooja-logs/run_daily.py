@@ -15,8 +15,8 @@ Exit codes (the wrapper stamps only on 0):
   could not be fetched: no stamp, no alert, the next slot retries);
   1   real failure, alerted (session expired = F24, a parse contract broke,
   or the scope restore could not be verified).
-Flags: --from YYYY-MM-DD --to YYYY-MM-DD (backfill window), --outlet ID
-(one outlet only), --no-activity, --only-activity, --dry-run (parse and count,
+Flags: --from YYYY-MM-DD --to YYYY-MM-DD (backfill window), --outlet ID[,ID,...]
+(only those outlets), --no-activity, --only-activity, --dry-run (parse and count,
 write nothing).
 """
 from __future__ import annotations
@@ -109,9 +109,10 @@ def main() -> int:
         alert("[CC ERP] Petpooja logs: failed before the pull", traceback.format_exc()[-3000:])
         return 1
     if args.outlet:
-        outlets = [o for o in outlets if o[0] == str(args.outlet)]
+        wanted = {x.strip() for x in str(args.outlet).split(",") if x.strip()}
+        outlets = [o for o in outlets if o[0] in wanted]
         if not outlets:
-            log(f"outlet {args.outlet} not in the dropdown"); return 1
+            log(f"outlet(s) {args.outlet} not in the dropdown"); return 1
     log(f"{len(outlets)} outlets in the dropdown")
 
     conn = None if args.dry_run else L.connect()
