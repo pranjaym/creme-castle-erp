@@ -173,6 +173,17 @@ export default async function AreaView({ am, date, latest }:
             excluded. Swiggy values and baskets come from the billed Petpooja order, matched on Swiggy&apos;s own
             order number.</p>
         </Period>
+        <Period label="Cancelled after the rider picked up (not the store's fault)">
+          <Fold label="Returned orders this week, every one" count={A.returned.length}>
+            <Rows cols={['Store', 'Day', 'Time', 'What the customer had ordered', 'Bill', 'Zomato paid', 'Net loss']}
+              rows={A.returned.map(r => [r.code, r.dlabel, r.time, <Basket key="b" text={r.basket} />,
+                inr(r.value), inr(r.comp), inr(r.net)])}
+              empty="No order came back after pickup this week." />
+          </Fold>
+          <p className="note">{n0(A.returned.length)} orders, {inr(A.returned.reduce((t, r) => t + (r.net ?? 0), 0))} net
+            after Zomato&apos;s compensation. The store accepted, made and handed these over; Zomato then cancelled them
+            because the customer could not receive the order. Not counted as turned away, not in section 9&apos;s totals.</p>
+        </Period>
       </div>
 
       <SecHead num="5">Complaints</SecHead>
@@ -294,9 +305,9 @@ export default async function AreaView({ am, date, latest }:
             return { c, z, s, total: (z?.total_wk ?? 0) + s };
           }).sort((a, b) => b.total - a.total);
           return (
-            <Rows cols={['Store', 'Z turned-away', 'Z refunds', 'S cancelled on store', 'Total lost']}
+            <Rows cols={['Store', 'Z turned-away', 'Z refunds', 'S cancelled on store', 'Total lost', 'Z returned after pickup (net, not in total)']}
               rows={rows.map(r => [r.c, inr(r.z?.stockout_wk ?? 0), inr(r.z?.refunds_wk ?? 0),
-                inr(r.s), <b key="t">{inr(r.total)}</b>])}
+                inr(r.s), <b key="t">{inr(r.total)}</b>, inr(r.z?.returned_wk ?? 0)])}
               empty="Nothing lost this week, on either app." />
           );
         })()}

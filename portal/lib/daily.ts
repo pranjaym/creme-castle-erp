@@ -45,6 +45,7 @@ export interface Receipt {
   tag?: string | null; reason?: string | null; refund?: number | null;
   value?: number | null; rating?: string | null;
   ready_secs?: number | null; waited_min?: number | null;
+  comp?: number | null; net?: number | null;   // F49 returned orders only
 }
 export interface TrendDay {
   d: string; online: number | null; offmin: number | null; comps: number | null;
@@ -62,6 +63,10 @@ export interface StoreDetail {
   waits3_day: number; waits3_wk: number; delivered_day: number;
   other_cancels_wk: number; refunds_day: number; refunds_wk: number;
   stockout_day: number; stockout_wk: number;
+  // F49 (migration 223): cancelled by Zomato AFTER the rider picked up. Not the
+  // store's fault; value is the bill, comp is what Zomato paid, net is the loss.
+  returned_day: Receipt[]; returned_wk: Receipt[];
+  returned_loss_day: number; returned_loss_wk: number;
 }
 export interface StoreReasons {
   comps?: number; wrong?: number; missing?: number; packaging?: number; quality?: number; late?: number;
@@ -181,6 +186,7 @@ export interface AreaReceipt {
   reason?: string | null; tag?: string | null; rating?: string | null;
   value?: number | null; refund?: number | null; today?: boolean;
   ready_secs?: number | null; waited_min?: number | null;
+  comp?: number | null; net?: number | null;   // F49 returned orders only
 }
 export interface OnlineDip {
   code: string; online_day: number; offmin_day: number; offmin_wk: number;
@@ -193,6 +199,7 @@ export interface WaitStore {
 export interface FrStore { code: string; fr_day: number; fr_wk: number; delivered_wk: number; pct: number | null }
 export interface MoneyStore {
   code: string; stockout_wk: number; refunds_wk: number; total_wk: number; rej_wk: number; comp_wk: number;
+  returned_wk?: number; returned_n_wk?: number;   // F49, net of Zomato's compensation, not in total_wk
 }
 
 // ---- the shut-shop tracker (migration 192, 26 Aug 2026) ----
@@ -218,6 +225,7 @@ export interface AreaDetail extends ShutBlock {
   online_dips: OnlineDip[]; rejections: AreaReceipt[]; complaints: AreaReceipt[];
   low_ratings: AreaReceipt[]; wait_stores: WaitStore[]; fr_stores: FrStore[];
   fr_orders: AreaReceipt[]; money_stores: MoneyStore[];
+  returned: AreaReceipt[];   // F49
 }
 export async function getAreaDetail(am: string, date: string): Promise<AreaDetail> {
   return rpc<AreaDetail>('dash_area_detail', { p_am: am, p_date: date });
@@ -256,6 +264,7 @@ export interface CentralDetail extends ShutBlock {
   fr_orders: CentralReceipt[];
   money_stores: (MoneyStore & { am: string })[];
   lever_stores: LeverStore[];
+  returned: CentralReceipt[];   // F49
 }
 export async function getCentralDetail(date: string): Promise<CentralDetail> {
   return rpc<CentralDetail>('dash_central_detail', { p_date: date });

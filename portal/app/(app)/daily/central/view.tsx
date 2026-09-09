@@ -370,13 +370,26 @@ export default async function CentralView({ date, latest }: { date: string; late
             Swiggy&apos;s own order number, never on a name. {inr(sCancWkVal)} of Swiggy orders were cancelled on
             stores across the 7 days.</p>
           <p className="note">{inr(rejValWk)} across the 7 days, every rupee of it an order a customer tried to
-            place. Only store-caused rejections are listed, in the order feed&apos;s own words: <b>items out of
-            stock, kitchen is full, restaurant is closed, timeout, unavailable to accept</b>. Customer and rider
-            cancellations are excluded.</p>
+            place. Only rejections Zomato itself marks as made by the store are listed (<b>items out of stock,
+            kitchen is full, restaurant is closed, timeout, device issue</b>). Customer and rider cancellations are
+            excluded, and orders cancelled after pickup have their own list below.</p>
           <p className="note">Two counts, as with complaints. Zomato&apos;s daily report counts {n0(srejWk)} store
             rejections for the week; {n0(D.rejections.length)} order rows carry one of those reasons. The list is
             the shorter of the two because only orders that reached the store appear in the order feed. Both are
             true; never add them together.</p>
+        </Period>
+        <Period label="Cancelled after the rider picked up (not the store's fault)">
+          <Fold label="Returned orders this week, every one" count={D.returned.length}>
+            <Rows cols={['Store', 'AM', 'Day', 'Time', 'What the customer had ordered', 'Bill', 'Zomato paid', 'Net loss']}
+              rows={D.returned.map(r => [r.code, r.am, r.dlabel, r.time, <Basket key="b" text={r.basket} />,
+                inr(r.value), inr(r.comp), inr(r.net)])}
+              empty="No order came back after pickup this week." />
+          </Fold>
+          <p className="note">{n0(D.returned.length)} orders, {inr(D.returned.reduce((t, r) => t + (r.value ?? 0), 0))} on
+            the bill, {inr(D.returned.reduce((t, r) => t + (r.net ?? 0), 0))} net after Zomato&apos;s compensation. The
+            store accepted, made and handed these over; Zomato then cancelled them (the customer could not receive the
+            order, or a rider problem after pickup). Zomato&apos;s report shortens the commonest case to &quot;Unavailable
+            to accept the order&quot;; Petpooja holds the full sentence. Not counted as turned away, not in section 11.</p>
         </Period>
       </div>
 
@@ -533,9 +546,9 @@ export default async function CentralView({ date, latest }: { date: string; late
             return { c, am, z, sVal, total: (z?.total_wk ?? 0) + sVal };
           }).sort((a, b) => b.total - a.total);
           return (
-            <Rows cols={['Store', 'AM', 'Z turned-away', 'Z refunds', 'S cancelled on store', 'Total lost']}
+            <Rows cols={['Store', 'AM', 'Z turned-away', 'Z refunds', 'S cancelled on store', 'Total lost', 'Z returned after pickup (net, not in total)']}
               rows={rows.map(r => [r.c, r.am, inr(r.z?.stockout_wk ?? 0), inr(r.z?.refunds_wk ?? 0),
-                inr(r.sVal), <b key="t">{inr(r.total)}</b>])}
+                inr(r.sVal), <b key="t">{inr(r.total)}</b>, inr(r.z?.returned_wk ?? 0)])}
               empty="Nothing lost this week, on either app." />
           );
         })()}

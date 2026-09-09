@@ -100,6 +100,19 @@ def store_page(s, det, reasons, all_stores, date):
             + R.note("Cancellations caused by the customer or the rider are not listed here and are not counted "
                      f"against the store ({R.n0(det.get('other_cancels_wk'))} this week).")))
 
+    # 2b. F49: cancelled by Zomato AFTER the rider picked up. Not the store's fault.
+    ret = (det.get("returned_day") or []) + (det.get("returned_wk") or [])
+    body += R.period("Cancelled after the rider picked up (not the store's fault)",
+        R.krow(R.kpi("Returned orders this week", R.n0(len(ret)),
+                     f"{R.money(det.get('returned_loss_wk'))} net loss after Zomato's compensation"))
+        + R.rows(["Day", "Time", "What the customer had ordered", "Bill", "Zomato paid", "Net loss"],
+                 [[R.esc(r.get("dlabel") or day_label), R.esc(r.get("time") or ""), R.basket(r.get("basket")),
+                   R.money(r.get("value")), R.money(r.get("comp")), R.money(r.get("net"))] for r in ret],
+                 "No order came back after pickup this week.")
+        + R.note("The store accepted, made and handed these over; Zomato then cancelled them because the customer "
+                 "could not receive the order. Zomato pays part of the bill. Not counted as turned away, not in "
+                 "the avoidable-loss total."))
+
     # 3. Was it right?
     comps_day = det.get("complaints_day") or []
     comps_wk = det.get("complaints_wk") or []
@@ -206,7 +219,9 @@ def store_page(s, det, reasons, all_stores, date):
                    [["Refunds to customers", R.money(det.get("refunds_day")), R.money(det.get("refunds_wk")),
                      "charged back to the restaurant for complaints"],
                     ["Orders turned away", R.money(det.get("stockout_day")), R.money(det.get("stockout_wk")),
-                     "value of store-rejected orders (section 2 lists them)"]])
+                     "value of store-rejected orders (section 2 lists them)"],
+                    ["Returned after pickup, net of Zomato's compensation", R.money(det.get("returned_loss_day")),
+                     R.money(det.get("returned_loss_wk")), "not the store's fault; not in the total below"]])
             + R.krow(R.kpi("Total avoidable loss, 7 days", R.money(total_loss), "",
                            R.verdict(total_loss < 1000, "small" if total_loss < 1000
                                      else "this is the number to bring down: both lines are store-controllable")))

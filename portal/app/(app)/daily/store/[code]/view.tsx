@@ -194,6 +194,21 @@ export default async function StoreView({ code, date, latest }:
             store ({det.other_cancels_wk} on Zomato this week). Swiggy values and baskets come from the billed
             Petpooja order, matched on Swiggy&apos;s own order number.</p>
         </Period>
+        <Period label="Cancelled after the rider picked up (not the store's fault)">
+          <div className="krow"><div className="kpi"><div className="dlabel"><AppTag app="Z" />Returned orders this week</div>
+            <div className="dvalue">{n0(det.returned_day.length + det.returned_wk.length)}</div>
+            <div className="ddelta">{inr(det.returned_loss_wk)} net loss after Zomato&apos;s compensation</div></div></div>
+          <Rows cols={['Day', 'Time', 'What the customer had ordered', 'Bill', 'Zomato paid', 'Net loss']}
+            rows={[
+              ...det.returned_day.map(r => R(r, dShort(date), r.time, <Basket key="b" text={r.basket} />, inr(r.value), inr(r.comp), inr(r.net))),
+              ...det.returned_wk.map(r => R(r, r.dlabel, r.time, <Basket key="b" text={r.basket} />, inr(r.value), inr(r.comp), inr(r.net))),
+            ]}
+            empty="No order came back after pickup this week." />
+          <p className="note">The store accepted, made and handed these over; Zomato then cancelled them because the
+            customer could not receive the order (Zomato&apos;s report shortens this to &quot;Unavailable to accept the
+            order&quot;; Petpooja holds the full sentence). Zomato pays part of the bill. These are not counted as turned
+            away and not in the avoidable-loss total.</p>
+        </Period>
       </div>
 
       <SecHead num="3">Was it right?</SecHead>
@@ -318,6 +333,7 @@ export default async function StoreView({ code, date, latest }:
               ['Refunds to customers', <AppTag key="a" app="Z" />, inr(det.refunds_day), inr(det.refunds_wk), 'charged back to the restaurant for complaints'],
               ['Orders turned away', <AppTag key="a" app="Z" />, inr(det.stockout_day), inr(det.stockout_wk), 'value of store-rejected orders (section 2 lists them)'],
               ['Orders cancelled on the store', <AppTag key="a" app="S" />, inr(sCancDayVal), inr(sCancWkVal), 'billed value of the orders in section 2'],
+              ['Returned after pickup, net of Zomato\'s compensation', <AppTag key="a" app="Z" />, inr(det.returned_loss_day), inr(det.returned_loss_wk), 'not the store\'s fault; shown for completeness, not in the total below'],
             ]} />
           <div className="krow" style={{ marginTop: 10 }}>
             <div className="kpi"><div className="dlabel">Total avoidable loss, 7 days, both apps</div>
