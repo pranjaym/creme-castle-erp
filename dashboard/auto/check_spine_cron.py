@@ -48,7 +48,7 @@ def main():
             pass
 
     import psycopg2
-    conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+    conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"], connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
     try:
         with conn.cursor() as cur:
             cur.execute(

@@ -52,7 +52,7 @@ def load_env_file(path):
 
 
 def connect():
-    return psycopg2.connect(env("SPINE_DATABASE_URL"), connect_timeout=30)
+    return psycopg2.connect(env("SPINE_DATABASE_URL"), connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
 
 
 def _hashable(row):

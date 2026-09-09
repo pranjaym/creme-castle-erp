@@ -67,7 +67,7 @@ def load_env_file(path):
 
 
 def connect():
-    return psycopg2.connect(env("SPINE_DATABASE_URL"), connect_timeout=30)
+    return psycopg2.connect(env("SPINE_DATABASE_URL"), connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
 
 
 def open_run(cur, window_from, window_to, raw_path=None, sha=None):
@@ -108,7 +108,17 @@ def load_shape(cur, shape, rows, run_id, pull_date=None):
         if missing:
             raise RuntimeError(f"{shape}: row missing columns {sorted(missing)[:5]}")
 
-    cur.execute(f"select id, row_hash, {', '.join(key_cols)} from {table} where superseded_at is null")
+    # F47 (10 Sep 2026): compare against the rows' own date window only. Every
+    # natural key carries business_date, so a current row outside the window can
+    # never match a key in this file; reading the whole table pulled 524k rows
+    # (227 MB) to the laptop each run and grew every day.
+    dates = [r.get("business_date") for r in rows if r.get("business_date")]
+    if dates and len(dates) == len(rows):
+        cur.execute(f"select id, row_hash, {', '.join(key_cols)} from {table} "
+                    f"where superseded_at is null and business_date between %s and %s",
+                    (min(dates), max(dates)))
+    else:
+        cur.execute(f"select id, row_hash, {', '.join(key_cols)} from {table} where superseded_at is null")
     current = {tuple(str(x) for x in rec[2:]): (rec[0], rec[1]) for rec in cur.fetchall()}
 
     to_insert, to_supersede, unchanged = [], [], 0

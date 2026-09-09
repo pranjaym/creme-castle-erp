@@ -67,7 +67,7 @@ def main():
 
     reports = (["online_orders", "order_summary_item"]
                if args.report == "both" else [args.report])
-    conn = psycopg2.connect(ingest.env("SPINE_DATABASE_URL"))
+    conn = psycopg2.connect(ingest.env("SPINE_DATABASE_URL"), connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
     try:
         for rep in reports:
             run_report(rep, args.days, conn)

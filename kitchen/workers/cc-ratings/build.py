@@ -116,7 +116,7 @@ def parse_items(s):
     return out
 
 def fetch(days):
-    conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+    conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"], connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("select max(order_date) d from landing.zomato_order_details where superseded_at is null")
     end = cur.fetchone()["d"]; start = end - timedelta(days=days-1)
