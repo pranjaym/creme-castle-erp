@@ -140,7 +140,19 @@ def main() -> int:
             log(f"outlet(s) {args.outlet} not in the dropdown"); return 1
     log(f"{len(outlets)} outlets in the dropdown")
 
-    conn = None if args.dry_run else L.connect()
+    # Opening the connection is itself a transport step, and it sat between the
+    # two guarded blocks: on 10 Sep 2026 the backfill hit "could not translate
+    # host name ... pooler.supabase.com" here and died with exit 1 and an owner
+    # mail for what was only the laptop losing DNS for a moment. It defers (F50).
+    try:
+        conn = None if args.dry_run else L.connect()
+    except Exception as e:
+        if is_transport(e):
+            log(f"could not reach the database ({type(e).__name__}: {str(e)[:120]}); deferring")
+            return 75
+        log(traceback.format_exc())
+        alert("[CC ERP] Petpooja logs: could not open the database", traceback.format_exc()[-3000:])
+        return 1
     cur = conn.cursor() if conn else None
     hashes: dict[str, str] = {}
     totals = {"store_log": [0, 0, 0], "item_log": [0, 0, 0], "activity": [0, 0, 0]}

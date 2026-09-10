@@ -19,17 +19,25 @@ PYTHON="${CC_PYTHON:-/Library/Frameworks/Python.framework/Versions/3.14/bin/pyth
 [ -x "$PYTHON" ] || PYTHON="$(command -v python3)"
 ok=0; failed=0; skipped=0; failed_days=""
 
-loaded_already() {   # a day is done when the store log already holds rows for it
+loaded_already() {
+  # A day counts as done only when BOTH logs hold rows for most of the network.
+  # "Any rows at all" was too weak and skipped three half-loaded days on 10 Sep
+  # 2026: 5 Sep held one outlet (the first Janakpuri test) and 14 and 17 Aug held
+  # a store log with no item log at all. A live day carries 41 outlets in each,
+  # so 30 and 20 leave room for genuinely quiet outlets without waving a gap through.
   "$PYTHON" - "$1" <<'PY' 2>/dev/null
 import sys, os
 sys.path.insert(0, os.getcwd())
 import load as L
 L.load_env_file(os.path.join(os.getcwd(), "..", "..", ".env.local"))
 c = L.connect(); cur = c.cursor()
-cur.execute("select count(*) from landing.petpooja_store_status_log "
+cur.execute("select count(distinct petpooja_rest_id) from landing.petpooja_store_status_log "
             "where superseded_at is null and business_date = %s", (sys.argv[1],))
-n = cur.fetchone()[0]; c.close()
-raise SystemExit(0 if n > 0 else 1)
+store_outlets = cur.fetchone()[0]
+cur.execute("select count(distinct petpooja_rest_id) from landing.petpooja_item_toggle_log "
+            "where superseded_at is null and business_date = %s", (sys.argv[1],))
+item_outlets = cur.fetchone()[0]; c.close()
+raise SystemExit(0 if (store_outlets >= 30 and item_outlets >= 20) else 1)
 PY
 }
 
