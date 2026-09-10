@@ -33,7 +33,47 @@ python3 run_pulse.py --no-items       # order side only, about 10 seconds
 python3 run_pulse.py --date 2026-08-28 --occasion "Raksha Bandhan"
 ```
 
-## The schedule
+## The schedule: OFF since 31 August 2026
+
+**The hourly schedule is switched off.** Pranjay's instruction, 31 Aug 2026: "I
+don't need hourly pulse now. Can we stop it? Just for a special day, I might ask to
+come back here." So the pulse is now an ON DEMAND tool for festivals and big days,
+not a standing hourly job.
+
+How it was switched off, and how to reverse it:
+
+```bash
+# OFF (done 31 Aug 2026)
+launchctl unload ~/Library/LaunchAgents/in.cremecastle.pulse.plist
+mkdir -p ~/Library/LaunchAgents/disabled
+mv ~/Library/LaunchAgents/in.cremecastle.pulse.plist ~/Library/LaunchAgents/disabled/
+
+# BACK ON for a special day
+mv ~/Library/LaunchAgents/disabled/in.cremecastle.pulse.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/in.cremecastle.pulse.plist
+
+# and OFF again when the day is done
+launchctl unload ~/Library/LaunchAgents/in.cremecastle.pulse.plist
+mv ~/Library/LaunchAgents/in.cremecastle.pulse.plist ~/Library/LaunchAgents/disabled/
+```
+
+The `mv` matters. Unloading alone is not enough: launchd loads every `.plist` sitting
+in `~/Library/LaunchAgents` at the next login or restart, so an unloaded-but-present
+plist quietly comes back. It does not look into subfolders, which is why `disabled/`
+works.
+
+`RunAtLoad` is true, so `launchctl load` fires a pulse immediately rather than waiting
+for the next :05. On a festival morning that is the behaviour you want.
+
+Nothing else in the repo reads this job's output or its success stamp (checked 31 Aug
+2026), so while it is off nothing else goes stale, and no watchdog anywhere will
+alarm about it. The "gone dark" alert lives inside `run_pulse.sh` itself, so a job
+that never runs never mails.
+
+Running one by hand (see above) works whether the schedule is on or off, and needs
+none of this.
+
+### What the schedule does when it is on
 
 `~/Library/LaunchAgents/in.cremecastle.pulse.plist`, every hour at :05.
 
@@ -46,11 +86,6 @@ The wrapper, not the schedule, decides whether to act:
   loses that hour and picks up at 09:05;
 - it holds its own lock, so a slow hour is never overtaken by the next slot;
 - it holds the Mac awake for the duration.
-
-```bash
-launchctl unload ~/Library/LaunchAgents/in.cremecastle.pulse.plist   # stop it
-launchctl load   ~/Library/LaunchAgents/in.cremecastle.pulse.plist   # start it
-```
 
 ## Where the data goes, and where it does NOT go
 

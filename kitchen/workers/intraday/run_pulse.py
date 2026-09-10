@@ -289,7 +289,11 @@ def pull(conn, report, business_date, occasion):
                 pass
             try:
                 import psycopg2 as _pg
-                conn = _pg.connect(os.environ["SPINE_DATABASE_URL"])
+                # F47: the reconnect after a dead socket needs the keepalives
+                # most of all, or the replacement can hang the same way.
+                conn = _pg.connect(os.environ["SPINE_DATABASE_URL"], connect_timeout=30,
+                                   keepalives=1, keepalives_idle=30,
+                                   keepalives_interval=10, keepalives_count=5)
                 print("  spine connection was dead; reconnected.")
             except Exception:
                 print("  spine unreachable; this run is recorded as failed by the "
