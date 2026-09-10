@@ -45,9 +45,25 @@ def log(*a):
     print(*a, flush=True)
 
 
+ALERT_STAMP = os.path.join(HERE, ".last_alert")
+
+
 def alert(subject, body):
+    """One owner mail per day, and none at all when CC_NO_ALERT is set (the
+    backfill sets it). Added 10 Sep 2026 after a 38-day backfill loop sent one
+    mail per failing day overnight: the fault was worth ONE message, not 17."""
     import smtplib
     from email.message import EmailMessage
+    if os.environ.get("CC_NO_ALERT"):
+        log(f"alert suppressed (CC_NO_ALERT): {subject}")
+        return
+    today = datetime.now(IST).date().isoformat()
+    try:
+        if open(ALERT_STAMP).read().strip() == today:
+            log(f"alert already sent today, not repeating: {subject}")
+            return
+    except FileNotFoundError:
+        pass
     try:
         user = os.environ["CC_MAIL_USER"]
         msg = EmailMessage()
@@ -57,13 +73,22 @@ def alert(subject, body):
         s.login(user, os.environ["CC_MAIL_APP_PASSWORD"].replace(" ", ""))
         s.send_message(msg)
         s.quit()
+        with open(ALERT_STAMP, "w") as f:
+            f.write(today)
         log("owner alert sent")
     except Exception as e:
         log(f"alert could not be sent: {type(e).__name__}: {e}")
 
 
 def is_transport(e: Exception) -> bool:
+    """A network problem, not a data problem: defer and let the next slot retry.
+    psycopg2's OperationalError / InterfaceError belong here. They are what a
+    keepalive-killed socket raises ("could not receive data from server"), and
+    on 9 Sep 2026 the overnight backfill mailed 17 of those as real failures."""
     import requests
+    import psycopg2
+    if isinstance(e, (psycopg2.OperationalError, psycopg2.InterfaceError)):
+        return True
     return isinstance(e, TRANSPORT) or isinstance(e, requests.exceptions.RequestException)
 
 
