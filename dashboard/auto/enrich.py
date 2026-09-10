@@ -62,7 +62,7 @@ def _load_glossary_from_spine():
     dsn = os.environ.get("SPINE_DATABASE_URL")
     if not dsn:
         raise RuntimeError("SPINE_DATABASE_URL not set")
-    conn = psycopg2.connect(dsn)
+    conn = psycopg2.connect(dsn, connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
     try:
         cur = conn.cursor()
         cur.execute("select item_name, alias, category from public.item_glossary")

@@ -708,7 +708,7 @@ def revive(conn):
             conn.close()
         except Exception:
             pass
-        return psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+        return psycopg2.connect(os.environ["SPINE_DATABASE_URL"], connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
 
 
 # ------------------------------------------------------------------------ main --
@@ -738,7 +738,7 @@ def main():
     occasion = args.occasion or cfg_occasion or None
     anchor = (dt.date.fromisoformat(args.festival_anchor) if args.festival_anchor
               else cfg_anchor)
-    conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+    conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"], connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
     errors = []
     try:
         if not args.report_only:

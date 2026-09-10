@@ -160,7 +160,7 @@ def build_mail(sender, to, cc, subject, body_text, attachments):
 
 def main():
     env = load_env()
-    conn = psycopg2.connect(env["SPINE_DATABASE_URL"])
+    conn = psycopg2.connect(env["SPINE_DATABASE_URL"], connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
     conn.autocommit = True
     cur = conn.cursor()
 

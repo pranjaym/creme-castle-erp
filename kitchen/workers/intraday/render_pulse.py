@@ -477,7 +477,7 @@ def main():
               else dt.datetime.now().time().replace(second=0, microsecond=0))
     occasion, anchor = run_pulse.occasion_for(day)
 
-    conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+    conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"], connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
     try:
         with conn.cursor() as cur:
             html = build(cur, day, cutoff, occasion, anchor)

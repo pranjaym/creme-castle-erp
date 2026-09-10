@@ -25,7 +25,10 @@ function displayNo(shopifyName, id) {
 
 const oms = createClient(reqEnv('OMS_SUPABASE_URL'), reqEnv('OMS_SUPABASE_READONLY_KEY'),
   { auth: { persistSession: false } });
-const db = new pg.Client({ connectionString: reqEnv('SPINE_DATABASE_URL') });
+// F47 (10 Sep 2026): TCP keepalives and a connect timeout, so a dead network
+// fails in about a minute instead of hanging the run for hours.
+const db = new pg.Client({ connectionString: reqEnv('SPINE_DATABASE_URL'),
+  keepAlive: true, keepAliveInitialDelayMillis: 30000, connectionTimeoutMillis: 30000 });
 await db.connect();
 
 try {

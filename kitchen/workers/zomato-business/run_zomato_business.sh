@@ -93,8 +93,21 @@ if command -v git >/dev/null 2>&1 && git -C "$HERE" rev-parse --git-dir >/dev/nu
   git -C "$HERE" pull --ff-only >> "$LOG" 2>&1 || log "git pull skipped/failed"
 fi
 
-"$PYTHON" run_nightly.py >> "$LOG" 2>&1
+# F47 (10 Sep 2026): a hard wall-clock cap. A stalled database socket used to hang
+# a run for 4.5 hours, and launchd will not start a second instance of a label,
+# so one hung run silently ate every later slot. macOS ships no timeout(1), so
+# a watchdog subshell kills the run after CC_WALL_CAP seconds (default 40 min);
+# the exit is non-zero, no stamp is written, and the next slot retries.
+WALL_CAP="${CC_WALL_CAP:-2400}"
+"$PYTHON" run_nightly.py >> "$LOG" 2>&1 &
+RUN_PID=$!
+( sleep "$WALL_CAP"; if kill -0 "$RUN_PID" 2>/dev/null; then
+    echo "wall-clock cap of ${WALL_CAP}s hit at $(date): killing run (pid $RUN_PID)" >> "$LOG"
+    kill "$RUN_PID" 2>/dev/null; sleep 15; kill -9 "$RUN_PID" 2>/dev/null; fi ) &
+WATCHDOG=$!
+wait "$RUN_PID"
 status=$?
+kill "$WATCHDOG" 2>/dev/null
 log "----- exit $status -----"
 
 if [ "$status" -eq 0 ]; then

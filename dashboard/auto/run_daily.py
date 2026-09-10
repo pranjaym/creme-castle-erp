@@ -179,7 +179,7 @@ def load_sub_order_wise():
         window = [(today - dt.timedelta(days=i)).isoformat()
                   for i in range(SUB_ORDER_LOOKBACK_DAYS, 0, -1)]      # oldest first
         table = ingest.REPORTS["sub_order_wise"]["table"]
-        conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+        conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"], connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
         try:
             with conn.cursor() as cur:
                 cur.execute(f"select distinct business_date from {table} "
@@ -224,7 +224,7 @@ def load_sub_order_wise():
                         except Exception:
                             pass
                         try:
-                            conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+                            conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"], connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
                             print("spine connection was dead; reconnected.")
                         except Exception as ce:
                             print(f"spine reconnect FAILED, abandoning the remaining "
@@ -261,7 +261,7 @@ def sync_spine(files):
         sys.path.insert(0, SCRAPER_DIR)
         import psycopg2
         import sync as spine_sync
-        conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+        conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"], connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
         try:
             results = []
             for report, path in files:
@@ -417,7 +417,7 @@ def outlet_watch():
         return ""
     try:
         import psycopg2
-        conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+        conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"], connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
         try:
             cur = conn.cursor()
             cur.execute("""select to_regclass('public.outlet_watch')""")

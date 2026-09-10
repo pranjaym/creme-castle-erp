@@ -169,7 +169,7 @@ def pull_window(end, days, include_customer=True):
     wanted = ["order_history"] + (["customer_details"] if include_customer else [])
     paths = scrape.scrape_exports(wanted, start, end, max_retries=2, retry_wait_s=45)
 
-    conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"])
+    conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"], connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
     try:
         for key in wanted:
             path = paths.get(key)

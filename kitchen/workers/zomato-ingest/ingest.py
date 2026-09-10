@@ -347,7 +347,7 @@ def main():
 
     receipt = store_receipt(args.file)
     import psycopg2
-    conn = psycopg2.connect(env("SPINE_DATABASE_URL"))
+    conn = psycopg2.connect(env("SPINE_DATABASE_URL"), connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
     try:
         load_records(records, skipped, dupes, conn, receipt, args.report_key)
     finally:
