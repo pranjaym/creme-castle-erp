@@ -33,6 +33,7 @@ two must be changed together:
      Zomato's daily-report words. Mixing the two made filters return nothing.
 """
 from __future__ import annotations
+import decimal
 import html
 from datetime import datetime
 
@@ -126,6 +127,11 @@ details.fold summary::-webkit-details-marker{display:none}
 .hbar .fill{background:var(--coral);height:100%}
 .hbar .val{width:44px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
 .note{font-size:11.5px;color:var(--muted);margin-top:5px;white-space:normal}
+.apptag{display:inline-block;font-size:10.5px;font-weight:800;color:#fff;border-radius:4px;padding:0 6px;
+ margin-right:6px;vertical-align:1px}
+.app-z{background:#E23744}.app-s{background:#F26522}
+.s1view.off{display:none}
+.sec-head small{font-size:11.5px;font-weight:400;color:var(--muted)}
 footer{margin-top:18px;border-top:1px solid var(--line);padding-top:9px;font-size:11.5px;color:var(--muted)}
 footer p{margin-bottom:6px;max-width:800px}
 footer a{color:var(--maroon)}
@@ -136,14 +142,46 @@ footer a{color:var(--maroon)}
 # The charts are server-rendered SVG on purpose, so the page is complete with
 # scripting off (some readers open the attachment in a viewer that blocks it).
 JS = """
-document.querySelectorAll('.rfilter').forEach(function(b){
+// Tag filters and app filters cooperate: a row must satisfy BOTH the chosen
+// tag and the chosen app. Same rule as the portal's dash.js, kept identical
+// on purpose so a reader who uses both never sees two behaviours.
+var _want = {};
+function _apply(target){
+  var w = _want[target] || {};
+  document.querySelectorAll('#'+target+' tbody tr').forEach(function(tr){
+    var okTag = !w.tag || tr.dataset.reason === w.tag;
+    var okApp = !w.app || tr.dataset.app === w.app;
+    tr.style.display = (okTag && okApp) ? '' : 'none';
+  });
+}
+document.querySelectorAll('.rfilter[data-reason]').forEach(function(b){
   b.addEventListener('click', function(){
     var target = b.dataset.target;
-    document.querySelectorAll('.rfilter[data-target="'+target+'"]').forEach(function(x){
+    document.querySelectorAll('.rfilter[data-reason][data-target="'+target+'"]').forEach(function(x){
       x.classList.toggle('on', x === b); });
-    var want = b.dataset.reason;
-    document.querySelectorAll('#'+target+' tbody tr').forEach(function(tr){
-      tr.style.display = (!want || tr.dataset.reason === want) ? '' : 'none'; });
+    _want[target] = _want[target] || {};
+    _want[target].tag = b.dataset.reason;
+    _apply(target);
+  });
+});
+// The section-1 app tabs: one table per app, the approved design.
+document.querySelectorAll('.s1tab').forEach(function(b){
+  b.addEventListener('click', function(){
+    var group = b.dataset.group || 'g1';
+    document.querySelectorAll('.s1tab[data-group="'+group+'"]').forEach(function(x){
+      x.classList.toggle('on', x === b); });
+    document.querySelectorAll('.s1view[data-group="'+group+'"]').forEach(function(v){
+      v.classList.toggle('off', v.dataset.view !== b.dataset.view); });
+  });
+});
+document.querySelectorAll('.appfilter').forEach(function(b){
+  b.addEventListener('click', function(){
+    var target = b.dataset.target;
+    document.querySelectorAll('.appfilter[data-target="'+target+'"]').forEach(function(x){
+      x.classList.toggle('on', x === b); });
+    _want[target] = _want[target] || {};
+    _want[target].app = b.dataset.app;
+    _apply(target);
   });
 });
 function cellKey(td){
@@ -206,12 +244,20 @@ def n0(v):
     return "-" if v is None else _grp(round(float(v)))
 
 
+def _fixed(v, dp):
+    """Round like JavaScript's toFixed, half away from zero, because Python's
+    own format rounds half to EVEN: a rating of 4.25 printed 4.2 here and 4.3 on
+    the portal, which is two products disagreeing over the same number."""
+    q = decimal.Decimal(1).scaleb(-dp)
+    return str(decimal.Decimal(str(float(v))).quantize(q, rounding=decimal.ROUND_HALF_UP))
+
+
 def n1(v):
-    return "-" if v is None else "{:.1f}".format(float(v))
+    return "-" if v is None else _fixed(v, 1)
 
 
 def n2(v):
-    return "-" if v is None else "{:.2f}".format(float(v))
+    return "-" if v is None else _fixed(v, 2)
 
 
 def lakh(v):
@@ -228,7 +274,7 @@ def goodv(v):
 
 def pct(v, dp=1):
     """A null percentage prints a dash, never the word null with a % after it."""
-    return "-" if v is None else ("{:." + str(dp) + "f}%").format(float(v))
+    return "-" if v is None else _fixed(v, dp) + "%"
 
 
 # ---------- page furniture
@@ -265,8 +311,12 @@ def vtile(label, value, delta, ok, text):
     return tile(label, value, delta, verdict(ok, text))
 
 
-def kpi(label, value, delta="", chip_html=""):
-    return (f'<div class="kpi"><div class="label">{esc(label)}</div><div class="value">{value}</div>'
+def kpi(label, value, delta="", chip_html="", raw_label=False):
+    """raw_label=True passes the label through unescaped, which is how a KPI
+    carries an app tag (the merged pages label their per-app KPIs Z or S).
+    Everything else is escaped, because most labels carry a store name."""
+    lab = label if raw_label else esc(label)
+    return (f'<div class="kpi"><div class="label">{lab}</div><div class="value">{value}</div>'
             + (f'<div class="delta">{delta}</div>' if delta else "") + chip_html + "</div>")
 
 
@@ -362,6 +412,132 @@ def basket(text, n=52):
     if len(t) <= n:
         return esc(t)
     return f'<span title="{esc(t)}">{esc(t[:n - 1])}&hellip;</span>'
+
+
+# ---------- the merged Zomato + Swiggy furniture (portal's swiggy-ui.tsx).
+# Locked with Pranjay on 30 Aug 2026: every row is tagged Z or S; clear outlet
+# mistakes read red and other reasons stay neutral; merged lists carry Both
+# apps / Zomato only / Swiggy only filters.
+def apptag(app):
+    a = "z" if app.upper() == "Z" else "s"
+    return f'<span class="apptag app-{a}">{app.upper()}</span>'
+
+
+def faulttag(why):
+    """Red only for the reasons that are unambiguously the store's doing."""
+    w = (why or "").lower()
+    bad = any(k in w for k in ("unavailable", "stock", "closed", "not accepting", "unable to connect"))
+    return f'<span class="rchip {"r-packing" if bad else "r-other"}">{esc(why or "")}</span>'
+
+
+def stars(rating):
+    if rating is None:
+        return "-"
+    n = int(round(float(rating)))
+    return f'<span class="rchip r-taste">{n} star{"" if n == 1 else "s"}</span>'
+
+
+def appfilter(target):
+    return ('<span class="rfilters" style="display:inline-flex">'
+            f'<button class="rfilter appfilter on" data-target="{target}" data-app="" type="button">Both apps</button>'
+            f'<button class="rfilter appfilter" data-target="{target}" data-app="Z" type="button">Zomato only</button>'
+            f'<button class="rfilter appfilter" data-target="{target}" data-app="S" type="button">Swiggy only</button>'
+            "</span>")
+
+
+def approws(table_id, cols, app_rows, empty="Nothing to list."):
+    """app_rows is a list of (app, [cells]) with cells already escaped."""
+    if not app_rows:
+        return note(esc(empty))
+    return appfilter(table_id) + rows(
+        cols, [cells for _, cells in app_rows], table_id=table_id,
+        row_attrs=[f' data-app="{a}"' for a, _ in app_rows])
+
+
+def apptabs(group="s1"):
+    """The two tab buttons over a section-1 table pair (Zomato, then Swiggy)."""
+    return ('<div class="rfilters">'
+            f'<button class="rfilter s1tab on" data-group="{group}" data-view="z" type="button">'
+            f'{apptag("Z")}Zomato</button>'
+            f'<button class="rfilter s1tab" data-group="{group}" data-view="s" type="button">'
+            f'{apptag("S")}Swiggy</button></div>')
+
+
+def s1view(group, view, inner, off=False):
+    return (f'<div class="s1view{" off" if off else ""}" data-group="{group}" data-view="{view}">'
+            + inner + "</div>")
+
+
+def swiggy_stores_table(srows, date, show_am=False):
+    """The Swiggy tab of the section-1 store table: the Zomato columns mirrored
+    one for one (Open % for Online %, Canc for Rej, 1-2 star for Comp), Wait
+    empty because Swiggy publishes no timing."""
+    def vs_avg(r):
+        avg = (r.get("orders_wk") or 0) / 7.0
+        if not avg or r.get("orders") is None:
+            return "-"
+        p = round(100.0 * (r["orders"] - avg) / avg)
+        if p >= 10:
+            return goodv(f"+{p}%")
+        if p <= -15:
+            return f'<span class="flag">{p}%</span>'
+        return ("+" if p >= 0 else "") + f"{p}%"
+
+    cols = ["#", "Store", "Orders", "vs avg", "Open %", "Canc", "1-2&#9733;", "Rating", "Wait"]
+    if show_am:
+        cols.insert(2, "AM")
+    body = []
+    for r in sorted(srows, key=lambda x: x.get("rank") or 99):
+        row = [str(r.get("rank") or "-"), store_link(r["code"], date)]
+        if show_am:
+            row.append(esc(r.get("am") or ""))
+        row += [n0(r.get("orders")), vs_avg(r),
+                flag("-" if r.get("open_pct") is None else n1(r["open_pct"]),
+                     (r.get("open_pct") if r.get("open_pct") is not None else 100) < 100),
+                flag(n0(r.get("canc")), (r.get("canc") or 0) >= 1),
+                flag(n0(r.get("low")), (r.get("low") or 0) >= 1),
+                "-" if r.get("rating") is None else n1(r["rating"]), "-"]
+        body.append(row)
+    return rows(cols, body, "No Swiggy outlet mapped for these stores.", sortable=True)
+
+
+def short_card(s):
+    """One card per store with Swiggy hours missing, the twin of DipCard."""
+    ser = [p.get("short") for p in (s.get("series") or [])]
+    labs = [str(p.get("d", ""))[-2:] for p in (s.get("series") or [])]
+    tps = [datetime.strptime(p["d"], "%Y-%m-%d").strftime("%a %-d %b") for p in (s.get("series") or [])]
+    return (f'<div class="minicard"><div class="mtitle">{apptag("S")}{esc(s["code"])}'
+            + (f' <small>&middot; {esc(s["am"])}</small>' if s.get("am") else "")
+            + f'</div><div class="mval">{n1(s.get("wk_short"))} <small>hrs short this week</small></div>'
+            + chart(ser, labs, tips=tps, title="Hours not open per day (day of month)",
+                    lo=0, width=280, height=96) + "</div>")
+
+
+def chartrow(*charts):
+    live = [c for c in charts if c]
+    return '<div class="chartgrid">' + "".join(live) + "</div>" if live else ""
+
+
+def clock(t):
+    """Swiggy timestamps arrive as ISO strings; the pages show clock only."""
+    if not t:
+        return "-"
+    s = str(t).replace("Z", "").replace("T", " ")
+    for f in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(s[:26], f).strftime("%I:%M %p").lstrip("0").lower()
+        except ValueError:
+            continue
+    return "-"
+
+
+def dshort(iso):
+    if not iso:
+        return "-"
+    try:
+        return datetime.strptime(str(iso)[:10], "%Y-%m-%d").strftime("%a %-d")
+    except ValueError:
+        return "-"
 
 
 def store_link(code, date, label=None):
@@ -545,5 +721,31 @@ def footer_html(extra=""):
             "orders between midnight and 2am sit on different days in the two systems. And rank 1 means the "
             "best-RUN store of the day (fewest complaints, fewest rejections, fully online), never the "
             "busiest.</p>"
+            f'<p>Live version, any date, at <a href="{PORTAL}/daily">{PORTAL}/daily</a> '
+            "(use your portal login). This file is the same page.</p></footer>")
+
+
+# The merged footer, word for word with the portal's own (store view, RECONCILE
+# plus the three notes under it). The Zomato-only footer above stays until the
+# area and central mails are merged too, then it goes.
+def footer_merged(extra=""):
+    return ('<footer>'
+            + (f"<p>{extra}</p>" if extra else "")
+            + "<p><b>Does an old day update?</b> Yes. This page reads the live database: the Zomato pulls refresh "
+            "recent days each morning, and Swiggy&rsquo;s file restates the whole month daily, so ratings and "
+            "complaints that arrive late appear when you come back.</p>"
+            "<p>Sales, discounts, ads and the order funnel are deliberately absent; they live in the sales "
+            "dashboards. Toing orders ride inside the Swiggy numbers (Swiggy counts both menus as one outlet). "
+            "Every number here is reproducible from the database, and no number is produced by AI.</p>"
+            "<p><b>Reading this next to Petpooja?</b> Differences are definitions, not errors. Petpooja still shows "
+            "more orders because walk-in and website are not here. Zomato files an order under the calendar day it "
+            "was placed and Swiggy under the midnight-to-midnight day, while Petpooja uses the trading night, so "
+            "post-midnight orders sit on different days. Swiggy splits a multi-cake order into separate deliveries "
+            "with new order numbers: Petpooja bills the split children while Swiggy&rsquo;s report keeps the "
+            "combined parent, so order-by-order matching never reaches 100%. And rank 1 means the best-RUN store of "
+            "the day, never the busiest.</p>"
+            "<p>Zomato item lists come from Zomato&rsquo;s item export with the evening feed as fallback. Swiggy "
+            "cancellation values and baskets are the billed Petpooja orders, matched on Swiggy&rsquo;s own order "
+            "number, never on a name. Hover any shortened item list to read it in full.</p>"
             f'<p>Live version, any date, at <a href="{PORTAL}/daily">{PORTAL}/daily</a> '
             "(use your portal login). This file is the same page.</p></footer>")

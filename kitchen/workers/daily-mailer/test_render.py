@@ -40,7 +40,12 @@ class FakeSMTP:
 # "None." is NOT one: that is the deliberate empty state of a folded list, the
 # same text the portal shows.
 LEAKS = [">None<", "None%", "&#8377;None", "None min", "None sec", "None of",
-         "nan", "undefined", "&amp;middot;", "&amp;rsquo;", "&amp;#8377;"]
+         "undefined", "&amp;middot;", "&amp;rsquo;", "&amp;#8377;"]
+
+# "nan" needs a word boundary. As a bare substring it fires on any customer who
+# wrote "bananas", which is how 15 Aug 2026 reported three phantom leaks; a real
+# one is the token on its own (Python prints "nan", Decimal prints "NaN").
+NAN = re.compile(r"\b(?:nan|NaN)\b")
 
 # The cell right after a reason chip is the order's item basket on every
 # receipt table, so this counts how many of those say something.
@@ -83,6 +88,9 @@ def main():
             for leak in LEAKS:
                 if leak in body:
                     problems.append(f"{m['Subject']}: {part.get_filename()} contains {leak!r}")
+            hit = NAN.search(re.sub(r"<[^>]+>", " ", body))
+            if hit:
+                problems.append(f"{m['Subject']}: {part.get_filename()} contains {hit.group(0)!r}")
             if body.count("<table") != body.count("</table>"):
                 problems.append(f"{m['Subject']}: {part.get_filename()} has unbalanced tables")
             # A receipt whose item list is a dash is a broken row, not missing

@@ -198,16 +198,25 @@ def main():
         detail = cur.fetchone()[0]
         cur.execute("select public.dash_store_reasons(%s, %s::date)", (s["code"], d))
         reasons = cur.fetchone()[0] or {}
-        store_html[s["code"]] = P.store_page(s, detail, reasons, stores, d)
+        # The Swiggy half of the merged page (migration 213). An unmapped store
+        # returns mapped = false and the page prints the Zomato half alone.
+        cur.execute("select public.dash_store_swiggy(%s, %s::date)", (s["code"], d))
+        swig = cur.fetchone()[0] or {}
+        store_html[s["code"]] = P.store_page(s, detail, reasons, swig, stores, d)
     area_html = {}
     for a in areas:
         if a["am"] not in AM_EMAIL:
             continue
         cur.execute("select public.dash_area_detail(%s, %s::date)", (a["am"], d))
+        adetail = cur.fetchone()[0]
+        cur.execute("select public.dash_area_swiggy(%s, %s::date)", (a["am"], d))
+        aswig = cur.fetchone()[0] or {}
         area_html[a["am"]] = P.area_page(
             a["am"], [s for s in stores if (s.get("am") or "Unassigned") == a["am"]],
-            cur.fetchone()[0], stores, areas, d)
-    central_html = P.central_page(data, central, areas, d)
+            adetail, aswig, stores, areas, d)
+    cur.execute("select public.dash_central_swiggy(%s::date)", (d,))
+    cswig = cur.fetchone()[0] or {}
+    central_html = P.central_page(data, central, cswig, areas, d)
     conn.close()
 
     if DRYRUN:
@@ -223,7 +232,7 @@ def main():
         return 0
 
     fname = lambda code: f"{code} {d}.html"
-    body_common = (f"Daily Zomato dashboard for {dlabel}.\n\n"
+    body_common = (f"Daily Zomato and Swiggy dashboard for {dlabel}.\n\n"
                    "Open the attached file in a browser (tap it on your phone) for the full page. Every "
                    "section shows the day first, then the 7 days ending on it, and every number lists the "
                    "orders behind it.\n\n"
