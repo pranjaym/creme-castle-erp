@@ -67,7 +67,15 @@ def load_env_file(path):
 
 
 def connect():
-    return psycopg2.connect(env("SPINE_DATABASE_URL"), connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
+    conn = psycopg2.connect(env("SPINE_DATABASE_URL"), connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
+    # F51 (13 Sep 2026): the spine's platform default statement_timeout is 2
+    # minutes, and it cancelled a sibling loader's read on a slow link. This is a
+    # batch loader already bounded by the wrapper's 40 minute wall clock, so one
+    # statement may take up to 10 minutes before it is cancelled.
+    with conn.cursor() as cur:
+        cur.execute("set statement_timeout = '10min'")
+    conn.commit()
+    return conn
 
 
 def open_run(cur, window_from, window_to, raw_path=None, sha=None):
@@ -112,11 +120,21 @@ def load_shape(cur, shape, rows, run_id, pull_date=None):
     # natural key carries business_date, so a current row outside the window can
     # never match a key in this file; reading the whole table pulled 524k rows
     # (227 MB) to the laptop each run and grew every day.
+    # F51 (13 Sep 2026): the fallback used to be the whole table again, which is
+    # the read that crossed the spine's 2 minute statement timeout on the Zomato
+    # side. For the order-grain sheets the key starts with order_id, so bound the
+    # read to the order ids in the file instead; that matches exactly the rows the
+    # full read could have matched, whatever their dates. Only a sheet with no
+    # usable date and no order_id key falls through to the full read.
     dates = [r.get("business_date") for r in rows if r.get("business_date")]
     if dates and len(dates) == len(rows):
         cur.execute(f"select id, row_hash, {', '.join(key_cols)} from {table} "
                     f"where superseded_at is null and business_date between %s and %s",
                     (min(dates), max(dates)))
+    elif "order_id" in key_cols:
+        ids = sorted({str(r["order_id"]) for r in rows if r.get("order_id") is not None})
+        cur.execute(f"select id, row_hash, {', '.join(key_cols)} from {table} "
+                    f"where superseded_at is null and order_id in (select unnest(%s::text[]))", (ids,))
     else:
         cur.execute(f"select id, row_hash, {', '.join(key_cols)} from {table} where superseded_at is null")
     current = {tuple(str(x) for x in rec[2:]): (rec[0], rec[1]) for rec in cur.fetchall()}
