@@ -52,7 +52,14 @@ def load_env_file(path):
 
 
 def connect():
-    return psycopg2.connect(env("SPINE_DATABASE_URL"), connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
+    conn = psycopg2.connect(env("SPINE_DATABASE_URL"), connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
+    # F51: the spine's platform default statement_timeout is 2 minutes. This is a
+    # batch loader already bounded by the wrapper's 40 minute wall clock, so one
+    # statement may take up to 10 minutes on a slow link before it is cancelled.
+    with conn.cursor() as cur:
+        cur.execute("set statement_timeout = '10min'")
+    conn.commit()
+    return conn
 
 
 def _hashable(row):
@@ -90,8 +97,19 @@ def load_shape(cur, shape, rows, run_id, pull_date=None):
         if missing:
             raise RuntimeError(f"{shape}: row missing columns {sorted(missing)[:5]}")
 
-    # current state, keyed
-    cur.execute(f"select id, row_hash, {', '.join(key_cols)} from {table} where superseded_at is null")
+    # current state, keyed. F51 (13 Sep 2026): read only the live rows this file
+    # can touch. For the day-grain shapes business_date is part of the natural key,
+    # so a live row outside the file's own date span can never match and need not
+    # be fetched. The unrestricted read had grown to 819k rows on the segment table
+    # and crossed the spine's 2 minute statement timeout on 13 Sep, which lost two
+    # mornings of loads. Order shapes are keyed by order id alone and stay unrestricted.
+    where, params = "superseded_at is null", ()
+    if "business_date" in key_cols:
+        days = [r["business_date"] for r in rows if r.get("business_date") is not None]
+        if days:
+            where += " and business_date between %s and %s"
+            params = (min(days), max(days))
+    cur.execute(f"select id, row_hash, {', '.join(key_cols)} from {table} where {where}", params)
     current = {tuple(str(x) for x in rec[2:]): (rec[0], rec[1]) for rec in cur.fetchall()}
 
     to_insert, to_supersede, unchanged = [], [], 0

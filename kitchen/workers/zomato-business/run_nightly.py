@@ -32,6 +32,7 @@ EXIT CODES, the house contract (same as workers/zomato-ingest/run_evening.py):
 from __future__ import annotations
 
 import argparse
+import imaplib
 import os
 import socket
 import ssl
@@ -79,7 +80,8 @@ DEFER = 75
 # dead session must alert loudly (the F24 lesson), never defer in silence.
 TRANSPORT = (socket.timeout, socket.gaierror, ssl.SSLError, ConnectionError,
              _rq.exceptions.Timeout, _rq.exceptions.ConnectionError,
-             psycopg2.OperationalError, psycopg2.InterfaceError)
+             psycopg2.OperationalError, psycopg2.InterfaceError,
+             imaplib.IMAP4.abort)   # F51: Gmail dropping the IMAP socket mid-poll
 
 # Playwright wraps a network drop in its own Error class, so it never matches
 # TRANSPORT by type; these message fragments are how one looks from outside.
@@ -164,9 +166,16 @@ def main():
         RB.log(f"DEFER, Zomato refused: {[(b['shape'], b['status']) for b in bad]}")
         return DEFER
 
+    # F51 (13 Sep 2026): the mailbox poll was the one step outside every guard, so
+    # an IMAP socket EOF (12 Sep 08:32) or read timeout (13 Sep 09:16) crashed the
+    # run with exit 1 and no owner mail. Both are transport: defer, the next slot retries.
     links = []
-    for w1, w2, sh in plan:
-        links += RB.wait_for_reports(since, len(sh), timeout_s=args.wait, window=(w1, w2))
+    try:
+        for w1, w2, sh in plan:
+            links += RB.wait_for_reports(since, len(sh), timeout_s=args.wait, window=(w1, w2))
+    except TRANSPORT as e:
+        RB.log(f"DEFER, mailbox unreachable while waiting for reports: {type(e).__name__}: {e}")
+        return DEFER
     if not links:
         RB.log("DEFER: no reports arrived; a later slot retries"); return DEFER
     if len(links) < len(shapes):
