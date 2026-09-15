@@ -8,7 +8,16 @@ import { spine } from '@/lib/supabase/service';
 
 // Phase 2 roles (migration 140). 'viewer' predates the role-equals-scope model and
 // is treated as read-only central until reassigned in /users.
-export type Role = 'admin' | 'central' | 'area_manager' | 'store' | 'viewer';
+export type Role = 'admin' | 'central' | 'area_manager' | 'store' | 'viewer' | 'chef' | 'controls';
+
+// Recipe module permissions (migration 229). Written once here so every page and
+// action reads the same sentence.
+export const recipePerms = (role: Role) => ({
+  view: ['admin', 'central', 'viewer', 'chef', 'controls'].includes(role),
+  draft: ['admin', 'chef', 'controls', 'central'].includes(role),
+  check: ['admin', 'controls', 'central'].includes(role),   // Narendra's step: rates, prices, checking
+  approve: role === 'admin',                                // Pranjay's step
+});
 
 export interface SessionUser {
   id: string;
