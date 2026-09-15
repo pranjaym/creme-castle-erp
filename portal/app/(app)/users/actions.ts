@@ -158,4 +158,6 @@ const ROLE_WORD: Record<Role, string> = {
   area_manager: 'an area manager',
   store: 'a store account',
   viewer: 'a viewer',
+  chef: 'a chef',
+  controls: 'the controls team',
 };

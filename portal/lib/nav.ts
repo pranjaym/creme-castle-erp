@@ -14,6 +14,7 @@ export interface NavSection {
 
 export function navSectionsFor(user: SessionUser): NavSection[] {
   const mgmt = user.role === 'admin' || user.role === 'central' || user.role === 'viewer';
+  const recipes = mgmt || user.role === 'chef' || user.role === 'controls';
   const sections: NavSection[] = [];
 
   sections.push({ title: null, items: [{ href: '/', label: 'Home' }] });
@@ -39,7 +40,19 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
         { href: '/glossary/outlets', label: 'Outlet Glossary' },
       ],
     });
-  } else if (user.role === 'area_manager') {
+  }
+  if (recipes) {
+    const items: NavItem[] = [
+      { href: '/recipes', label: 'Recipes home' },
+      { href: '/recipes/finished', label: 'Finished goods' },
+      { href: '/recipes/semi', label: 'Semi-finished' },
+      { href: '/recipes/ingredients', label: 'Ingredients & prices' },
+    ];
+    if (user.role !== 'chef') items.push({ href: '/recipes/food-cost', label: 'Food cost list' }, { href: '/recipes/impact', label: 'Price impact' });
+    items.push({ href: '/recipes/approvals', label: 'Changes & approvals' });
+    sections.push({ title: 'Recipes & costing', items });
+  }
+  if (user.role === 'area_manager') {
     sections.push({
       title: 'Store Performance',
       items: [
@@ -68,4 +81,6 @@ export const ROLE_LABELS: Record<Role, string> = {
   area_manager: 'Area Manager',
   store: 'Store',
   viewer: 'Viewer',
+  chef: 'Chef',
+  controls: 'Controls',
 };

@@ -41,6 +41,18 @@ export const ROLE_DEFS: RoleDef[] = [
     needs: 'nothing',
   },
   {
+    role: 'chef',
+    label: 'Chef',
+    blurb: 'The recipe book only: writes and changes recipes and sends them for checking. Sees no sales pages.',
+    needs: 'nothing',
+  },
+  {
+    role: 'controls',
+    label: 'Controls',
+    blurb: 'The recipe book with prices: checks recipes, keeps ingredient rates and selling prices, reads the food cost list. Sees no sales pages.',
+    needs: 'nothing',
+  },
+  {
     role: 'viewer',
     label: 'Viewer (old)',
     blurb: 'The role accounts had before roles existed. Same reach as central. Do not pick it for someone new.',
