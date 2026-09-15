@@ -198,8 +198,25 @@ def _scope_value(page) -> str:
     return page.evaluate("() => (document.querySelector(\"input[name='header_changed_rest_id']\")||{}).value || ''")
 
 
-def restore_all_outlets(page) -> bool:
-    """Put the session back on All Outlets and verify. Returns True when verified."""
+def _is_lost_connection(e) -> bool:
+    """True when the browser could not reach Petpooja at all. Playwright reports
+    these as net::ERR_* or a navigation Timeout; the socket layer as OSError."""
+    if isinstance(e, (ConnectionError, OSError, TimeoutError)):
+        return True
+    msg = str(e)
+    return "net::" in msg or "ERR_" in msg or "Timeout" in msg
+
+
+def restore_all_outlets(page):
+    """Put the session back on All Outlets and verify.
+
+    Tri-state on purpose (F53, 15 Sep 2026). True: verified. False: the page
+    answered and the session is genuinely still on one outlet, which is worth
+    waking the owner. None: we could not even ask, because the network died
+    under us, and that must defer to the next slot like any other transport
+    fault (F23). On 15 Sep a DNS drop mid-pull mailed "pick All Outlets by
+    hand" for a session the next slot would have restored by itself.
+    """
     try:
         _scope(page, 0)
         page.goto(DASHBOARD, wait_until="domcontentloaded", timeout=60000)
@@ -209,7 +226,18 @@ def restore_all_outlets(page) -> bool:
         log(f"scope restore: {'verified All Outlets' if ok else 'NOT verified: ' + head[:60]}")
         return ok
     except Exception as e:
-        log(f"scope restore failed: {type(e).__name__}: {str(e)[:120]}")
+        # F53: "the network died under us" and "the page answered and refused to
+        # move" are not the same failure. _scope raises only after it has asked
+        # three times AND read the scope field back, so that is a genuinely
+        # stuck session and the one case worth waking the owner at once.
+        # Anything unrecognised is treated as stuck, not as transport: the safe
+        # direction for an unknown fault is to alarm, never to go quiet.
+        if _is_lost_connection(e):
+            log(f"scope restore unverified, could not reach the page: "
+                f"{type(e).__name__}: {str(e)[:120]}")
+            return None
+        log(f"scope restore FAILED, session would not go back: "
+            f"{type(e).__name__}: {str(e)[:120]}")
         return False
 
 
