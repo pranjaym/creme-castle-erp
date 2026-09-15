@@ -89,6 +89,18 @@ def is_transport(e: Exception) -> bool:
     import psycopg2
     if isinstance(e, (psycopg2.OperationalError, psycopg2.InterfaceError)):
         return True
+    # F53: psycopg2 does not always narrow a lost socket to OperationalError.
+    # The 09:30 run on 15 Sep 2026 died on a bare DatabaseError ("server closed
+    # the connection unexpectedly") and alerted instead of deferring.
+    if isinstance(e, psycopg2.Error):
+        msg = str(e).lower()
+        if any(k in msg for k in ("server closed the connection",
+                                  "connection already closed",
+                                  "could not receive data",
+                                  "could not send data",
+                                  "terminating connection",
+                                  "ssl connection has been closed")):
+            return True
     return isinstance(e, TRANSPORT) or isinstance(e, requests.exceptions.RequestException)
 
 
@@ -218,7 +230,11 @@ def main() -> int:
                 L.close_run(cur, run_id, len(rows_all), note=f"new {n}, changed {c}, unchanged {u}")
                 conn.commit()
                 log(f"activity: loaded, new {n}, changed {c}, unchanged {u}")
-            if diag["restored"] is False:
+            if diag["restored"] is None and now.hour < LAST_SLOT_HOUR:
+                log("scope restore could not be verified (no network at the time); "
+                    "deferring to the next slot, which re-scopes and restores on its own")
+                return 75
+            if diag["restored"] is not True:
                 alert("[CC ERP] Petpooja logs: session NOT back on All Outlets",
                       "The activity pull could not verify the session was restored to All Outlets. "
                       "Open billing.petpooja.com and pick All Outlets at the top left before 8am, "
