@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function RecipesHome({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string }> }) {
   const user = await requireUser();
-  const perms = recipePerms(user.role);
+  const perms = recipePerms(user);
   if (!perms.view) redirect('/');
   const sp = await searchParams;
   const [c, settings, events] = await Promise.all([homeCounts(), getSettings(), recentEvents(20)]);

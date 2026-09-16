@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function VersionPage({ params, searchParams }: { params: Promise<{ code: string; vid: string }>; searchParams: Promise<{ ok?: string; err?: string }> }) {
   const user = await requireUser();
-  const perms = recipePerms(user.role);
+  const perms = recipePerms(user);
   if (!perms.view) redirect('/');
   const { code, vid } = await params; const sp = await searchParams;
   const d = await getRecipe(decodeURIComponent(code));
@@ -76,7 +76,7 @@ export default async function VersionPage({ params, searchParams }: { params: Pr
           <div className="tiles" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
             <div className="tile"><div className="tlabel">Unit cost</div><div className="mval">{inr(liveCost?.unit_cost, isFG ? 2 : 4)} → <b>{inr(cost?.unit_cost, isFG ? 2 : 4)}</b></div><div className="muted small">{liveCost && cost ? ((cost.unit_cost - liveCost.unit_cost) >= 0 ? '+' : '') + inr(cost.unit_cost - liveCost.unit_cost, isFG ? 2 : 4) + (liveCost.unit_cost ? ` (${pct((cost.unit_cost - liveCost.unit_cost) / liveCost.unit_cost)})` : '') : ''}</div></div>
             <div className="tile"><div className="tlabel">Batch makes</div><div className="mval">{d.live.output_qty.toLocaleString('en-IN')} {unitShort(d.live.output_unit)} → <b>{v.output_qty.toLocaleString('en-IN')} {unitShort(v.output_unit)}</b></div></div>
-            {isFG && user.role !== 'chef' ? <div className="tile"><div className="tlabel">Food cost with packaging</div><div className="mval">{pct(fc(liveCost))} → <b>{pct(fc(cost))}</b></div><div className="muted small"><Verdict fc={fc(cost)} target={settings.target / 100} /></div></div> : null}
+            {isFG && perms.money ? <div className="tile"><div className="tlabel">Food cost with packaging</div><div className="mval">{pct(fc(liveCost))} → <b>{pct(fc(cost))}</b></div><div className="muted small"><Verdict fc={fc(cost)} target={settings.target / 100} /></div></div> : null}
             <div className="tile"><div className="tlabel">Lines changed</div><div className="mval">{diffs.length}</div></div>
           </div>
           {diffs.length ? (

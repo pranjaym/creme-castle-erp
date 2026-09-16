@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function SemiPage({ searchParams }: { searchParams: Promise<{ q?: string; ok?: string; err?: string }> }) {
   const user = await requireUser();
-  const perms = recipePerms(user.role);
+  const perms = recipePerms(user);
   if (!perms.view) redirect('/');
   const sp = await searchParams; const qq = (sp.q ?? '').trim();
   const rows = await listRecipes('intermediate', qq);

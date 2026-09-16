@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function RecipePage({ params, searchParams }: { params: Promise<{ code: string }>; searchParams: Promise<{ ok?: string; err?: string }> }) {
   const user = await requireUser();
-  const perms = recipePerms(user.role);
+  const perms = recipePerms(user);
   if (!perms.view) redirect('/');
   const { code } = await params; const sp = await searchParams;
   const d = await getRecipe(decodeURIComponent(code));
@@ -30,7 +30,7 @@ export default async function RecipePage({ params, searchParams }: { params: Pro
   const sp0 = price?.selling_price ?? 0; const pc0 = price?.packaging_charge ?? 0;
   const fcNo = sp0 > 0 ? withAllow / sp0 : null; const fcPack = sp0 > 0 ? (withAllow + packCost) / (sp0 + pc0) : null;
   const pending = versions.find(v => v.state === 'draft' || v.state === 'checked');
-  const showMoney = user.role !== 'chef';
+  const showMoney = perms.money;
   const back = '/recipes/r/' + encodeURIComponent(recipe.code);
   const exTotal = explode.reduce((s, e) => s + e.cost, 0);
 

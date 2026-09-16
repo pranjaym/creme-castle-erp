@@ -64,6 +64,20 @@ async function resolveScope(role: Role, form: FormData):
   return { codes: [] };
 }
 
+
+// The recipe-module grant posted by the form, as the modules array to store: any
+// other module's grants are kept, the recipes:* entry is replaced.
+async function modulesFor(id: string | null, formData: FormData): Promise<string[]> {
+  const grant = String(formData.get('recipe_grant') || '').trim();
+  let current: string[] = [];
+  if (id) {
+    const { data } = await spine().from('profiles').select('modules').eq('id', id).maybeSingle();
+    current = ((data as { modules?: string[] } | null)?.modules) ?? [];
+  }
+  const kept = current.filter(m => !m.startsWith('recipes:'));
+  return grant.startsWith('recipes:') ? [...kept, grant] : kept;
+}
+
 export async function createUser(formData: FormData): Promise<void> {
   const actor = await requireAdminAction();
 
@@ -91,11 +105,11 @@ export async function createUser(formData: FormData): Promise<void> {
   // The on-auth-insert trigger (migration 040) has already created an inactive
   // viewer profile; promote it to what the admin chose.
   const { error: profErr } = await db.from('profiles')
-    .update({ email, full_name: fullName || null, role, outlet_codes: scope.codes, active: true })
+    .update({ email, full_name: fullName || null, role, outlet_codes: scope.codes, active: true, modules: await modulesFor(null, formData) })
     .eq('id', created.user.id);
   if (profErr) bounce(back, `Account created but the profile update failed: ${profErr.message}`, 'err');
 
-  await log(actor, 'user_created', email, { role, outlets: scope.codes, full_name: fullName });
+  await log(actor, 'user_created', email, { role, outlets: scope.codes, full_name: fullName, recipe_grant: String(formData.get('recipe_grant') || '') });
   revalidatePath('/users');
   bounce('/users', `${email} added as ${ROLE_WORD[role]}. Give them the temporary password in person or on a call, not by email.`);
 }
@@ -121,11 +135,11 @@ export async function updateUser(formData: FormData): Promise<void> {
   }
 
   const { error } = await spine().from('profiles')
-    .update({ role, full_name: fullName || null, outlet_codes: scope.codes, active })
+    .update({ role, full_name: fullName || null, outlet_codes: scope.codes, active, modules: await modulesFor(id, formData) })
     .eq('id', id);
   if (error) bounce(back, `Save failed: ${error.message}`, 'err');
 
-  await log(actor, 'user_updated', email || id, { role, outlets: scope.codes, active });
+  await log(actor, 'user_updated', email || id, { role, outlets: scope.codes, active, recipe_grant: String(formData.get('recipe_grant') || '') });
   revalidatePath('/users');
   bounce('/users', `${email || 'Account'} saved: ${ROLE_WORD[role]}${active ? '' : ', switched off'}.`);
 }

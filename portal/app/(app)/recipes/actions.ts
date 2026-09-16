@@ -16,7 +16,7 @@ import { pickLists } from '@/lib/recipes';
 type Perm = 'view' | 'draft' | 'check' | 'approve';
 async function need(perm: Perm): Promise<SessionUser> {
   const u = await getSessionUser();
-  if (!u || !recipePerms(u.role)[perm]) redirect('/');
+  if (!u || !recipePerms(u)[perm]) redirect('/');
   return u;
 }
 const who = (u: SessionUser) => u.fullName ? `${u.fullName} <${u.email}>` : u.email;

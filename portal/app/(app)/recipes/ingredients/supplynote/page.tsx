@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function SupplyNotePage({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string; days?: string }> }) {
   const user = await requireUser();
-  const perms = recipePerms(user.role);
+  const perms = recipePerms(user);
   if (!perms.check) redirect('/recipes/ingredients');
   const sp = await searchParams;
   const days = Math.min(Math.max(Number(sp.days ?? 120) || 120, 7), 366);

@@ -28,6 +28,7 @@ export interface ExistingUser {
   role: Role;
   active: boolean;
   outlet_codes: string[];
+  modules?: string[];
 }
 
 export default function UserForm({ basePath, chosen, outlets, existing }: {
@@ -142,6 +143,20 @@ export default function UserForm({ basePath, chosen, outlets, existing }: {
             {roleDef(chosen).needs === 'nothing' ? (
               <p className="note">Nothing else to set: this role sees the whole network.</p>
             ) : null}
+
+            <label className="fld" htmlFor="uf-recipes">In the recipe module, this person is</label>
+            <select className="txt" id="uf-recipes" name="recipe_grant"
+              defaultValue={(existing?.modules ?? []).find(m => m.startsWith('recipes:')) ?? ''}>
+              <option value="">what the role gives by default</option>
+              <option value="recipes:chef">a chef: writes and changes recipes</option>
+              <option value="recipes:checker">a checker: checks recipes, keeps rates and prices, sees food cost</option>
+              <option value="recipes:admin">an admin of the module: can also approve</option>
+            </select>
+            <p className="note">
+              Defaults: Admin does everything; Chef drafts; Controls checks; Central and Viewer read.
+              A grant here adds to the role without touching any other module, so a central-office
+              account can be a checker in recipes and keep everything else.
+            </p>
           </section>
 
           {!existing ? (
