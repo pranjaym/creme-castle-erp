@@ -85,9 +85,12 @@ export interface FoodCostRow {
   recipe_id: number; code: string; name: string; book: string | null; status: string; material_per_unit: number | null;
   material_with_allowance: number | null; packaging_per_unit: number | null; selling_price: number | null; packaging_charge: number | null;
   food_cost_pct: number | null; food_cost_with_packaging_pct: number | null; target_pct: number; missing_rates: number; version_id: number;
+  glossary_alias: string | null; glossary_category: string | null;
 }
 export async function foodCostList(): Promise<FoodCostRow[]> {
-  const rows = await q('select * from recipes.food_cost_list order by food_cost_with_packaging_pct desc nulls last, name');
+  const rows = await q(`select f.*, g.alias as glossary_alias, g.category as glossary_category from recipes.food_cost_list f
+    left join lateral (select ig.alias, ig.category from recipes.recipe_alias ra join public.item_glossary ig on ig.item_name = ra.external_name where ra.recipe_id = f.recipe_id and ra.system = 'item_glossary' limit 1) g on true
+    order by f.food_cost_with_packaging_pct desc nulls last, f.name`);
   return rows.map(r => ({ ...(r as unknown as FoodCostRow), material_per_unit: num(r.material_per_unit), material_with_allowance: num(r.material_with_allowance),
     packaging_per_unit: num(r.packaging_per_unit), selling_price: num(r.selling_price), packaging_charge: num(r.packaging_charge),
     food_cost_pct: num(r.food_cost_pct), food_cost_with_packaging_pct: num(r.food_cost_with_packaging_pct), target_pct: n0(r.target_pct), missing_rates: n0(r.missing_rates) }));
