@@ -4,7 +4,7 @@ import { requireUser, recipePerms } from '@/lib/session';
 import { getRecipe, getSettings } from '@/lib/recipes';
 import { inr, pct, rateLabel, unitShort } from '@/lib/recipes-engine';
 import { startDraft, setPrice, retireRecipe } from '../../actions';
-import { Crumbs, Flash, Kind, Status, State, Verdict, RefLink } from '../../ui';
+import { Crumbs, Flash, Kind, Status, State, Verdict, RefLink, Strip, soldAs } from '../../ui';
 
 // The costing card: one component for a semi-finished batch and a finished good.
 // Lines are what the chef writes; the rate on each line comes from the price list
@@ -40,10 +40,9 @@ export default async function RecipePage({ params, searchParams }: { params: Pro
       <div className="spread">
         <div>
           <h1 className="page">{recipe.name}</h1>
-          <p className="note" style={{ marginTop: 4 }}>
-            <Kind kind={recipe.kind} /> <Status status={recipe.status} />{' '}
-            <span className="muted num">{recipe.code}</span>
-            {live ? <> · version {live.version_no}, live from {live.effective_from ?? 'import'}{live.checked_by ? `, checked by ${live.checked_by.split('<')[0].trim()}` : ''}, approved by {live.approved_by?.split('<')[0].trim()}</> : <> · <b>no live version</b></>}
+          <p className="rtitle" style={{ marginTop: 4 }}>
+            <Kind kind={recipe.kind} /> <Status status={recipe.status} />
+            <span className="meta">{live ? <>live since {live.effective_from ?? '17 Aug 2026'}{(live.approved_by ?? '').startsWith('workbook') ? ', from the workbook' : `, approved by ${(live.approved_by ?? '').split('<')[0].trim()}`}{live.version_no > 1 ? ` (change ${live.version_no})` : ''}</> : <b>no live version</b>}</span>
           </p>
         </div>
         <div className="row">
@@ -56,6 +55,20 @@ export default async function RecipePage({ params, searchParams }: { params: Pro
       </div>
       <Flash ok={sp.ok} err={sp.err} />
       {recipe.retired_at ? <p className="hint warn">Retired on {recipe.retired_at.slice(0, 10)}: {recipe.retired_reason}. Kept for history; no cost reads it.</p> : null}
+      <Strip items={isFG ? [
+        { l: 'Material cost', v: inr(unit), d: 'per sold unit, today' },
+        ...(showMoney ? [
+          { l: 'Packaging', v: inr(packCost), d: packaging.length ? `${packaging.length} item${packaging.length === 1 ? '' : 's'}` : 'none yet' },
+          { l: 'Selling price', v: sp0 ? inr(sp0, 0) : 'missing', d: pc0 ? `+ ${inr(pc0, 0)} packaging charge` : 'Zomato = Swiggy' },
+          { l: 'Food cost', v: pct(fcPack), d: <Verdict fc={fcPack} target={settings.target / 100} /> },
+        ] : []),
+        { l: 'Sold as', v: soldAs(live?.output_qty, live?.sold_weight_g).replace(' per batch', ''), d: live && live.output_qty > 1 ? 'per batch' : 'one batch makes one' },
+      ] : [
+        { l: 'Cost', v: rateLabel(unit, live?.output_unit ?? 'piece'), d: 'today, per ' + (live && (live.output_unit === 'gram' || live.output_unit === 'millilitre') ? (live.output_unit === 'gram' ? 'kg' : 'litre') : 'piece') },
+        { l: 'One batch makes', v: live ? `${live.output_qty.toLocaleString('en-IN', { maximumFractionDigits: 0 })} ${unitShort(live.output_unit)}` : '', d: `${inr(batch)} of ingredients` },
+        { l: 'Yield', v: yieldPct != null ? pct(yieldPct, 0) : 'by piece', d: yieldPct != null ? `${inputW.toLocaleString('en-IN')} g/ml goes in` : '' },
+        { l: 'Used in', v: String(usedIn.length), d: usedIn.length === 1 ? 'recipe' : 'recipes' },
+      ]} />
 
       <h2 className="sec-head">The batch</h2>
       <div className="scroll-x">
@@ -140,20 +153,30 @@ export default async function RecipePage({ params, searchParams }: { params: Pro
             <ul className="small" style={{ marginTop: 8 }}>{d.aliases.map((a, i) => <li key={i}><span className="muted">{a.system.replace('_', ' ')}:</span> {a.external_name}</li>)}
               {!d.aliases.some(a => a.system === 'item_glossary') ? <li className="muted">Not yet linked to an item in the sales glossary.</li> : null}</ul>
           )}
-          <div className="t" style={{ marginTop: 14 }}>Versions</div>
+        </div>
+      </div>
+
+      <details className="rfold">
+        <summary>Change history</summary>
+        <p className="hint">Every version this recipe has had, and every action on it. Most recipes show one version, the workbook import; a version appears here each time a change is approved.</p>
+        <div className="tiles" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))' }}>
+          <div className="tile">
+          <div className="t">Versions</div>
           <div className="scroll-x"><table className="sheet" style={{ marginTop: 8 }}>
             <thead><tr><th>v</th><th>State</th><th>Who</th><th>When</th><th className="num">Cost at approval</th></tr></thead>
             <tbody>{versions.map(v => <tr key={v.version_id}><td><Link href={`${back}/v/${v.version_id}`}>v{v.version_no}</Link></td><td><State state={v.state} checkedBy={v.checked_by} /></td><td className="muted small">{(v.approved_by ?? v.checked_by ?? v.drafted_by ?? '').split('<')[0].trim()}</td><td className="muted small">{(v.approved_at ?? v.checked_at ?? v.drafted_at ?? '').slice(0, 10)}</td><td className="num">{v.unit_cost_at_approval != null ? inr(v.unit_cost_at_approval, isFG ? 2 : 4) : ''}</td></tr>)}</tbody>
           </table></div>
           {d.snapshots.length ? <><div className="t" style={{ marginTop: 14 }}>Cost history</div><ul className="small" style={{ marginTop: 6 }}>{d.snapshots.slice(0, 8).map((s, i) => <li key={i}><span className="muted">{s.as_of}, {s.snapshot_kind.replace('_', ' ')}:</span> {inr(s.unit_cost, isFG ? 2 : 4)}</li>)}</ul></> : null}
-        </div>
-      </div>
-
-      <h2 className="sec-head">History</h2>
+          </div>
+          <div className="tile">
+            <div className="t">Actions</div>
       <div className="scroll-x"><table className="sheet">
         <thead><tr><th>When</th><th>What</th><th>Who</th><th>Detail</th></tr></thead>
         <tbody>{d.events.map((e, i) => <tr key={i}><td className="muted small">{e.at.slice(0, 16).replace('T', ' ')}</td><td>{e.action}</td><td className="muted small">{(e.actor ?? '').split('<')[0].trim()}</td><td className="muted small">{e.data ? Object.entries(e.data).filter(([k, v]) => v != null && !['recipe_id', 'copied_from', 'version_id'].includes(k)).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${typeof v === 'number' ? v.toLocaleString('en-IN', { maximumFractionDigits: 4 }) : String(v)}`).join(' · ') : ''}</td></tr>)}</tbody>
       </table></div>
+          </div>
+        </div>
+      </details>
     </>
   );
 }
