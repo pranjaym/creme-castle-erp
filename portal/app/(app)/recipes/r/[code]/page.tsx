@@ -42,6 +42,7 @@ export default async function RecipePage({ params, searchParams }: { params: Pro
           <h1 className="page">{recipe.name}</h1>
           <p className="rtitle" style={{ marginTop: 4 }}>
             <Kind kind={recipe.kind} /> <Status status={recipe.status} />
+            {d.aliases.filter(a => a.system === 'item_glossary').map(a => <span key={a.external_name} className="meta">sold as <b>{a.external_name}</b></span>)}
             <span className="meta">{live ? <>live since {live.effective_from ?? '17 Aug 2026'}{(live.approved_by ?? '').startsWith('workbook') ? ', from the workbook' : `, approved by ${(live.approved_by ?? '').split('<')[0].trim()}`}{live.version_no > 1 ? ` (change ${live.version_no})` : ''}</> : <b>no live version</b>}</span>
           </p>
         </div>
