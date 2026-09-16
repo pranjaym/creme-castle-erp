@@ -48,9 +48,6 @@ export default async function RecipePage({ params, searchParams }: { params: Pro
         <div className="row">
           {pending ? <Link className="btn btn-primary" href={`${back}/v/${pending.version_id}`}>Open the change in progress (v{pending.version_no}, {pending.state})</Link>
             : perms.draft ? <form action={startDraft}><input type="hidden" name="recipe_id" value={recipe.id} /><input type="hidden" name="code" value={recipe.code} /><button className="btn btn-primary" type="submit">Start a change</button></form> : null}
-          {perms.approve && !recipe.retired_at ? (
-            <form action={retireRecipe} className="row"><input type="hidden" name="recipe_id" value={recipe.id} /><input type="hidden" name="code" value={recipe.code} />
-              <input name="reason" placeholder="reason to retire" style={{ width: 160 }} /><button className="btn btn-secondary" type="submit">Retire</button></form>) : null}
         </div>
       </div>
       <Flash ok={sp.ok} err={sp.err} />
@@ -159,6 +156,10 @@ export default async function RecipePage({ params, searchParams }: { params: Pro
       <details className="rfold">
         <summary>Change history</summary>
         <p className="hint">Every version this recipe has had, and every action on it. Most recipes show one version, the workbook import; a version appears here each time a change is approved.</p>
+        {perms.approve && !recipe.retired_at ? (
+          <form action={retireRecipe} className="row" style={{ marginBottom: 12 }}><input type="hidden" name="recipe_id" value={recipe.id} /><input type="hidden" name="code" value={recipe.code} />
+            <input name="reason" placeholder="reason to retire this recipe" style={{ width: 260, padding: '7px 10px', border: '1px solid var(--line)', borderRadius: 6 }} /><button className="btn btn-secondary" type="submit">Retire the recipe</button>
+            <span className="note">Retiring keeps every record; the recipe just stops counting as live.</span></form>) : null}
         <div className="tiles" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))' }}>
           <div className="tile">
           <div className="t">Versions</div>
