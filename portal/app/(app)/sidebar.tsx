@@ -40,9 +40,11 @@ export default function Sidebar({ sections, foot }:
           <div key={i}>
             {sec.title ? <div className="nav-section">{sec.title}</div> : null}
             {sec.items.map(item => {
-              const active = item.href === '/'
-                ? pathname === '/'
-                : pathname === item.href || pathname.startsWith(item.href + '/');
+              // The link that matches the most of the path is the active one, so a
+              // module's home ("/recipes") does not light up beside its own pages.
+              const matches = (h: string) => h === '/' ? pathname === '/' : (pathname === h || pathname.startsWith(h + '/'));
+              const best = sections.flatMap(x => x.items).filter(x => matches(x.href)).sort((a, b) => b.href.length - a.href.length)[0];
+              const active = !!best && best.href === item.href;
               return (
                 <Link key={item.href} href={item.href}
                   className={active ? 'nav-link active' : 'nav-link'}>
