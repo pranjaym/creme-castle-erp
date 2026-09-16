@@ -13,7 +13,7 @@ const U: Record<string, string> = { gram: 'g', millilitre: 'ml', piece: 'pc', se
 
 export async function GET(req: Request) {
   const user = await requireUser();
-  const perms = recipePerms(user.role);
+  const perms = recipePerms(user);
   if (!perms.view) return new NextResponse('Not allowed for this role.', { status: 403 });
   const what = new URL(req.url).searchParams.get('what') ?? '';
   let header: string[] = []; let rows: unknown[][] = []; let name = 'recipes';
@@ -28,7 +28,7 @@ export async function GET(req: Request) {
     rows = r.map(x => [x.code, x.name, x.status, x.line_count, x.output_qty, x.output_unit, x.batch_cost?.toFixed(2), x.unit_cost?.toFixed(4), x.selling_price, x.packaging_charge, x.food_cost_with_packaging_pct != null ? (x.food_cost_with_packaging_pct * 100).toFixed(1) : '', x.used_in]);
     name = what === 'semi' ? 'cc_semi_finished_recipes' : 'cc_finished_goods';
   } else if (what === 'foodcost') {
-    if (user.role === 'chef') return new NextResponse('Not allowed for this role.', { status: 403 });
+    if (!perms.money) return new NextResponse('Not allowed for this role.', { status: 403 });
     const r = await foodCostList();
     header = ['code', 'name', 'status', 'material_per_unit', 'material_with_allowance', 'packaging_per_unit', 'selling_price', 'packaging_charge', 'food_cost_pct', 'food_cost_with_packaging_pct', 'target_pct', 'lines_without_rate'];
     rows = r.map(x => [x.code, x.name, x.status, x.material_per_unit?.toFixed(2), x.material_with_allowance?.toFixed(2), x.packaging_per_unit?.toFixed(2), x.selling_price, x.packaging_charge, x.food_cost_pct != null ? (x.food_cost_pct * 100).toFixed(1) : '', x.food_cost_with_packaging_pct != null ? (x.food_cost_with_packaging_pct * 100).toFixed(1) : '', (x.target_pct * 100).toFixed(1), x.missing_rates]);

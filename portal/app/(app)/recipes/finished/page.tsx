@@ -9,13 +9,13 @@ export const dynamic = 'force-dynamic';
 
 export default async function FinishedPage({ searchParams }: { searchParams: Promise<{ q?: string; ok?: string; err?: string; book?: string }> }) {
   const user = await requireUser();
-  const perms = recipePerms(user.role);
+  const perms = recipePerms(user);
   if (!perms.view) redirect('/');
   const sp = await searchParams; const qq = (sp.q ?? '').trim();
   let rows = await listRecipes('finished', qq);
   if (sp.book) rows = rows.filter(r => r.book === sp.book);
   const settings = await getSettings();
-  const showMoney = perms.check || perms.approve || user.role === 'viewer';
+  const showMoney = perms.money;
   return (
     <>
       <Crumbs items={[['Recipes', '/recipes'], 'Finished goods']} />

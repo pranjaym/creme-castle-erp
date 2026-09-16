@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function UploadPage({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string; result?: string }> }) {
   const user = await requireUser();
-  const perms = recipePerms(user.role);
+  const perms = recipePerms(user);
   if (!perms.draft) redirect('/recipes');
   const sp = await searchParams;
   let result: UploadResult | null = null;

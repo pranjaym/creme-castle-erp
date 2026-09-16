@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function ApprovalsPage({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string; state?: string }> }) {
   const user = await requireUser();
-  const perms = recipePerms(user.role);
+  const perms = recipePerms(user);
   if (!perms.view) redirect('/');
   const sp = await searchParams;
   const all = await pendingVersions();

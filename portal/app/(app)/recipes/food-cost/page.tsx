@@ -13,8 +13,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function FoodCostPage({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string; filter?: string; q?: string }> }) {
   const user = await requireUser();
-  const perms = recipePerms(user.role);
-  if (!perms.view || user.role === 'chef') redirect('/recipes');
+  const perms = recipePerms(user);
+  if (!perms.money) redirect('/recipes');
   const sp = await searchParams;
   const settings = await getSettings();
   let rows = (await foodCostList()).filter(r => r.status === 'active');

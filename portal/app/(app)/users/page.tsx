@@ -19,6 +19,7 @@ interface ProfileRow {
   role: Role;
   active: boolean;
   outlet_codes: string[];
+  modules?: string[];
   created_at: string;
 }
 
@@ -43,7 +44,7 @@ export default async function UsersPage({ searchParams }:
   const db = spine();
   const [{ data: profiles }, { data: outlets }] = await Promise.all([
     db.from('profiles')
-      .select('id, email, full_name, role, active, outlet_codes, created_at')
+      .select('id, email, full_name, role, active, outlet_codes, modules, created_at')
       .order('role').order('email'),
     db.from('outlets')
       .select('internal_code, area_manager').eq('active', true).order('internal_code'),
@@ -92,7 +93,7 @@ export default async function UsersPage({ searchParams }:
               <tr key={p.id}>
                 <td className="name">{p.full_name || <span className="muted">not set</span>}</td>
                 <td>{p.email}</td>
-                <td>{ROLE_LABEL(p.role)}</td>
+                <td>{ROLE_LABEL(p.role)}{(p.modules ?? []).filter(m => m.startsWith('recipes:')).map(m => <span key={m} className="muted small"> + recipes {m.split(':')[1]}</span>)}</td>
                 <td>{scopeOf(p, outletRows)}</td>
                 <td>
                   {p.active

@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function NewRecipePage({ searchParams }: { searchParams: Promise<{ kind?: string; ok?: string; err?: string }> }) {
   const user = await requireUser();
-  if (!recipePerms(user.role).draft) redirect('/recipes');
+  if (!recipePerms(user).draft) redirect('/recipes');
   const sp = await searchParams;
   const finished = sp.kind === 'finished';
   return (

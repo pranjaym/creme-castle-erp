@@ -23,7 +23,7 @@ export default async function EditUserPage({ params, searchParams }: {
   const db = spine();
   const [{ data: profile }, { data: outlets }] = await Promise.all([
     db.from('profiles')
-      .select('id, email, full_name, role, active, outlet_codes')
+      .select('id, email, full_name, role, active, outlet_codes, modules')
       .eq('id', id).maybeSingle(),
     db.from('outlets')
       .select('internal_code, area_manager').eq('active', true).order('internal_code'),

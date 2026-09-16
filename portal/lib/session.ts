@@ -10,20 +10,39 @@ import { spine } from '@/lib/supabase/service';
 // is treated as read-only central until reassigned in /users.
 export type Role = 'admin' | 'central' | 'area_manager' | 'store' | 'viewer' | 'chef' | 'controls';
 
-// Recipe module permissions (migration 229). Written once here so every page and
-// action reads the same sentence.
-export const recipePerms = (role: Role) => ({
-  view: ['admin', 'central', 'viewer', 'chef', 'controls'].includes(role),
-  draft: ['admin', 'chef', 'controls', 'central'].includes(role),
-  check: ['admin', 'controls', 'central'].includes(role),   // Narendra's step: rates, prices, checking
-  approve: role === 'admin',                                // Pranjay's step
-});
+// Recipe module permissions (migration 229). A person's reach in this module is
+// their portal role's default PLUS any module grant in profiles.modules, so a
+// central-office account keeps every other module and can still be a checker
+// here (Pranjay, 16 Sep 2026: "they enjoy all the other rights for other modules,
+// but for this module they have the role of checker").
+//   recipes:chef     may draft
+//   recipes:checker  may draft, check, keep rates and prices, see the money pages
+//   recipes:admin    everything, including approve
+export type RecipeGrant = 'recipes:chef' | 'recipes:checker' | 'recipes:admin';
+export const RECIPE_GRANTS: RecipeGrant[] = ['recipes:chef', 'recipes:checker', 'recipes:admin'];
+export function recipePerms(u: { role: Role; modules?: string[] }) {
+  const g = new Set(u.modules ?? []);
+  const role = u.role;
+  const admin = role === 'admin' || g.has('recipes:admin');
+  const checker = admin || role === 'controls' || g.has('recipes:checker');
+  const chef = checker || role === 'chef' || g.has('recipes:chef');
+  const reader = role === 'central' || role === 'viewer';
+  return {
+    view: chef || reader,
+    draft: chef,
+    check: checker,          // Narendra's step: rates, prices, checking
+    approve: admin,          // Pranjay's step
+    money: checker || reader, // the food cost list, price impact, prices: not for a plain chef
+  };
+}
 
 export interface SessionUser {
   id: string;
   email: string;
   fullName: string | null;
   role: Role;
+  // Module grants beyond the role default (profiles.modules), e.g. recipes:checker.
+  modules: string[];
   // Scope: store = one internal_code, area_manager = their outlets,
   // admin/central/viewer = empty meaning all.
   outletCodes: string[];
@@ -39,7 +58,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   const { data: profile, error } = await spine()
     .from('profiles')
-    .select('role, full_name, active, outlet_codes')
+    .select('role, full_name, active, outlet_codes, modules')
     .eq('id', user.id)
     .single();
 
@@ -51,6 +70,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     fullName: profile.full_name ?? null,
     role: (profile.role as Role) ?? 'viewer',
     outletCodes: ((profile as { outlet_codes?: string[] }).outlet_codes) ?? [],
+    modules: ((profile as { modules?: string[] }).modules) ?? [],
   };
 }
 

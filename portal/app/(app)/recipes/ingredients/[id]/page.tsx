@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function IngredientPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ ok?: string; err?: string }> }) {
   const user = await requireUser();
-  const perms = recipePerms(user.role);
+  const perms = recipePerms(user);
   if (!perms.view) redirect('/');
   const { id } = await params; const sp = await searchParams;
   const data = await getIngredient(Number(id));

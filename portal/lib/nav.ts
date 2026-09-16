@@ -1,7 +1,7 @@
 // The navigation registry, same pattern as the OMS (lib/roles.ts NAV_ITEMS):
 // grouped sections, filtered by role, so navigation and permissions can never
 // disagree. Names per Pranjay (24 Aug): plain words that say what a thing is.
-import type { Role, SessionUser } from '@/lib/session';
+import { recipePerms, type Role, type SessionUser } from '@/lib/session';
 
 export interface NavItem {
   href: string;
@@ -14,7 +14,7 @@ export interface NavSection {
 
 export function navSectionsFor(user: SessionUser): NavSection[] {
   const mgmt = user.role === 'admin' || user.role === 'central' || user.role === 'viewer';
-  const recipes = mgmt || user.role === 'chef' || user.role === 'controls';
+  const rp = recipePerms(user);
   const sections: NavSection[] = [];
 
   sections.push({ title: null, items: [{ href: '/', label: 'Home' }] });
@@ -41,14 +41,14 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
       ],
     });
   }
-  if (recipes) {
+  if (rp.view) {
     const items: NavItem[] = [
       { href: '/recipes', label: 'Recipes home' },
       { href: '/recipes/finished', label: 'Finished goods' },
       { href: '/recipes/semi', label: 'Semi-finished' },
       { href: '/recipes/ingredients', label: 'Ingredients & prices' },
     ];
-    if (user.role !== 'chef') items.push({ href: '/recipes/food-cost', label: 'Food cost list' }, { href: '/recipes/impact', label: 'Price impact' });
+    if (rp.money) items.push({ href: '/recipes/food-cost', label: 'Food cost list' }, { href: '/recipes/impact', label: 'Price impact' });
     items.push({ href: '/recipes/approvals', label: 'Changes & approvals' });
     sections.push({ title: 'Recipes & costing', items });
   }
