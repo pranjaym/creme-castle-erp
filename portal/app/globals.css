@@ -561,3 +561,46 @@ section { margin-bottom: 16px; }
 .app-z { background: #E23744; }
 .app-s { background: #F26522; }
 .s1view.off { display: none; }
+
+/* ============================ recipe module ==============================
+   Pranjay, 16 Sep 2026: "UI and UX are basic". A proper toolbar (search, chip
+   filters, the actions at the right), sticky column headers that survive the
+   page scroll, a summary strip on the recipe page, and a legend under tables
+   that use a word a chef would not. Tables stay 12.5px with tabular figures.
+   ======================================================================== */
+.rtoolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 12px; }
+.rtoolbar .search { display: flex; gap: 6px; align-items: center; }
+.rtoolbar .search input { padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; min-width: 260px; font-size: 13.5px; background: var(--card); }
+.rtoolbar .search input:focus { outline: 2px solid var(--coral); outline-offset: 1px; border-color: var(--coral); }
+.rtoolbar .spacer { flex: 1; }
+.rtoolbar .chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.rchip { display: inline-block; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 12.5px; font-weight: 600; line-height: 1; }
+.rchip:hover { border-color: var(--coral); text-decoration: none; }
+.rchip.on { background: var(--maroon); border-color: var(--maroon); color: #fff; }
+.rchip .n { color: inherit; opacity: .7; font-weight: 500; margin-left: 4px; }
+.rcount { color: var(--muted); font-size: 12.5px; }
+
+/* sticky headers: the table is not wrapped in an overflow container on a wide
+   screen, so the header can stick under the topbar; on a phone it scrolls sideways */
+.rtable { overflow: visible; }
+.rtable table.sheet thead th { position: sticky; top: 57px; z-index: 2; box-shadow: 0 1px 0 var(--line); }
+@media (max-width: 900px) { .rtable { overflow-x: auto; } .rtable table.sheet thead th { position: static; } }
+table.sheet tbody tr:hover td { background: #FFFBFC; }
+table.sheet td.name { font-weight: 600; }
+table.sheet td .sub { display: block; color: var(--muted); font-size: 11.5px; font-weight: 400; margin-top: 1px; }
+
+.rlegend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 0; padding: 10px 12px; background: var(--head); border-radius: var(--radius-sm); font-size: 12px; color: var(--muted); }
+.rlegend b { color: var(--ink); font-weight: 600; }
+
+/* summary strip on a recipe */
+.rstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 18px; }
+.rstrip .s { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow-card); }
+.rstrip .l { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rstrip .v { font-family: var(--font-display); font-size: 22px; color: var(--maroon); font-weight: 700; line-height: 1.15; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.rstrip .d { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+.rfold summary { cursor: pointer; font-family: var(--font-display); color: var(--maroon); font-size: 17px; font-weight: 700; margin: 22px 0 8px; list-style: none; }
+.rfold summary::before { content: '▸ '; color: var(--coral); }
+.rfold[open] summary::before { content: '▾ '; }
+.rtitle { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rtitle .meta { color: var(--muted); font-size: 13px; }

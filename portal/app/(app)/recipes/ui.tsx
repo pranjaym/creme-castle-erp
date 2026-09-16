@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { inr, pct, rateLabel, unitShort } from '@/lib/recipes-engine';
 
 export const Kind = ({ kind }: { kind: string }) => (
-  <span className={'pill ' + (kind === 'finished' ? 'pill-warn' : kind === 'intermediate' || kind === 'semi' ? 'pill-neutral' : 'pill-neutral')}>
+  <span className={'pill ' + (kind === 'finished' ? 'pill-warn' : 'pill-neutral')}>
     {kind === 'finished' ? 'finished' : kind === 'intermediate' || kind === 'semi' ? 'semi-finished' : kind === 'packaging' ? 'packaging' : 'purchased'}
   </span>
 );
@@ -54,13 +54,37 @@ export function Flash({ ok, err }: { ok?: string; err?: string }) {
   return <>{ok ? <p className="ok">{ok}</p> : null}{err ? <p className="err">{err}</p> : null}</>;
 }
 
-export function SearchForm({ action, q, placeholder, extra }: { action: string; q: string; placeholder: string; extra?: React.ReactNode }) {
+// The list toolbar: search on the left, filter chips, actions on the right.
+export interface Chip { label: string; href: string; on: boolean; count?: number }
+export function Toolbar({ action, q, placeholder, chips, hidden, right, count }: {
+  action: string; q: string; placeholder: string; chips?: Chip[]; hidden?: Record<string, string>; right?: React.ReactNode; count?: string;
+}) {
   return (
-    <form method="get" action={action} className="filter-bar" style={{ marginBottom: 10 }}>
-      <input name="q" defaultValue={q} placeholder={placeholder} style={{ minWidth: 260, padding: '7px 10px', border: '1px solid var(--line)', borderRadius: 6 }} />
-      <button className="btn btn-secondary" type="submit">Find</button>
-      {q ? <Link className="linkbtn" href={action}>Clear</Link> : null}
-      {extra}
-    </form>
+    <div className="rtoolbar">
+      <form method="get" action={action} className="search">
+        {Object.entries(hidden ?? {}).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
+        <input name="q" defaultValue={q} placeholder={placeholder} aria-label={placeholder} />
+        {q ? <Link className="linkbtn" href={action}>clear</Link> : null}
+      </form>
+      {chips?.length ? <div className="chips">{chips.map(c => <Link key={c.href} href={c.href} className={'rchip' + (c.on ? ' on' : '')}>{c.label}{c.count != null ? <span className="n">{c.count}</span> : null}</Link>)}</div> : null}
+      {count ? <span className="rcount">{count}</span> : null}
+      <span className="spacer" />
+      {right}
+    </div>
   );
+}
+
+// One line per column that uses a word a chef or an accountant might not.
+export function Legend({ items }: { items: [string, string][] }) {
+  return <div className="rlegend">{items.map(([k, v]) => <span key={k}><b>{k}</b> {v}</span>)}</div>;
+}
+
+export function Strip({ items }: { items: { l: string; v: React.ReactNode; d?: React.ReactNode }[] }) {
+  return <div className="rstrip">{items.map((it, i) => <div className="s" key={i}><div className="l">{it.l}</div><div className="v">{it.v}</div>{it.d ? <div className="d">{it.d}</div> : null}</div>)}</div>;
+}
+
+export function soldAs(outputQty: number | null | undefined, soldWeightG: number | null | undefined): string {
+  if (outputQty == null) return '';
+  const w = soldWeightG ? ` of ${soldWeightG.toLocaleString('en-IN')} g` : '';
+  return outputQty === 1 ? `1 unit${w}` : `${outputQty.toLocaleString('en-IN')} units${w} per batch`;
 }

@@ -54,7 +54,7 @@ export async function getIngredient(id: number) {
 export interface RecipeListRow {
   recipe_id: number; code: string; name: string; kind: Kind; book: string | null; status: string; version_id: number | null;
   output_qty: number | null; output_unit: string | null; batch_cost: number | null; unit_cost: number | null; packaging_cost: number | null;
-  missing_rates: number; line_count: number; semi_lines: number; input_qty: number | null; used_in: number; pending: string | null;
+  missing_rates: number; line_count: number; semi_lines: number; input_qty: number | null; used_in: number; pending: string | null; sold_weight_g: number | null;
   selling_price: number | null; packaging_charge: number | null; food_cost_pct: number | null; food_cost_with_packaging_pct: number | null;
 }
 export async function listRecipes(kind: Kind, search = ''): Promise<RecipeListRow[]> {
@@ -65,6 +65,7 @@ export async function listRecipes(kind: Kind, search = ''): Promise<RecipeListRo
            (select sum(l.qty) from recipes.recipe_line l where l.version_id = lc.version_id and l.role = 'material' and l.unit in ('gram','millilitre')) as input_qty,
            (select count(distinct used_by_recipe_id) from recipes.where_used w where w.sub_recipe_id = lc.recipe_id) as used_in,
            (select string_agg(v.state, ',') from recipes.recipe_version v where v.recipe_id = lc.recipe_id and v.state in ('draft','checked')) as pending,
+           (select v.sold_weight_g from recipes.recipe_version v where v.id = lc.version_id) as sold_weight_g,
            cp.selling_price, cp.packaging_charge, fc.food_cost_pct, fc.food_cost_with_packaging_pct
     from recipes.live_cost lc
     left join recipes.current_price cp on cp.recipe_id = lc.recipe_id and cp.channel = 'aggregator'
@@ -73,7 +74,7 @@ export async function listRecipes(kind: Kind, search = ''): Promise<RecipeListRo
     order by lc.name`, search ? [kind, '%' + search + '%'] : [kind]);
   return rows.map(r => ({ ...(r as unknown as RecipeListRow), output_qty: num(r.output_qty), batch_cost: num(r.batch_cost), unit_cost: num(r.unit_cost),
     packaging_cost: num(r.packaging_cost), missing_rates: n0(r.missing_rates), line_count: n0(r.line_count), semi_lines: n0(r.semi_lines),
-    input_qty: num(r.input_qty), used_in: n0(r.used_in), selling_price: num(r.selling_price), packaging_charge: num(r.packaging_charge),
+    input_qty: num(r.input_qty), used_in: n0(r.used_in), sold_weight_g: num(r.sold_weight_g), selling_price: num(r.selling_price), packaging_charge: num(r.packaging_charge),
     food_cost_pct: num(r.food_cost_pct), food_cost_with_packaging_pct: num(r.food_cost_with_packaging_pct) }));
 }
 
