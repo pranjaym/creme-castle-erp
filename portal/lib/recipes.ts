@@ -55,6 +55,7 @@ export interface RecipeListRow {
   recipe_id: number; code: string; name: string; kind: Kind; book: string | null; status: string; version_id: number | null;
   output_qty: number | null; output_unit: string | null; batch_cost: number | null; unit_cost: number | null; packaging_cost: number | null;
   missing_rates: number; line_count: number; semi_lines: number; input_qty: number | null; used_in: number; pending: string | null; sold_weight_g: number | null;
+  glossary_alias: string | null; glossary_category: string | null;
   selling_price: number | null; packaging_charge: number | null; food_cost_pct: number | null; food_cost_with_packaging_pct: number | null;
 }
 export async function listRecipes(kind: Kind, search = ''): Promise<RecipeListRow[]> {
@@ -66,8 +67,10 @@ export async function listRecipes(kind: Kind, search = ''): Promise<RecipeListRo
            (select count(distinct used_by_recipe_id) from recipes.where_used w where w.sub_recipe_id = lc.recipe_id) as used_in,
            (select string_agg(v.state, ',') from recipes.recipe_version v where v.recipe_id = lc.recipe_id and v.state in ('draft','checked')) as pending,
            (select v.sold_weight_g from recipes.recipe_version v where v.id = lc.version_id) as sold_weight_g,
-           cp.selling_price, cp.packaging_charge, fc.food_cost_pct, fc.food_cost_with_packaging_pct
+           cp.selling_price, cp.packaging_charge, fc.food_cost_pct, fc.food_cost_with_packaging_pct,
+           g.alias as glossary_alias, g.category as glossary_category
     from recipes.live_cost lc
+    left join lateral (select ig.alias, ig.category from recipes.recipe_alias ra join public.item_glossary ig on ig.item_name = ra.external_name where ra.recipe_id = lc.recipe_id and ra.system = 'item_glossary' limit 1) g on true
     left join recipes.current_price cp on cp.recipe_id = lc.recipe_id and cp.channel = 'aggregator'
     left join recipes.food_cost_list fc on fc.recipe_id = lc.recipe_id
     where lc.kind = $1 ${search ? 'and lc.name ilike $2' : ''}

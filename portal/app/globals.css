@@ -619,3 +619,10 @@ table.sheet td .sub { display: block; color: var(--muted); font-size: 11.5px; fo
 .rx h1.page { margin-bottom: 4px; }
 .rx .spread { margin-bottom: 8px; }
 .rx .note { line-height: 1.5; }
+/* sticky headers, second attempt: table.sheet clips with overflow:hidden for its
+   rounded corners, and a clipped ancestor cancels position: sticky. Inside the
+   recipe module the table does not clip; the corners go on the header cells. */
+.rx .rtable table.sheet { overflow: visible; }
+.rx .rtable table.sheet thead th:first-child { border-top-left-radius: var(--radius); }
+.rx .rtable table.sheet thead th:last-child { border-top-right-radius: var(--radius); }
+.rx .rtable table.sheet thead th { top: 56px; }
