@@ -1,62 +1,234 @@
 // Interactivity for the daily dashboard pages: the Day / Week view toggle,
-// click-to-sort on any table marked .sortable, and the small trend sparklines.
-// Plain browser JS, no framework, loaded once per dashboard page.
+// click-to-sort on any table marked .sortable, the trend sparklines, and the
+// row filters (app, complaint tag, store mistakes). Plain browser JS.
+//
+// REWRITTEN 18 Sep 2026, after Pranjay: "the Store mistakes only button is not
+// working, and when I click on it nothing is happening. In fact the Swiggy
+// only button is also not working."
+//
+// The cause was not the buttons. This file is loaded by next/script with
+// strategy="lazyOnload", which runs a script ONCE PER FULL PAGE LOAD. Every
+// link in the portal rail and every "previous day" link is a Next <Link>, so
+// moving between pages is a CLIENT-SIDE navigation: React swaps the DOM and
+// the script is never re-run. Two things then went wrong.
+//
+//   1. Arriving at a daily page from any other page left the new DOM with no
+//      listeners at all, so nothing on it worked. Reloading the page fixed it,
+//      which is why this looked intermittent.
+//   2. Moving between two daily pages reused the DOM nodes, so inline
+//      display:none from the previous page's filter survived onto rows of the
+//      new day, while React reset the buttons' own highlight. Rows were hidden
+//      with no lit button to explain why.
+//
+// This was NOT introduced by the store-mistake work; the app filters, the sort
+// and the view toggle had the same fault from the day they were written. It
+// only surfaced now because a new button sent Pranjay looking.
+//
+// Two rules now keep it fixed:
+//
+//   A. EVERY click handler is DELEGATED from `document`, bound once. A
+//      delegated listener does not care that the element under the pointer was
+//      created after it, so it survives every navigation.
+//   B. NO filter state is held in a variable. What is on screen is derived
+//      from which buttons carry .on, and React owns those classes, so a
+//      navigation resets the filters by itself and the buttons can never
+//      disagree with the rows.
 (function () {
-  var root = document.querySelector('.dashroot');
-  if (!root) return;
+  if (window.__ccDashBound) return;   // bound once per browser page load
+  window.__ccDashBound = true;
 
-  // Day / week toggle, on the pages that still offer one.
-  document.querySelectorAll('.views button').forEach(function (b) {
-    b.addEventListener('click', function () {
-      root.dataset.view = b.dataset.view;
-      document.querySelectorAll('.views button').forEach(function (x) {
-        x.classList.toggle('on', x === b);
-      });
+  var $ = function (sel, ctx) { return (ctx || document).querySelector(sel); };
+  var $$ = function (sel, ctx) {
+    return Array.prototype.slice.call((ctx || document).querySelectorAll(sel));
+  };
+  var rootEl = function () { return $('.dashroot'); };
+
+  // ------------------------------------------------------------------
+  // What should be on screen, read from the DOM every time it is asked.
+  // ------------------------------------------------------------------
+  function stateFor(target) {
+    var q = '[data-target="' + target + '"]';
+    var app = $('.appfilter' + q + '.on');
+    var tag = $('.rfilter[data-reason]' + q + '.on');
+    var root = rootEl();
+    return {
+      app: app ? (app.dataset.app || '') : '',
+      tag: tag ? (tag.dataset.reason || '') : '',
+      mistake: !!$('.rfilter.fault' + q + '.on')
+               || !!(root && root.dataset.mistake === '1')
+    };
+  }
+
+  function apply(target) {
+    var table = document.getElementById(target);
+    if (!table) return 0;
+    var w = stateFor(target);
+    var shown = 0, bad = 0;
+    $$('tbody tr', table).forEach(function (tr) {
+      var isBad = tr.dataset.mistake === '1';
+      if (isBad) bad++;
+      var ok = (!w.tag || tr.dataset.reason === w.tag)
+            && (!w.app || tr.dataset.app === w.app)
+            && (!w.mistake || isBad);
+      tr.style.display = ok ? '' : 'none';
+      if (ok) shown++;
     });
+    // A list filtered down to nothing must say so, or a screenshot of an empty
+    // table reads as "no data" when it means "nothing wrong here".
+    var holder = table.parentNode;
+    var note = $('.mnone', holder);
+    if (!note) {
+      note = document.createElement('p');
+      note.className = 'mnone';
+      holder.appendChild(note);
+    }
+    note.textContent = shown ? '' :
+      (w.mistake ? 'No store mistakes in this list.' : 'Nothing matches this filter.');
+    note.style.display = shown ? 'none' : '';
+    return bad;
+  }
+
+  function applyAll() {
+    var total = 0;
+    $$('table.faultable[id]').forEach(function (t) { total += apply(t.id) || 0; });
+    var c = document.getElementById('mistake-count');
+    // "rows", not "orders": an order that both complained and rated low is
+    // listed in two places, so a row count is the only honest one here.
+    if (c) {
+      c.textContent = ' ' + total + ' store-mistake row'
+        + (total === 1 ? '' : 's') + ' on this page';
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // One delegated click handler for every control on the page.
+  // ------------------------------------------------------------------
+  function only(sel, el) {   // give .on to el alone among sel
+    $$(sel).forEach(function (x) { x.classList.toggle('on', x === el); });
+  }
+
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (!t || !t.closest) return;
+
+    // Day / week view toggle
+    var v = t.closest('.views button');
+    if (v) {
+      var root = rootEl();
+      if (root) root.dataset.view = v.dataset.view;
+      only('.views button', v);
+      return;
+    }
+
+    // Section-1 Zomato / Swiggy tab pair
+    var tab = t.closest('.s1tab');
+    if (tab) {
+      var group = tab.dataset.group || 'g1';
+      only('.s1tab[data-group="' + group + '"]', tab);
+      $$('.s1view[data-group="' + group + '"]').forEach(function (view) {
+        view.classList.toggle('off', view.dataset.view !== tab.dataset.view);
+      });
+      return;
+    }
+
+    // Both apps / Zomato only / Swiggy only
+    var af = t.closest('.appfilter');
+    if (af) {
+      only('.appfilter[data-target="' + af.dataset.target + '"]', af);
+      apply(af.dataset.target);
+      return;
+    }
+
+    // Store mistakes only, for one list
+    var fa = t.closest('.rfilter.fault[data-target]');
+    if (fa) {
+      var on = !fa.classList.contains('on');
+      fa.classList.toggle('on', on);
+      if (on) {
+        // showing mistakes only means no single tag is selected, so the two
+        // can never cancel each other out and leave an empty table
+        var tagSel = '.rfilter[data-reason][data-target="' + fa.dataset.target + '"]';
+        var showAll = $(tagSel + '[data-reason=""]');
+        only(tagSel, showAll);
+      }
+      apply(fa.dataset.target);
+      return;
+    }
+
+    // A single complaint tag
+    var tg = t.closest('.rfilter[data-reason]');
+    if (tg) {
+      var target = tg.dataset.target || 'comp-wk';
+      only('.rfilter[data-reason][data-target="' + target + '"]', tg);
+      var chip = $('.rfilter.fault[data-target="' + target + '"]');
+      if (chip) chip.classList.remove('on');   // picking a tag drops the narrowing
+      apply(target);
+      return;
+    }
+
+    // The page-wide store-mistake switch
+    var sw = t.closest('#mistake-switch');
+    if (sw) {
+      var r = rootEl();
+      if (!r) return;
+      var want = r.dataset.mistake !== '1';
+      r.dataset.mistake = want ? '1' : '';
+      sw.classList.toggle('on', want);
+      sw.setAttribute('aria-pressed', want ? 'true' : 'false');
+      applyAll();
+      return;
+    }
+
+    // Click-to-sort on any .sortable table header
+    var th = t.closest('table.sortable thead th');
+    if (th) { sortBy(th); return; }
   });
 
-  // The reason, app and store-mistake filters all live in ONE engine at the
-  // bottom of this file (18 Sep 2026). There used to be a second copy here
-  // that also bound to .rfilter and reset the table before the real filter
-  // ran; with a third dimension to honour that would have been a bug.
-
-  // Sortable tables
   function cellKey(td) {
-    var t = td.textContent.trim();
-    var n = parseFloat(t.replace(/[₹,%]/g, '').replace(/,/g, ''));
+    var s = td.textContent.trim();
+    var n = parseFloat(s.replace(/[\u20B9,%]/g, '').replace(/,/g, ''));
     return isNaN(n) ? null : n;
   }
-  document.querySelectorAll('table.sortable').forEach(function (table) {
-    var ths = table.querySelectorAll('thead th');
-    ths.forEach(function (th, ci) {
-      th.addEventListener('click', function () {
-        var tbody = table.tBodies[0];
-        var rows = Array.prototype.slice.call(tbody.rows);
-        var dir = th.dataset.dir === 'asc' ? 'desc' : 'asc';
-        ths.forEach(function (h) { delete h.dataset.dir; var a = h.querySelector('.arrow'); if (a) a.remove(); });
-        th.dataset.dir = dir;
-        var arrow = document.createElement('span');
-        arrow.className = 'arrow';
-        arrow.textContent = dir === 'asc' ? ' ▲' : ' ▼';
-        th.appendChild(arrow);
-        rows.sort(function (a, b) {
-          var x = cellKey(a.cells[ci]), y = cellKey(b.cells[ci]);
-          if (x === null && y === null) {
-            var xs = a.cells[ci].textContent.trim().toLowerCase(), ys = b.cells[ci].textContent.trim().toLowerCase();
-            return dir === 'asc' ? xs.localeCompare(ys) : ys.localeCompare(xs);
-          }
-          if (x === null) return 1;
-          if (y === null) return -1;
-          return dir === 'asc' ? x - y : y - x;
-        });
-        rows.forEach(function (r) { tbody.appendChild(r); });
-      });
-    });
-  });
 
-  // Sparklines: <svg class="sparkline" data-points="[..]" data-labels="[..]"
-  //             data-min data-max data-suffix>
-  document.querySelectorAll('svg.sparkline').forEach(function (svg) {
+  function sortBy(th) {
+    var table = th.closest('table');
+    var ths = $$('thead th', table);
+    var ci = ths.indexOf(th);
+    if (ci < 0 || !table.tBodies[0]) return;
+    var tbody = table.tBodies[0];
+    var rows = Array.prototype.slice.call(tbody.rows);
+    var dir = th.dataset.dir === 'asc' ? 'desc' : 'asc';
+    ths.forEach(function (h) {
+      delete h.dataset.dir;
+      var a = h.querySelector('.arrow');
+      if (a) a.remove();
+    });
+    th.dataset.dir = dir;
+    var arrow = document.createElement('span');
+    arrow.className = 'arrow';
+    arrow.textContent = dir === 'asc' ? ' \u25B2' : ' \u25BC';
+    th.appendChild(arrow);
+    rows.sort(function (a, b) {
+      var x = cellKey(a.cells[ci]), y = cellKey(b.cells[ci]);
+      if (x === null && y === null) {
+        var xs = a.cells[ci].textContent.trim().toLowerCase();
+        var ys = b.cells[ci].textContent.trim().toLowerCase();
+        return dir === 'asc' ? xs.localeCompare(ys) : ys.localeCompare(xs);
+      }
+      if (x === null) return 1;
+      if (y === null) return -1;
+      return dir === 'asc' ? x - y : y - x;
+    });
+    rows.forEach(function (r) { tbody.appendChild(r); });
+  }
+
+  // ------------------------------------------------------------------
+  // Sparklines. Marked once drawn so a re-run is free and never doubles up.
+  // ------------------------------------------------------------------
+  function drawSparklines() {
+    $$('svg.sparkline').forEach(function (svg) {
+      if (svg.dataset.drawn === '1') return;
+      svg.dataset.drawn = '1';
     var data, labels;
     try { data = JSON.parse(svg.dataset.points || '[]'); } catch (e) { return; }
     try { labels = JSON.parse(svg.dataset.labels || '[]'); } catch (e) { labels = []; }
@@ -109,137 +281,43 @@
       c.appendChild(t);
       svg.appendChild(c);
     });
-  });
-})();
-
-// ---- merged Zomato + Swiggy pages (30 Aug 2026) ----
-// App-tab toggle (the approved section 1 design: one table per app).
-(function () {
-  document.querySelectorAll('.s1tab').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var group = b.dataset.group || 'g1';
-      document.querySelectorAll('.s1tab[data-group="' + group + '"]').forEach(function (x) {
-        x.classList.toggle('on', x === b);
-      });
-      document.querySelectorAll('.s1view[data-group="' + group + '"]').forEach(function (v) {
-        v.classList.toggle('off', v.dataset.view !== b.dataset.view);
-      });
-    });
-  });
-  // Both apps / Zomato only / Swiggy only filters. They cooperate with the
-  // ---------------- the one row-filter engine (18 Sep 2026) ----------------
-  // Three dimensions, one source of truth for whether a row is on screen:
-  //   tag      the complaint tag chips        (data-reason on the row)
-  //   app      Both apps / Zomato / Swiggy    (data-app on the row)
-  //   mistake  store mistakes only            (data-mistake="1" on the row)
-  // plus the page-wide switch in the header, which turns the mistake dimension
-  // on for EVERY list at once so one click gives a screenshot to send a team.
-  // Written as one function because three separate handlers each rewriting
-  // tr.style.display cannot agree.
-  var root = document.querySelector('.dashroot');
-  var want = {};
-
-  function apply(target) {
-    var table = document.getElementById(target);
-    if (!table) return;
-    var w = want[target] || {};
-    var onlyBad = w.mistake || (root && root.dataset.mistake === '1');
-    var shown = 0, bad = 0;
-    table.querySelectorAll('tbody tr').forEach(function (tr) {
-      if (tr.classList.contains('nonerow')) return;
-      var isBad = tr.dataset.mistake === '1';
-      if (isBad) bad++;
-      var ok = (!w.tag || tr.dataset.reason === w.tag)
-            && (!w.app || tr.dataset.app === w.app)
-            && (!onlyBad || isBad);
-      tr.style.display = ok ? '' : 'none';
-      if (ok) shown++;
-    });
-    // A list filtered down to nothing must say so, or a screenshot of an empty
-    // table reads as "no data" when it means "nothing wrong here".
-    var note = table.parentNode.querySelector('.mnone');
-    if (!note) {
-      note = document.createElement('p');
-      note.className = 'mnone';
-      table.parentNode.insertBefore(note, table.nextSibling);
-    }
-    note.textContent = shown ? '' : (onlyBad
-      ? 'No store mistakes in this list.'
-      : 'Nothing matches this filter.');
-    note.style.display = shown ? 'none' : '';
-    return bad;
-  }
-
-  function applyAll() {
-    var total = 0;
-    document.querySelectorAll('table.faultable[id]').forEach(function (t) {
-      total += apply(t.id) || 0;
-    });
-    var c = document.getElementById('mistake-count');
-    // "rows", not "orders": an order that both complained and rated low is
-    // listed in two places, so a row count is the only honest one here.
-    if (c) c.textContent = ' ' + total + ' store-mistake row' + (total === 1 ? '' : 's') + ' on this page';
-  }
-
-  document.querySelectorAll('.appfilter').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var target = b.dataset.target;
-      document.querySelectorAll('.appfilter[data-target="' + target + '"]').forEach(function (x) {
-        x.classList.toggle('on', x === b);
-      });
-      want[target] = want[target] || {};
-      want[target].app = b.dataset.app;
-      apply(target);
-    });
-  });
-
-  document.querySelectorAll('.rfilter[data-reason]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var target = b.dataset.target || 'comp-wk';
-      document.querySelectorAll('.rfilter[data-reason][data-target="' + target + '"]').forEach(function (x) {
-        x.classList.toggle('on', x === b);
-      });
-      want[target] = want[target] || {};
-      want[target].tag = b.dataset.reason;
-      // Picking a single tag drops the store-mistake narrowing, so the two
-      // never silently cancel each other out and leave an empty table.
-      want[target].mistake = false;
-      var m = document.querySelector('.rfilter.fault[data-target="' + target + '"]');
-      if (m) m.classList.remove('on');
-      apply(target);
-    });
-  });
-
-  // One list's own store-mistake chip.
-  document.querySelectorAll('.rfilter.fault[data-target]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var target = b.dataset.target;
-      want[target] = want[target] || {};
-      var on = !b.classList.contains('on');
-      b.classList.toggle('on', on);
-      want[target].mistake = on;
-      if (on) {
-        // showing mistakes only means no single tag is selected
-        want[target].tag = '';
-        document.querySelectorAll('.rfilter[data-reason][data-target="' + target + '"]').forEach(function (x) {
-          x.classList.toggle('on', x.dataset.reason === '');
-        });
-      }
-      apply(target);
-    });
-  });
-
-  // The page-wide switch in the header.
-  var sw = document.getElementById('mistake-switch');
-  if (sw && root) {
-    sw.addEventListener('click', function () {
-      var on = root.dataset.mistake !== '1';
-      root.dataset.mistake = on ? '1' : '';
-      sw.classList.toggle('on', on);
-      sw.setAttribute('aria-pressed', on ? 'true' : 'false');
-      applyAll();
     });
   }
 
-  applyAll();
+  // ------------------------------------------------------------------
+  // Run for the page that is on screen now, and again after every
+  // client-side navigation. React paints a little after the URL changes, so
+  // the render is retried on a short ladder; every step is idempotent.
+  // ------------------------------------------------------------------
+  function render() {
+    if (!rootEl()) return;
+    drawSparklines();
+    applyAll();
+  }
+
+  function onRouteChange() {
+    // React reuses DOM nodes between two daily pages, so inline display:none
+    // and the page-wide switch can outlive the page that set them. Clear both
+    // before re-applying, or rows stay hidden with no button lit to say why.
+    var r = rootEl();
+    if (r) r.dataset.mistake = '';
+    $$('table[id] tbody tr').forEach(function (tr) { tr.style.display = ''; });
+    [0, 120, 400, 1000].forEach(function (ms) { setTimeout(render, ms); });
+  }
+
+  ['pushState', 'replaceState'].forEach(function (k) {
+    var orig = history[k];
+    if (typeof orig !== 'function') return;
+    history[k] = function () {
+      var out = orig.apply(this, arguments);
+      onRouteChange();
+      return out;
+    };
+  });
+  window.addEventListener('popstate', onRouteChange);
+
+  render();
+  // The script itself is lazy-loaded, so the page may still be settling when
+  // it first runs; the same short ladder covers that.
+  [120, 400, 1000].forEach(function (ms) { setTimeout(render, ms); });
 })();

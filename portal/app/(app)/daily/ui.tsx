@@ -39,7 +39,13 @@ export function DashHead({ title, subtitle, date, latest, basePath, toggle, mist
 }
 
 export function DashScript() {
-  return <Script src="/dash.js" strategy="lazyOnload" />;
+  // afterInteractive, not lazyOnload (18 Sep 2026). lazyOnload waits for the
+  // browser to go idle, which on these pages measured 3 to 4 seconds; until
+  // then every filter button on screen is dead and a click does nothing, with
+  // no way for the person clicking to tell that from a broken button. The
+  // script is 9 KB and does nothing until clicked, so there is no reason to
+  // make it wait. See the header of public/dash.js for the rest of that fault.
+  return <Script src="/dash.js" strategy="afterInteractive" />;
 }
 
 export function Tile({ label, y, wk }: { label: string; y: React.ReactNode; wk: React.ReactNode }) {
