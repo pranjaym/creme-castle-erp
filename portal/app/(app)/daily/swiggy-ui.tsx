@@ -9,24 +9,29 @@
 //   * section-1 tables keep the original columns with one Z/S toggle;
 //   * merged lists carry Both apps / Zomato only / Swiggy only filters.
 import Link from 'next/link';
-import { n0, n1, clockTime, isStoreMistake, type SwiggyStoreRow, type SwiggyShortSeries } from '@/lib/daily';
+import { n0, n1, clockTime, isStoreMistake, reasonFamily,
+  type SwiggyStoreRow, type SwiggyShortSeries } from '@/lib/daily';
 import { Chart } from './ui';
 
 export function AppTag({ app }: { app: 'Z' | 'S' }) {
   return <span className={`apptag app-${app.toLowerCase()}`}>{app}</span>;
 }
 
-// Red for the reasons that are unambiguously the store's doing. The keyword
-// list moved into lib/daily.ts (isStoreMistake) on 18 Sep 2026 so that the
-// rejection reasons and the complaint tags are judged by ONE rule and the new
-// store-mistake filter catches exactly what the red chips show.
+// The turned-away reasons. Same two rules as the complaint tags: the tint
+// names the failure (stock, shut, handover, tech) and a red left edge marks it
+// as the store's. Both moved into lib/daily.ts on 18 Sep 2026 so the rejection
+// reasons and the complaint tags are judged once and the store-mistake filter
+// catches exactly what the edge shows.
 // `store` is passed by the turned-away lists, where every row is store-caused
 // before it reaches the page (migrations 225 and 213), so the tag is red even
 // when Zomato sent no reason word at all: on 13 Sep 2026 two of the network's
 // 55 rejections carried a null reason, and a keyword rule alone would have
 // quietly dropped them out of the store-mistake filter.
 export function FaultTag({ why, store }: { why: string; store?: boolean }) {
-  return <span className={`rchip ${store || isStoreMistake(why) ? 'r-fault' : 'r-other'}`}>{why}</span>;
+  const fault = store || isStoreMistake(why);
+  return (
+    <span className={`rchip r-${reasonFamily(why)}${fault ? ' is-fault' : ''}`}>{why}</span>
+  );
 }
 
 // Both apps / Zomato only / Swiggy only. Filters rows carrying data-app in
