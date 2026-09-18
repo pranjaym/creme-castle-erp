@@ -2,7 +2,7 @@
 // The interactivity (view toggle, sorting, sparklines) is /dash.js.
 import Script from 'next/script';
 import Link from 'next/link';
-import { dateLabel, shiftDate, isStoreMistake, MISTAKE_RULE } from '@/lib/daily';
+import { dateLabel, shiftDate, isStoreMistake, reasonFamily, MISTAKE_RULE } from '@/lib/daily';
 
 export function DashHead({ title, subtitle, date, latest, basePath, toggle, mistakeScope }:
   { title: string; subtitle: string; date: string; latest: string; basePath: string; toggle?: boolean;
@@ -348,17 +348,16 @@ export function Words({ text }: { text?: string | null }) {
 }
 
 // Complaint reason tag. The tag text comes from the ORDER row, never from
-// Zomato's daily report (the two use different words). A STORE MISTAKE (wrong
-// item, item missing) is the one loud colour on the page; the other families
-// stay calm but visibly different from each other. The rule lives in
-// lib/daily.ts so the colour and the filter can never disagree.
+// Zomato's daily report (the two use different words). The chip's tint names
+// WHAT went wrong; a STORE MISTAKE (wrong item, item missing) additionally
+// carries a red left edge. Both rules live in lib/daily.ts so the colour, the
+// edge and the filter can never disagree.
 export function Tag({ reason }: { reason: string }) {
-  const r = reason.toLowerCase();
-  const cls = isStoreMistake(reason) ? 'fault'
-    : r.includes('packag') || r.includes('spill') ? 'packing'
-    : r.includes('taste') || r.includes('quality') ? 'taste'
-    : r.includes('late') || r.includes('delay') ? 'late' : 'other';
-  return <span className={`rchip r-${cls}`}>{reason}</span>;
+  return (
+    <span className={`rchip r-${reasonFamily(reason)}${isStoreMistake(reason) ? ' is-fault' : ''}`}>
+      {reason}
+    </span>
+  );
 }
 
 // ---- area page components (approved design v2, 25 Aug 2026) ----

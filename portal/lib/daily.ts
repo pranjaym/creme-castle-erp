@@ -391,6 +391,36 @@ const MISTAKE_WORDS = [
 //   "Ordered the wrong item" is the customer saying they ordered wrong.
 const NOT_MISTAKE = ['unavailable to accept', 'ordered the wrong item'];
 
+// What KIND of thing went wrong, which is what the chip's colour says. Kept
+// separate from isStoreMistake() on purpose (Pranjay, 18 Sep 2026: "why the
+// same colour? it looks so red and not appealing to the eyes"). Painting every
+// store mistake one loud red made a section of 25 rejections a wall of
+// identical scarlet that carried no information, because those lists are
+// store-caused by construction. So: the colour names the failure, and being
+// the store's mistake is a quiet red edge on the chip instead.
+//
+// Four store families, which are also the four different things a manager does
+// about them: stock (order more), shut (open the shop), handover (check the
+// bag), tech (fix the tablet). Three that are not the store's: packing, taste,
+// late, plus the untagged majority.
+export function reasonFamily(text?: string | null): string {
+  const t = (text ?? '').toLowerCase().trim();
+  if (!t) return 'other';
+  if (NOT_MISTAKE.some(k => t.includes(k))) return 'other';
+  if (t.includes('out of stock') || t.includes('unavailable')
+      || t.includes('not available') || t.includes('item oos')) return 'stock';
+  if (t.includes('closed') || t.includes('not accepting')
+      || t.includes('kitchen is full')) return 'shut';
+  if (t.includes('wrong item') || t.includes('missing')
+      || t.includes('wrong restaurant address')) return 'hand';
+  if (t.includes('unable to connect') || t.includes('device')
+      || t.includes('timeout')) return 'tech';
+  if (t.includes('packag') || t.includes('spill')) return 'packing';
+  if (t.includes('taste') || t.includes('quality')) return 'taste';
+  if (t.includes('late') || t.includes('delay')) return 'late';
+  return 'other';
+}
+
 export function isStoreMistake(text?: string | null): boolean {
   const t = (text ?? '').toLowerCase().trim();
   if (!t) return false;

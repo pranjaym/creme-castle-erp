@@ -652,15 +652,33 @@ table.sheet td .sub { display: block; color: var(--muted); font-size: 11.5px; fo
 .dashroot .rchip { display: inline-block; font-size: 12px; font-weight: 600;
   border-radius: 6px; padding: 1px 8px; white-space: nowrap; }
 
-/* the store's own mistake: wrong item, item missing, and every turned-away reason */
-.dashroot .r-fault { background: #B3261E; color: #fff; }
-.dashroot .r-fault::before { content: '\25CF'; font-size: 8px; vertical-align: 2px; margin-right: 5px; opacity: .85; }
-
-/* not the store's mistake, and each visibly its own thing */
+/* THE COLOUR NAMES THE FAULT. Pranjay, 18 Sep 2026: "why the same colour? it
+   looks so red and not appealing to the eyes." He was right twice. A section
+   of 25 rejections painted one solid scarlet was a wall with no information in
+   it (those rows are all store-caused by construction, so the red said
+   nothing), and 25 saturated blocks in a row are unpleasant to read. So the
+   chip body is a soft tint that names WHAT went wrong, and the four families
+   are also the four different things a manager does about it. */
+.dashroot .r-stock   { background: #FBEDE6; color: #8A4423; }  /* order more     */
+.dashroot .r-shut    { background: #FAE8EC; color: #8B2545; }  /* open the shop  */
+.dashroot .r-hand    { background: #F3EAF4; color: #6B2F62; }  /* check the bag  */
+.dashroot .r-tech    { background: #ECEFF4; color: #435068; }  /* fix the tablet */
 .dashroot .r-packing { background: #EAF0FA; color: #2C4E82; }
 .dashroot .r-taste   { background: #FDF3D7; color: #7A5A12; }
-.dashroot .r-late    { background: #F2E8FA; color: #5E3B82; }
+.dashroot .r-late    { background: #EFF2EA; color: #4A5A32; }
 .dashroot .r-other   { background: #F0EDEB; color: #6b5a5d; }
+
+/* BEING THE STORE'S MISTAKE IS A QUIET EDGE, not a fill. One red rule down the
+   left of the chip, the same on every store-mistake chip whatever its family,
+   so the eye can find them in a mixed list without the page shouting. It also
+   survives a black and white print, which a fill colour does not. */
+.dashroot .is-fault { border-left: 3px solid #C0362C; padding-left: 7px; }
+
+/* and the row it sits on takes the faintest warm wash, so scanning sixty rows
+   finds the store's own without reading a single word. It has to beat the
+   zebra stripe, hence the td. */
+.dashroot tbody tr[data-mistake="1"] > td { background: #FFF6F4; }
+.dashroot tbody tr[data-mistake="1"]:hover > td { background: var(--wash); }
 
 /* The store-mistake filter chip, so it is never mistaken for a tag chip. */
 .dashroot .rfilter.fault { border-color: #B3261E; color: #B3261E; font-weight: 700; }
