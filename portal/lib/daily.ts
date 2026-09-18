@@ -350,3 +350,58 @@ export function dShort(iso: string | null | undefined): string {
   if (!iso) return '-';
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' });
 }
+
+// ===================== whose mistake was it =====================
+// One rule, used by every reason tag on every daily page, so a store mistake
+// reads the same red on the store page, the area page and the network page and
+// the one filter catches all of them. Locked with Pranjay, 18 Sep 2026.
+//
+// COMPLAINTS. Zomato tags a complaint with one of five words. Only two of them
+// are the store's own mistake: wrong item(s) delivered, and item(s) missing or
+// not delivered. Poor packaging or spillage and poor taste or quality keep
+// their own colours and are deliberately NOT store mistakes: a taste complaint
+// is one customer's mouth, and neither should be sent to a store as a packing
+// error. "Non-refunded complaint" is Zomato's word for a complaint with no
+// reason given, so it cannot be charged to anybody.
+//
+// TURNED AWAY. Every reason in the rejection and cancellation lists is already
+// a store-caused one before it reaches the page (Zomato: order_state is not
+// Delivered AND rejected_by = 'Mx rejected', migration 225; Swiggy: the
+// restaurant-driven cancellations only, migration 213), so the whole of that
+// list is the store's. The three that matter most, in Pranjay's words: shop
+// closed, unable to connect, items out of stock.
+//
+// The word lists below are the words the two feeds actually use, checked
+// against 90 days of rows on 18 Sep 2026, not words from memory.
+const MISTAKE_WORDS = [
+  // complaint tags (Zomato)
+  'wrong item', 'missing',
+  // Zomato rejection reasons marked Mx rejected
+  'out of stock', 'kitchen is full', 'is closed', 'timeout', 'device issue',
+  'wrong restaurant address',
+  // Swiggy restaurant-driven cancellation sub-dispositions
+  'unavailable', 'not available', 'item oos', 'closed for', 'not accepting',
+  'unable to connect',
+];
+
+// Two reasons carry a store word but are not the store's doing, so they are
+// named here rather than left to a substring to get wrong.
+//   "Unavailable to accept the order" is Zomato's post-pickup CUSTOMER
+//     cancellation, never a store rejection (F49, 9 Sep 2026).
+//   "Ordered the wrong item" is the customer saying they ordered wrong.
+const NOT_MISTAKE = ['unavailable to accept', 'ordered the wrong item'];
+
+export function isStoreMistake(text?: string | null): boolean {
+  const t = (text ?? '').toLowerCase().trim();
+  if (!t) return false;
+  if (NOT_MISTAKE.some(k => t.includes(k))) return false;
+  return MISTAKE_WORDS.some(k => t.includes(k));
+}
+
+// The one sentence that travels with a filtered screenshot, so whoever gets it
+// in a group knows exactly what they are looking at without asking.
+export const MISTAKE_RULE = 'Store mistakes are the orders the store itself got wrong: '
+  + 'wrong item delivered, item missing, and every order turned away or cancelled on the store '
+  + '(shop closed, unable to connect, items out of stock, kitchen full, device issue, timeout). '
+  + 'Poor packaging, poor taste and late delivery are not counted here. '
+  + 'An order that both complained and rated low is listed in both places, so the count is of rows, not orders.';

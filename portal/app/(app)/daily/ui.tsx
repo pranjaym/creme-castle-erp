@@ -2,10 +2,11 @@
 // The interactivity (view toggle, sorting, sparklines) is /dash.js.
 import Script from 'next/script';
 import Link from 'next/link';
-import { dateLabel, shiftDate } from '@/lib/daily';
+import { dateLabel, shiftDate, isStoreMistake, MISTAKE_RULE } from '@/lib/daily';
 
-export function DashHead({ title, subtitle, date, latest, basePath, toggle }:
-  { title: string; subtitle: string; date: string; latest: string; basePath: string; toggle?: boolean }) {
+export function DashHead({ title, subtitle, date, latest, basePath, toggle, mistakeScope }:
+  { title: string; subtitle: string; date: string; latest: string; basePath: string; toggle?: boolean;
+    mistakeScope?: string }) {
   const prev = shiftDate(date, -1);
   const next = shiftDate(date, 1);
   return (
@@ -26,7 +27,9 @@ export function DashHead({ title, subtitle, date, latest, basePath, toggle }:
             <button data-view="wk" type="button">Last 7 days</button>
           </span>
         ) : null}
+        {mistakeScope ? <MistakeSwitch /> : null}
       </div>
+      {mistakeScope ? <MistakeBanner scope={mistakeScope} date={date} /> : null}
       <p className="note">
         Settled data only: the newest selectable day is 2 days back because Zomato keeps revising fresher days.
         Each section shows the selected day first, then the 7 days ending on it.
@@ -283,16 +286,56 @@ export function Fold({ label, count, open, children }:
   );
 }
 
-export function Rows({ cols, rows, empty }:
-  { cols: string[]; rows: React.ReactNode[][]; empty?: string }) {
+// `mistakes` marks which rows are the store's own mistake, by position, so the
+// day lists join the same one-switch filter as the week lists. A table that
+// passes it is declared .faultable and dash.js will filter it.
+export function Rows({ cols, rows, empty, id, mistakes }:
+  { cols: string[]; rows: React.ReactNode[][]; empty?: string; id?: string; mistakes?: boolean[] }) {
   if (!rows.length) return <p className="note">{empty ?? 'Nothing to list.'}</p>;
   return (
     <div className="scroll-x">
-      <table>
+      <table id={id} className={mistakes ? 'faultable' : undefined}>
         <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
-        <tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{c}</td>)}</tr>)}</tbody>
+        <tbody>{rows.map((r, i) => (
+          <tr key={i} data-mistake={mistakes && mistakes[i] ? '1' : undefined}>
+            {r.map((c, j) => <td key={j}>{c}</td>)}
+          </tr>
+        ))}</tbody>
       </table>
     </div>
+  );
+}
+
+// ---- store mistakes: the page-wide switch and the screenshot caption ----
+// Pranjay, 18 Sep 2026: "maybe we can have a filter for store mistakes, where
+// we can just select that, filter, create the screenshot, and share it with
+// the relevant team." One switch in the header filters every reason list on
+// the page at once, and the banner below it is written to survive being
+// screenshotted into a group: it names the page, the day and the rule.
+export function MistakeSwitch() {
+  return (
+    <button className="mswitch" id="mistake-switch" type="button" aria-pressed="false">
+      <span className="dot" />Store mistakes only
+    </button>
+  );
+}
+
+export function MistakeBanner({ scope, date }: { scope: string; date: string }) {
+  return (
+    <div className="mbanner">
+      <b>Store mistakes only</b> &middot; {scope} &middot; {dateLabel(date)} &middot;
+      <span id="mistake-count"> </span>
+      <span className="rule">{MISTAKE_RULE}</span>
+    </div>
+  );
+}
+
+// One list's own store-mistake chip, next to its tag chips.
+export function MistakeChip({ target }: { target: string }) {
+  return (
+    <button className="rfilter fault" data-target={target} data-mistake="1" type="button">
+      Store mistakes only
+    </button>
   );
 }
 
@@ -304,14 +347,17 @@ export function Words({ text }: { text?: string | null }) {
   return <span className="words" title={text}>&ldquo;{t}&rdquo;</span>;
 }
 
-// Complaint reason tag, coloured by family. The tag text comes from the ORDER
-// row, never from Zomato's daily report (the two use different words).
+// Complaint reason tag. The tag text comes from the ORDER row, never from
+// Zomato's daily report (the two use different words). A STORE MISTAKE (wrong
+// item, item missing) is the one loud colour on the page; the other families
+// stay calm but visibly different from each other. The rule lives in
+// lib/daily.ts so the colour and the filter can never disagree.
 export function Tag({ reason }: { reason: string }) {
   const r = reason.toLowerCase();
-  const cls = r.includes('packag') || r.includes('spill') ? 'packing'
+  const cls = isStoreMistake(reason) ? 'fault'
+    : r.includes('packag') || r.includes('spill') ? 'packing'
     : r.includes('taste') || r.includes('quality') ? 'taste'
-    : r.includes('missing') ? 'missing'
-    : r.includes('wrong') ? 'wrong' : 'other';
+    : r.includes('late') || r.includes('delay') ? 'late' : 'other';
   return <span className={`rchip r-${cls}`}>{reason}</span>;
 }
 
