@@ -1,11 +1,11 @@
 import { redirect } from 'next/navigation';
 import {
   getDashAll, getAreaDetail, getAreaSwiggy, aggregateAreas,
-  inr, n0, n1, clockTime, dShort, type AreaReceipt,
+  inr, n0, n1, clockTime, dShort, isStoreMistake, type AreaReceipt,
 } from '@/lib/daily';
 import {
   DashHead, DashScript, SecHead, Period, Fold, Rows, Tag, Basket,
-  AreaStores, DipCard, AreasTables, ShutShop, Lead, Words,
+  AreaStores, DipCard, AreasTables, ShutShop, Lead, Words, MistakeChip,
 } from '../../ui';
 import { AppTag, AppTabs, AppRows, FaultTag, SwiggyStoresTable, ShortCard } from '../../swiggy-ui';
 
@@ -80,7 +80,8 @@ export default async function AreaView({ am, date, latest }:
   return (
     <main className="dashroot">
       <DashHead title={`${am}'s area`} subtitle={`${mine.length} stores · Zomato + Swiggy`}
-        date={date} latest={latest} basePath={`/daily/area/${encodeURIComponent(am)}`} />
+        date={date} latest={latest} basePath={`/daily/area/${encodeURIComponent(am)}`}
+        mistakeScope={`${am}'s area, ${mine.length} stores`} />
 
       <div className="dctx">
         <div className="dtile"><div className="dlabel">Orders</div>
@@ -148,11 +149,13 @@ export default async function AreaView({ am, date, latest }:
         <Period label={dshort}>
           <AppRows id="turn-day" cols={['Store', 'Time', 'App', 'Reason', 'What the customer had ordered', 'Value lost']}
             rows={[
-              ...rejT.map(r => ({ app: 'Z' as const, cells: [r.code, r.time, <AppTag key="a" app="Z" />,
-                <FaultTag key="t" why={r.reason ?? 'no reason'} />,
+              ...rejT.map(r => ({ app: 'Z' as const, mistake: true,
+                cells: [r.code, r.time, <AppTag key="a" app="Z" />,
+                <FaultTag key="t" why={r.reason ?? 'no reason'} store />,
                 <Basket key="b" text={r.basket} />, inr(r.value)] })),
-              ...SW.canc_day.map(c => ({ app: 'S' as const, cells: [c.code ?? '', clockTime(c.t), <AppTag key="a" app="S" />,
-                <FaultTag key="t" why={c.why} />, <Basket key="b" text={c.basket} />,
+              ...SW.canc_day.map(c => ({ app: 'S' as const, mistake: true,
+                cells: [c.code ?? '', clockTime(c.t), <AppTag key="a" app="S" />,
+                <FaultTag key="t" why={c.why} store />, <Basket key="b" text={c.basket} />,
                 c.val === null ? 'n/a' : inr(c.val)] })),
             ]}
             empty="Nothing was turned away on either app on this day." />
@@ -161,11 +164,13 @@ export default async function AreaView({ am, date, latest }:
           <Fold label="Earlier this week, both apps" count={rejW.length + SW.canc_wk.length}>
             <AppRows id="turn-wk" cols={['Store', 'Day', 'Time', 'App', 'Reason', 'What the customer had ordered', 'Value lost']}
               rows={[
-                ...rejW.map(r => ({ app: 'Z' as const, cells: [r.code, r.dlabel, r.time, <AppTag key="a" app="Z" />,
-                  <FaultTag key="t" why={r.reason ?? 'no reason'} />,
+                ...rejW.map(r => ({ app: 'Z' as const, mistake: true,
+                  cells: [r.code, r.dlabel, r.time, <AppTag key="a" app="Z" />,
+                  <FaultTag key="t" why={r.reason ?? 'no reason'} store />,
                   <Basket key="b" text={r.basket} />, inr(r.value)] })),
-                ...SW.canc_wk.map(c => ({ app: 'S' as const, cells: [c.code ?? '', dShort(c.d), clockTime(c.t), <AppTag key="a" app="S" />,
-                  <FaultTag key="t" why={c.why} />, <Basket key="b" text={c.basket} />,
+                ...SW.canc_wk.map(c => ({ app: 'S' as const, mistake: true,
+                  cells: [c.code ?? '', dShort(c.d), clockTime(c.t), <AppTag key="a" app="S" />,
+                  <FaultTag key="t" why={c.why} store />, <Basket key="b" text={c.basket} />,
                   c.val === null ? 'n/a' : inr(c.val)] })),
               ]} />
           </Fold>
@@ -190,16 +195,18 @@ export default async function AreaView({ am, date, latest }:
       <div className="dcard">
         <Period label={dshort}>
           {compT.length <= 25
-            ? <Rows cols={['Store', 'Time', 'Tag on the order', 'What was in the order', 'What the customer wrote', 'Refunded']}
+            ? <Rows id="area-cd" cols={['Store', 'Time', 'Tag on the order', 'What was in the order', 'What the customer wrote', 'Refunded']}
                 rows={compT.map(r => [r.code, r.time, <Tag key="t" reason={r.tag ?? ''} />,
                   <Basket key="b" text={r.basket} />, <Words key="w" text={r.review} />,
                   r.refund ? inr(r.refund) : '-'])}
+                mistakes={compT.map(r => isStoreMistake(r.tag))}
                 empty="No issues reported on this day." />
             : <Fold label={`Every order with an issue on ${dshort}`} count={compT.length} open>
-                <Rows cols={['Store', 'Time', 'Tag on the order', 'What was in the order', 'What the customer wrote', 'Refunded']}
+                <Rows id="area-cd" cols={['Store', 'Time', 'Tag on the order', 'What was in the order', 'What the customer wrote', 'Refunded']}
                   rows={compT.map(r => [r.code, r.time, <Tag key="t" reason={r.tag ?? ''} />,
                     <Basket key="b" text={r.basket} />, <Words key="w" text={r.review} />,
-                    r.refund ? inr(r.refund) : '-'])} />
+                    r.refund ? inr(r.refund) : '-'])}
+                  mistakes={compT.map(r => isStoreMistake(r.tag))} />
               </Fold>}
         </Period>
         <Period label={wkLabel}>
@@ -208,15 +215,16 @@ export default async function AreaView({ am, date, latest }:
               <button key={t} className="rfilter" data-reason={t} data-target="area-cw" type="button">{t}: <b>{c}</b></button>
             ))}
             <button className="rfilter on" data-reason="" data-target="area-cw" type="button">Show all</button>
+            <MistakeChip target="area-cw" />
           </div>
           <Fold label="Complaints earlier this week (newest 60)" count={compW.length}>
             <div className="scroll-x">
-              <table id="area-cw" className="tight">
+              <table id="area-cw" className="tight faultable">
                 <thead><tr><th>Store</th><th>Day</th><th>Time</th><th>Tag on the order</th>
                   <th>What was in the order</th><th>What the customer wrote</th><th>Refunded</th></tr></thead>
                 <tbody>
                   {compW.map((r, i) => (
-                    <tr key={i} data-reason={r.tag ?? ''}>
+                    <tr key={i} data-reason={r.tag ?? ''} data-mistake={isStoreMistake(r.tag) ? '1' : undefined}>
                       <td className="name">{r.code}</td><td>{r.dlabel}</td><td>{r.time}</td>
                       <td><Tag reason={r.tag ?? ''} /></td>
                       <td><Basket text={r.basket} /></td>
@@ -237,10 +245,12 @@ export default async function AreaView({ am, date, latest }:
         <Period label={dshort}>
           <AppRows id="low-day" cols={['Store', 'Time', 'App', 'Stars', 'What was in the order', 'What the customer wrote', 'Complaint tag if any']}
             rows={[
-              ...lowT.map(r => ({ app: 'Z' as const, cells: [r.code, r.time, <AppTag key="a" app="Z" />, r.rating,
+              ...lowT.map(r => ({ app: 'Z' as const, why: r.tag ?? null,
+                cells: [r.code, r.time, <AppTag key="a" app="Z" />, r.rating,
                 <Basket key="b" text={r.basket} />, <Words key="w" text={r.review} />,
                 r.tag ? <Tag key="t" reason={r.tag} /> : '-'] })),
-              ...SW.low_day.map(r => ({ app: 'S' as const, cells: [r.code ?? '', clockTime(r.t), <AppTag key="a" app="S" />,
+              ...SW.low_day.map(r => ({ app: 'S' as const, why: null,
+                cells: [r.code ?? '', clockTime(r.t), <AppTag key="a" app="S" />,
                 r.rating == null ? '-' : n0(r.rating), <Basket key="b" text={r.basket} />,
                 <Words key="w" text={r.words} />, '-'] })),
             ]}
@@ -250,10 +260,12 @@ export default async function AreaView({ am, date, latest }:
           <Fold label="Low-rated orders earlier this week, both apps" count={lowW.length + SW.low_wk.length}>
             <AppRows id="low-wk" cols={['Store', 'Day', 'Time', 'App', 'Stars', 'What was in the order', 'What the customer wrote', 'Complaint tag if any']}
               rows={[
-                ...lowW.map(r => ({ app: 'Z' as const, cells: [r.code, r.dlabel, r.time, <AppTag key="a" app="Z" />, r.rating,
+                ...lowW.map(r => ({ app: 'Z' as const, why: r.tag ?? null,
+                  cells: [r.code, r.dlabel, r.time, <AppTag key="a" app="Z" />, r.rating,
                   <Basket key="b" text={r.basket} />, <Words key="w" text={r.review} />,
                   r.tag ? <Tag key="t" reason={r.tag} /> : '-'] })),
-                ...SW.low_wk.map(r => ({ app: 'S' as const, cells: [r.code ?? '', dShort(r.d), clockTime(r.t), <AppTag key="a" app="S" />,
+                ...SW.low_wk.map(r => ({ app: 'S' as const, why: null,
+                  cells: [r.code ?? '', dShort(r.d), clockTime(r.t), <AppTag key="a" app="S" />,
                   r.rating == null ? '-' : n0(r.rating), <Basket key="b" text={r.basket} />,
                   <Words key="w" text={r.words} />, '-'] })),
               ]} />

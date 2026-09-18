@@ -1,10 +1,10 @@
 import {
   getDashAll, getCentralDetail, getCentralSwiggy,
-  inr, lakh, n0, n1, clockTime, dShort, type StoreStats, type CentralReceipt,
+  inr, lakh, n0, n1, clockTime, dShort, isStoreMistake, type StoreStats, type CentralReceipt,
 } from '@/lib/daily';
 import {
   DashHead, DashScript, SecHead, Period, Fold, Rows, Tag, Basket, Chart, DipCard,
-  Lead, VTile, CentralStores, CentralAreas, Funnel, ShutShop, Words, type CentralArea,
+  Lead, VTile, CentralStores, CentralAreas, Funnel, ShutShop, Words, MistakeChip, type CentralArea,
 } from '../ui';
 import { AppTag, AppTabs, AppRows, FaultTag, SwiggyStoresTable, ShortCard } from '../swiggy-ui';
 
@@ -180,7 +180,8 @@ export default async function CentralView({ date, latest }: { date: string; late
   return (
     <main className="dashroot central">
       <DashHead title="The whole network" subtitle={`${stores.length} stores, ${areas.length} areas. Zomato + Swiggy.`}
-        date={date} latest={latest} basePath="/daily/central" />
+        date={date} latest={latest} basePath="/daily/central"
+        mistakeScope={`The whole network, ${stores.length} stores`} />
 
       <p className="note" style={{ marginTop: -4 }}>
         Central&apos;s question is not &ldquo;what happened here&rdquo; but &ldquo;where do I put pressure, and which
@@ -344,11 +345,13 @@ export default async function CentralView({ date, latest }: { date: string; late
         <Period label={dshort}>
           <AppRows id="turn-day" cols={['Store', 'AM', 'Time', 'App', 'Reason', 'What the customer had ordered', 'Value lost']}
             rows={[
-              ...rejT.map(r => ({ app: 'Z' as const, cells: [r.code, r.am, r.time, <AppTag key="a" app="Z" />,
-                <FaultTag key="t" why={r.reason ?? 'no reason'} />,
+              ...rejT.map(r => ({ app: 'Z' as const, mistake: true,
+                cells: [r.code, r.am, r.time, <AppTag key="a" app="Z" />,
+                <FaultTag key="t" why={r.reason ?? 'no reason'} store />,
                 <Basket key="b" text={r.basket} />, inr(r.value)] })),
-              ...SW.canc_day.map(c => ({ app: 'S' as const, cells: [c.code ?? '', c.am ?? '', clockTime(c.t), <AppTag key="a" app="S" />,
-                <FaultTag key="t" why={c.why} />, <Basket key="b" text={c.basket} />,
+              ...SW.canc_day.map(c => ({ app: 'S' as const, mistake: true,
+                cells: [c.code ?? '', c.am ?? '', clockTime(c.t), <AppTag key="a" app="S" />,
+                <FaultTag key="t" why={c.why} store />, <Basket key="b" text={c.basket} />,
                 c.val === null ? 'n/a' : inr(c.val)] })),
             ]}
             empty="Nothing was turned away on either app on this day." />
@@ -358,11 +361,13 @@ export default async function CentralView({ date, latest }: { date: string; late
           <Fold label="Earlier this week, both apps" count={rejW.length + SW.canc_wk.length}>
             <AppRows id="turn-wk" cols={['Store', 'AM', 'Day', 'Time', 'App', 'Reason', 'What the customer had ordered', 'Value lost']}
               rows={[
-                ...rejW.map(r => ({ app: 'Z' as const, cells: [r.code, r.am, r.dlabel, r.time, <AppTag key="a" app="Z" />,
-                  <FaultTag key="t" why={r.reason ?? 'no reason'} />,
+                ...rejW.map(r => ({ app: 'Z' as const, mistake: true,
+                  cells: [r.code, r.am, r.dlabel, r.time, <AppTag key="a" app="Z" />,
+                  <FaultTag key="t" why={r.reason ?? 'no reason'} store />,
                   <Basket key="b" text={r.basket} />, inr(r.value)] })),
-                ...SW.canc_wk.map(c => ({ app: 'S' as const, cells: [c.code ?? '', c.am ?? '', dShort(c.d), clockTime(c.t),
-                  <AppTag key="a" app="S" />, <FaultTag key="t" why={c.why} />,
+                ...SW.canc_wk.map(c => ({ app: 'S' as const, mistake: true,
+                  cells: [c.code ?? '', c.am ?? '', dShort(c.d), clockTime(c.t),
+                  <AppTag key="a" app="S" />, <FaultTag key="t" why={c.why} store />,
                   <Basket key="b" text={c.basket} />, c.val === null ? 'n/a' : inr(c.val)] })),
               ]} />
           </Fold>
@@ -399,10 +404,11 @@ export default async function CentralView({ date, latest }: { date: string; late
       <div className="dcard">
         <Period label={dshort}>
           <Fold label={`Every order with an issue on ${dshort}`} count={compT.length} open={compT.length <= 40}>
-            <Rows cols={compCols}
+            <Rows id="cent-cd" cols={compCols}
               rows={compT.map(r => [r.code, r.am, r.time, <Tag key="t" reason={r.tag ?? ''} />,
                 <Basket key="b" text={r.basket} />, <Words key="w" text={r.review} />,
-                r.refund ? inr(r.refund) : '-'])} />
+                r.refund ? inr(r.refund) : '-'])}
+              mistakes={compT.map(r => isStoreMistake(r.tag))} />
           </Fold>
         </Period>
         <Period label={wkLabel}>
@@ -411,14 +417,15 @@ export default async function CentralView({ date, latest }: { date: string; late
               <button key={t} className="rfilter" data-reason={t} data-target="cent-cw" type="button">{t}: <b>{c}</b></button>
             ))}
             <button className="rfilter on" data-reason="" data-target="cent-cw" type="button">Show all</button>
+            <MistakeChip target="cent-cw" />
           </div>
           <Fold label={`Complaints earlier this week (newest ${compW.length} of ${compWAll})`} count={compW.length}>
             <div className="scroll-x">
-              <table id="cent-cw" className="tight">
+              <table id="cent-cw" className="tight faultable">
                 <thead><tr>{compColsWk.map(c => <th key={c}>{c}</th>)}</tr></thead>
                 <tbody>
                   {compW.map((r, i) => (
-                    <tr key={i} data-reason={r.tag ?? ''}>
+                    <tr key={i} data-reason={r.tag ?? ''} data-mistake={isStoreMistake(r.tag) ? '1' : undefined}>
                       <td className="name">{r.code}</td><td>{r.am}</td><td>{r.dlabel}</td><td>{r.time}</td>
                       <td><Tag reason={r.tag ?? ''} /></td>
                       <td><Basket text={r.basket} /></td>
@@ -464,10 +471,12 @@ export default async function CentralView({ date, latest }: { date: string; late
             <AppRows id="low-day" cols={['Store', 'AM', 'Time', 'App', 'Stars', 'What was in the order', 'What the customer wrote',
               'Complaint tag if any']}
               rows={[
-                ...lowT.map(r => ({ app: 'Z' as const, cells: [r.code, r.am, r.time, <AppTag key="a" app="Z" />, r.rating,
+                ...lowT.map(r => ({ app: 'Z' as const, why: r.tag ?? null,
+                  cells: [r.code, r.am, r.time, <AppTag key="a" app="Z" />, r.rating,
                   <Basket key="b" text={r.basket} />, <Words key="w" text={r.review} />,
                   r.tag ? <Tag key="t" reason={r.tag} /> : '-'] })),
-                ...SW.low_day.map(r => ({ app: 'S' as const, cells: [r.code ?? '', r.am ?? '', clockTime(r.t), <AppTag key="a" app="S" />,
+                ...SW.low_day.map(r => ({ app: 'S' as const, why: null,
+                  cells: [r.code ?? '', r.am ?? '', clockTime(r.t), <AppTag key="a" app="S" />,
                   r.rating == null ? '-' : n0(r.rating), <Basket key="b" text={r.basket} />,
                   <Words key="w" text={r.words} />, '-'] })),
               ]} />
@@ -479,10 +488,12 @@ export default async function CentralView({ date, latest }: { date: string; late
             <AppRows id="low-wk" cols={['Store', 'AM', 'Day', 'Time', 'App', 'Stars', 'What was in the order',
               'What the customer wrote', 'Complaint tag if any']}
               rows={[
-                ...lowW.map(r => ({ app: 'Z' as const, cells: [r.code, r.am, r.dlabel, r.time, <AppTag key="a" app="Z" />, r.rating,
+                ...lowW.map(r => ({ app: 'Z' as const, why: r.tag ?? null,
+                  cells: [r.code, r.am, r.dlabel, r.time, <AppTag key="a" app="Z" />, r.rating,
                   <Basket key="b" text={r.basket} />, <Words key="w" text={r.review} />,
                   r.tag ? <Tag key="t" reason={r.tag} /> : '-'] })),
-                ...SW.low_wk.map(r => ({ app: 'S' as const, cells: [r.code ?? '', r.am ?? '', dShort(r.d), clockTime(r.t),
+                ...SW.low_wk.map(r => ({ app: 'S' as const, why: null,
+                  cells: [r.code ?? '', r.am ?? '', dShort(r.d), clockTime(r.t),
                   <AppTag key="a" app="S" />, r.rating == null ? '-' : n0(r.rating),
                   <Basket key="b" text={r.basket} />, <Words key="w" text={r.words} />, '-'] })),
               ]} />

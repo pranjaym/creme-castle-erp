@@ -1,11 +1,11 @@
 import { redirect } from 'next/navigation';
 import {
   getDashAll, getStoreDetail, getStoreReasons, getStoreSwiggy,
-  inr, n0, n1, clockTime, dShort, type Receipt,
+  inr, n0, n1, clockTime, dShort, isStoreMistake, type Receipt,
 } from '@/lib/daily';
 import {
   DashHead, DashScript, SecHead, HBar,
-  Chart, Verdict, Period, Fold, Rows, Tag, Words, Basket,
+  Chart, Verdict, Period, Fold, Rows, Tag, Words, Basket, MistakeChip,
 } from '../../ui';
 import { AppTag, AppFilter, AppRows, FaultTag } from '../../swiggy-ui';
 
@@ -101,7 +101,8 @@ export default async function StoreView({ code, date, latest }:
     <main className="dashroot">
       <DashHead title={`Store Daily: ${code}`}
         subtitle={`${det.locality ?? ''}${det.city ? ', ' + det.city : ''} · Area manager: ${det.am ?? '-'} · Zomato + Swiggy${sw.mapped ? '' : ' (no Swiggy outlet mapped for this store)'}`}
-        date={date} latest={latest} basePath={`/daily/store/${encodeURIComponent(code)}`} />
+        date={date} latest={latest} basePath={`/daily/store/${encodeURIComponent(code)}`}
+        mistakeScope={`${code}${det.am ? ', ' + det.am : ''}`} />
 
       <div className="dctx">
         <div className="dtile"><div className="dlabel">Orders</div><div className="dvalue">{n0(totOrders)}</div>
@@ -166,10 +167,12 @@ export default async function StoreView({ code, date, latest }:
               bad={`${inr(det.stockout_day + sCancDayVal)} of orders lost`} /></div></div>
           <AppRows id="turn-day" cols={['Time', 'App', 'Reason', 'What the customer had ordered', 'Value lost']}
             rows={[
-              ...det.rejections_day.map(r => ({ app: 'Z' as const, cells: [r.time, <AppTag key="a" app="Z" />,
-                <FaultTag key="t" why={r.reason ?? 'no reason'} />, <Basket key="b" text={r.basket} />, inr(r.value)] })),
-              ...sw.canc_day.map(c => ({ app: 'S' as const, cells: [clockTime(c.t), <AppTag key="a" app="S" />,
-                <FaultTag key="t" why={c.why} />, <Basket key="b" text={c.basket} />,
+              ...det.rejections_day.map(r => ({ app: 'Z' as const, mistake: true,
+                cells: [r.time, <AppTag key="a" app="Z" />,
+                <FaultTag key="t" why={r.reason ?? 'no reason'} store />, <Basket key="b" text={r.basket} />, inr(r.value)] })),
+              ...sw.canc_day.map(c => ({ app: 'S' as const, mistake: true,
+                cells: [clockTime(c.t), <AppTag key="a" app="S" />,
+                <FaultTag key="t" why={c.why} store />, <Basket key="b" text={c.basket} />,
                 c.val === null ? 'n/a' : inr(c.val)] })),
             ]}
             empty="Nothing was turned away on either app yesterday." />
@@ -183,10 +186,12 @@ export default async function StoreView({ code, date, latest }:
           <Fold label="Earlier this week, both apps" count={det.rejections_wk.length + sw.canc_wk.filter(c => c.d !== date).length}>
             <AppRows id="turn-wk" cols={['Day', 'Time', 'App', 'Reason', 'What the customer had ordered', 'Value lost']}
               rows={[
-                ...det.rejections_wk.map(r => ({ app: 'Z' as const, cells: [r.dlabel, r.time, <AppTag key="a" app="Z" />,
-                  <FaultTag key="t" why={r.reason ?? 'no reason'} />, <Basket key="b" text={r.basket} />, inr(r.value)] })),
-                ...sw.canc_wk.filter(c => c.d !== date).map(c => ({ app: 'S' as const, cells: [dShort(c.d), clockTime(c.t),
-                  <AppTag key="a" app="S" />, <FaultTag key="t" why={c.why} />,
+                ...det.rejections_wk.map(r => ({ app: 'Z' as const, mistake: true,
+                  cells: [r.dlabel, r.time, <AppTag key="a" app="Z" />,
+                  <FaultTag key="t" why={r.reason ?? 'no reason'} store />, <Basket key="b" text={r.basket} />, inr(r.value)] })),
+                ...sw.canc_wk.filter(c => c.d !== date).map(c => ({ app: 'S' as const, mistake: true,
+                  cells: [dShort(c.d), clockTime(c.t),
+                  <AppTag key="a" app="S" />, <FaultTag key="t" why={c.why} store />,
                   <Basket key="b" text={c.basket} />, c.val === null ? 'n/a' : inr(c.val)] })),
               ]} />
           </Fold>
@@ -224,9 +229,11 @@ export default async function StoreView({ code, date, latest }:
               <div className="ddelta">Zomato counts only some as official complaints</div></div>
           </div>
           <div className="tlabel">Every order with an issue yesterday, with its tag</div>
-          <Rows cols={['Time', 'Tag on the order', 'What was in the order', 'What the customer wrote', 'Refunded']}
+          <Rows id="comp-day" cols={['Time', 'Tag on the order', 'What was in the order', 'What the customer wrote', 'Refunded']}
             rows={det.complaints_day.map(r => R(r, r.time, <Tag reason={r.tag ?? ''} />, r.basket ?? '-',
-              <Words text={r.review} />, r.refund ? inr(r.refund) : '-'))} empty="No issues reported yesterday." />
+              <Words text={r.review} />, r.refund ? inr(r.refund) : '-'))}
+            mistakes={det.complaints_day.map(r => isStoreMistake(r.tag))}
+            empty="No issues reported yesterday." />
           <p className="note">Swiggy publishes no complaint feed; its unhappy signal is the 1-2 star ratings, in the
             filterable list below and in section 6 with the customer&apos;s words.</p>
         </Period>
@@ -252,15 +259,17 @@ export default async function StoreView({ code, date, latest }:
               <button key={t} className="rfilter" data-reason={t} data-target="comp-wk" type="button">{t}: <b>{c}</b></button>
             ))}
             <button className="rfilter on" data-reason="" data-target="comp-wk" type="button">Show all</button>
+            <MistakeChip target="comp-wk" />
           </div>
           <details className="fold" open>
             <summary>Orders with issues earlier this week ({det.complaints_wk.length + sLowWkEarlier.length}) &rsaquo; tap to close</summary>
             <div className="scroll-x">
-              <table id="comp-wk">
+              <table id="comp-wk" className="faultable">
                 <thead><tr><th>Day</th><th>Time</th><th>App</th><th>Tag on the order</th><th>What was in the order</th><th>What the customer wrote</th><th>Refunded</th></tr></thead>
                 <tbody>
                   {det.complaints_wk.map((r, i) => (
-                    <tr key={`z${i}`} data-app="Z" data-reason={r.tag ?? 'reason not tagged by Zomato'}>
+                    <tr key={`z${i}`} data-app="Z" data-reason={r.tag ?? 'reason not tagged by Zomato'}
+                      data-mistake={isStoreMistake(r.tag) ? '1' : undefined}>
                       <td>{r.dlabel}</td><td>{r.time}</td><td><AppTag app="Z" /></td><td><Tag reason={r.tag ?? ''} /></td>
                       <td>{r.basket ?? '-'}</td><td><Words text={r.review} /></td>
                       <td>{r.refund ? inr(r.refund) : '-'}</td>
@@ -384,9 +393,11 @@ export default async function StoreView({ code, date, latest }:
             count={det.low_ratings_wk.length + sw.low_wk.length}>
             <AppRows id="low-wk" cols={['Day', 'Time', 'App', 'Stars', 'What was in the order', 'The customer’s words', 'Tag if any']}
               rows={[
-                ...det.low_ratings_wk.map(r => ({ app: 'Z' as const, cells: [r.dlabel, r.time, <AppTag key="a" app="Z" />, r.rating,
+                ...det.low_ratings_wk.map(r => ({ app: 'Z' as const, why: r.tag ?? null,
+                  cells: [r.dlabel, r.time, <AppTag key="a" app="Z" />, r.rating,
                   r.basket ?? '-', <Words key="w" text={r.review} />, r.tag ? <Tag key="t" reason={r.tag} /> : '-'] })),
-                ...sw.low_wk.map(r => ({ app: 'S' as const, cells: [dShort(r.d), clockTime(r.t), <AppTag key="a" app="S" />,
+                ...sw.low_wk.map(r => ({ app: 'S' as const, why: null,
+                  cells: [dShort(r.d), clockTime(r.t), <AppTag key="a" app="S" />,
                   r.rating == null ? '-' : n0(r.rating), <Basket key="b" text={r.basket} />,
                   <Words key="w" text={r.words} />, '-'] })),
               ]} />

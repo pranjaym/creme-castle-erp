@@ -15,20 +15,10 @@
     });
   });
 
-  // Complaint reason filters. The chips carry the tags the rows actually have,
-  // so a chip can never come up empty (the 25 Aug bug).
-  document.querySelectorAll('.rfilter').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var target = b.dataset.target || 'comp-wk';
-      document.querySelectorAll('.rfilter[data-target="' + target + '"]').forEach(function (x) {
-        x.classList.toggle('on', x === b);
-      });
-      var want = b.dataset.reason;
-      document.querySelectorAll('#' + target + ' tbody tr').forEach(function (tr) {
-        tr.style.display = (!want || tr.dataset.reason === want) ? '' : 'none';
-      });
-    });
-  });
+  // The reason, app and store-mistake filters all live in ONE engine at the
+  // bottom of this file (18 Sep 2026). There used to be a second copy here
+  // that also bound to .rfilter and reset the table before the real filter
+  // ran; with a third dimension to honour that would have been a bug.
 
   // Sortable tables
   function cellKey(td) {
@@ -137,16 +127,60 @@
     });
   });
   // Both apps / Zomato only / Swiggy only filters. They cooperate with the
-  // complaint-tag filters: a row must satisfy BOTH the chosen tag and app.
+  // ---------------- the one row-filter engine (18 Sep 2026) ----------------
+  // Three dimensions, one source of truth for whether a row is on screen:
+  //   tag      the complaint tag chips        (data-reason on the row)
+  //   app      Both apps / Zomato / Swiggy    (data-app on the row)
+  //   mistake  store mistakes only            (data-mistake="1" on the row)
+  // plus the page-wide switch in the header, which turns the mistake dimension
+  // on for EVERY list at once so one click gives a screenshot to send a team.
+  // Written as one function because three separate handlers each rewriting
+  // tr.style.display cannot agree.
+  var root = document.querySelector('.dashroot');
   var want = {};
+
   function apply(target) {
+    var table = document.getElementById(target);
+    if (!table) return;
     var w = want[target] || {};
-    document.querySelectorAll('#' + target + ' tbody tr').forEach(function (tr) {
-      var okTag = !w.tag || tr.dataset.reason === w.tag;
-      var okApp = !w.app || tr.dataset.app === w.app;
-      tr.style.display = (okTag && okApp) ? '' : 'none';
+    var onlyBad = w.mistake || (root && root.dataset.mistake === '1');
+    var shown = 0, bad = 0;
+    table.querySelectorAll('tbody tr').forEach(function (tr) {
+      if (tr.classList.contains('nonerow')) return;
+      var isBad = tr.dataset.mistake === '1';
+      if (isBad) bad++;
+      var ok = (!w.tag || tr.dataset.reason === w.tag)
+            && (!w.app || tr.dataset.app === w.app)
+            && (!onlyBad || isBad);
+      tr.style.display = ok ? '' : 'none';
+      if (ok) shown++;
     });
+    // A list filtered down to nothing must say so, or a screenshot of an empty
+    // table reads as "no data" when it means "nothing wrong here".
+    var note = table.parentNode.querySelector('.mnone');
+    if (!note) {
+      note = document.createElement('p');
+      note.className = 'mnone';
+      table.parentNode.insertBefore(note, table.nextSibling);
+    }
+    note.textContent = shown ? '' : (onlyBad
+      ? 'No store mistakes in this list.'
+      : 'Nothing matches this filter.');
+    note.style.display = shown ? 'none' : '';
+    return bad;
   }
+
+  function applyAll() {
+    var total = 0;
+    document.querySelectorAll('table.faultable[id]').forEach(function (t) {
+      total += apply(t.id) || 0;
+    });
+    var c = document.getElementById('mistake-count');
+    // "rows", not "orders": an order that both complained and rated low is
+    // listed in two places, so a row count is the only honest one here.
+    if (c) c.textContent = ' ' + total + ' store-mistake row' + (total === 1 ? '' : 's') + ' on this page';
+  }
+
   document.querySelectorAll('.appfilter').forEach(function (b) {
     b.addEventListener('click', function () {
       var target = b.dataset.target;
@@ -158,13 +192,54 @@
       apply(target);
     });
   });
-  // Let the existing tag filters keep working alongside the app filter.
+
   document.querySelectorAll('.rfilter[data-reason]').forEach(function (b) {
     b.addEventListener('click', function () {
       var target = b.dataset.target || 'comp-wk';
+      document.querySelectorAll('.rfilter[data-reason][data-target="' + target + '"]').forEach(function (x) {
+        x.classList.toggle('on', x === b);
+      });
       want[target] = want[target] || {};
       want[target].tag = b.dataset.reason;
+      // Picking a single tag drops the store-mistake narrowing, so the two
+      // never silently cancel each other out and leave an empty table.
+      want[target].mistake = false;
+      var m = document.querySelector('.rfilter.fault[data-target="' + target + '"]');
+      if (m) m.classList.remove('on');
       apply(target);
     });
   });
+
+  // One list's own store-mistake chip.
+  document.querySelectorAll('.rfilter.fault[data-target]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var target = b.dataset.target;
+      want[target] = want[target] || {};
+      var on = !b.classList.contains('on');
+      b.classList.toggle('on', on);
+      want[target].mistake = on;
+      if (on) {
+        // showing mistakes only means no single tag is selected
+        want[target].tag = '';
+        document.querySelectorAll('.rfilter[data-reason][data-target="' + target + '"]').forEach(function (x) {
+          x.classList.toggle('on', x.dataset.reason === '');
+        });
+      }
+      apply(target);
+    });
+  });
+
+  // The page-wide switch in the header.
+  var sw = document.getElementById('mistake-switch');
+  if (sw && root) {
+    sw.addEventListener('click', function () {
+      var on = root.dataset.mistake !== '1';
+      root.dataset.mistake = on ? '1' : '';
+      sw.classList.toggle('on', on);
+      sw.setAttribute('aria-pressed', on ? 'true' : 'false');
+      applyAll();
+    });
+  }
+
+  applyAll();
 })();

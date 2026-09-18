@@ -9,29 +9,37 @@
 //   * section-1 tables keep the original columns with one Z/S toggle;
 //   * merged lists carry Both apps / Zomato only / Swiggy only filters.
 import Link from 'next/link';
-import { n0, n1, clockTime, type SwiggyStoreRow, type SwiggyShortSeries } from '@/lib/daily';
+import { n0, n1, clockTime, isStoreMistake, type SwiggyStoreRow, type SwiggyShortSeries } from '@/lib/daily';
 import { Chart } from './ui';
 
 export function AppTag({ app }: { app: 'Z' | 'S' }) {
   return <span className={`apptag app-${app.toLowerCase()}`}>{app}</span>;
 }
 
-// Red for the reasons that are unambiguously the store's doing.
-export function FaultTag({ why }: { why: string }) {
-  const w = why.toLowerCase();
-  const bad = ['unavailable', 'stock', 'closed', 'not accepting', 'unable to connect']
-    .some(k => w.includes(k));
-  return <span className={`rchip ${bad ? 'r-packing' : 'r-other'}`}>{why}</span>;
+// Red for the reasons that are unambiguously the store's doing. The keyword
+// list moved into lib/daily.ts (isStoreMistake) on 18 Sep 2026 so that the
+// rejection reasons and the complaint tags are judged by ONE rule and the new
+// store-mistake filter catches exactly what the red chips show.
+// `store` is passed by the turned-away lists, where every row is store-caused
+// before it reaches the page (migrations 225 and 213), so the tag is red even
+// when Zomato sent no reason word at all: on 13 Sep 2026 two of the network's
+// 55 rejections carried a null reason, and a keyword rule alone would have
+// quietly dropped them out of the store-mistake filter.
+export function FaultTag({ why, store }: { why: string; store?: boolean }) {
+  return <span className={`rchip ${store || isStoreMistake(why) ? 'r-fault' : 'r-other'}`}>{why}</span>;
 }
 
 // Both apps / Zomato only / Swiggy only. Filters rows carrying data-app in
 // the table with id `target` (dash.js), cooperating with the tag filters.
-export function AppFilter({ target }: { target: string }) {
+export function AppFilter({ target, mistakes }: { target: string; mistakes?: boolean }) {
   return (
     <span className="rfilters" style={{ display: 'inline-flex' }}>
       <button className="rfilter appfilter on" data-target={target} data-app="" type="button">Both apps</button>
       <button className="rfilter appfilter" data-target={target} data-app="Z" type="button">Zomato only</button>
       <button className="rfilter appfilter" data-target={target} data-app="S" type="button">Swiggy only</button>
+      {mistakes
+        ? <button className="rfilter fault" data-target={target} data-mistake="1" type="button">Store mistakes only</button>
+        : null}
     </span>
   );
 }
@@ -115,17 +123,28 @@ export const sTime = clockTime;
 // A merged list with its own Both apps / Zomato only / Swiggy only buttons.
 // Each row declares which app it came from; dash.js drives the filtering.
 export function AppRows({ id, cols, rows, empty }:
-  { id: string; cols: string[]; rows: { app: 'Z' | 'S'; cells: React.ReactNode[] }[]; empty?: string }) {
+  { id: string; cols: string[];
+    rows: { app: 'Z' | 'S'; why?: string | null; mistake?: boolean; cells: React.ReactNode[] }[];
+    empty?: string }) {
   if (!rows.length) return <p className="note">{empty ?? 'Nothing to list.'}</p>;
+  // A row declares whether it is the store's own mistake, so the page-wide
+  // switch and the per-list chip can filter it. `mistake` is the explicit
+  // answer (the turned-away lists, which are store-caused by construction);
+  // otherwise the reason text is read by the one shared rule.
+  const bad = (r: { why?: string | null; mistake?: boolean }) =>
+    r.mistake ?? (r.why != null ? isStoreMistake(r.why) : null);
+  const anyWhy = rows.some(r => bad(r) !== null);
   return (
     <>
-      <AppFilter target={id} />
+      <AppFilter target={id} mistakes={anyWhy} />
       <div className="scroll-x">
-        <table id={id}>
+        <table id={id} className={anyWhy ? 'faultable' : undefined}>
           <thead><tr>{cols.map(c => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={i} data-app={r.app}>{r.cells.map((c, j) => <td key={j}>{c}</td>)}</tr>
+              <tr key={i} data-app={r.app} data-mistake={bad(r) ? '1' : undefined}>
+                {r.cells.map((c, j) => <td key={j}>{c}</td>)}
+              </tr>
             ))}
           </tbody>
         </table>

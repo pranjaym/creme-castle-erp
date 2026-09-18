@@ -574,10 +574,15 @@ section { margin-bottom: 16px; }
 .rtoolbar .search input:focus { outline: 2px solid var(--coral); outline-offset: 1px; border-color: var(--coral); }
 .rtoolbar .spacer { flex: 1; }
 .rtoolbar .chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
-.rchip { display: inline-block; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 12.5px; font-weight: 600; line-height: 1; }
-.rchip:hover { border-color: var(--coral); text-decoration: none; }
-.rchip.on { background: var(--maroon); border-color: var(--maroon); color: #fff; }
-.rchip .n { color: inherit; opacity: .7; font-weight: 500; margin-left: 4px; }
+/* Scoped to .rx on 18 Sep 2026. Unscoped, this block sat AFTER the daily
+   pages' own .rchip and, at equal specificity, won: every complaint tag and
+   every rejection reason on the three daily pages lost its colour and read the
+   same neutral grey, which is what Pranjay reported. The recipe module wraps
+   everything in .rx (recipes/layout.tsx), so scoping it costs nothing there. */
+.rx .rchip { display: inline-block; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 12.5px; font-weight: 600; line-height: 1; }
+.rx .rchip:hover { border-color: var(--coral); text-decoration: none; }
+.rx .rchip.on { background: var(--maroon); border-color: var(--maroon); color: #fff; }
+.rx .rchip .n { color: inherit; opacity: .7; font-weight: 500; margin-left: 4px; }
 .rcount { color: var(--muted); font-size: 12.5px; }
 
 /* sticky headers: the table is not wrapped in an overflow container on a wide
@@ -626,3 +631,52 @@ table.sheet td .sub { display: block; color: var(--muted); font-size: 11.5px; fo
 .rx .rtable table.sheet thead th:first-child { border-top-left-radius: var(--radius); }
 .rx .rtable table.sheet thead th:last-child { border-top-right-radius: var(--radius); }
 .rx .rtable table.sheet thead th { top: 56px; }
+
+/* =================== store mistakes (18 Sep 2026) ====================
+   Pranjay: "you used to highlight the reason for the store mistake with a
+   different colour; now everything is the same colour, so it is difficult to
+   figure out which is a store mistake." Two things are fixed here.
+
+   1. The colours are back. They were lost when the recipe module's .rchip
+      landed later in this file at equal specificity; that block is now scoped
+      to .rx, and the families are restated below so the daily palette is
+      readable in one place.
+   2. One loud colour, one meaning. A STORE MISTAKE is a filled red chip and
+      nothing else on the page is. The other complaint families keep calm,
+      clearly different colours so a taste complaint can never be mistaken for
+      a packing one, but neither of them shouts.
+
+   The rule for what counts is in lib/daily.ts (isStoreMistake), not here, so
+   the colour and the filter can never disagree.
+   ==================================================================== */
+.dashroot .rchip { display: inline-block; font-size: 12px; font-weight: 600;
+  border-radius: 6px; padding: 1px 8px; white-space: nowrap; }
+
+/* the store's own mistake: wrong item, item missing, and every turned-away reason */
+.dashroot .r-fault { background: #B3261E; color: #fff; }
+.dashroot .r-fault::before { content: '\25CF'; font-size: 8px; vertical-align: 2px; margin-right: 5px; opacity: .85; }
+
+/* not the store's mistake, and each visibly its own thing */
+.dashroot .r-packing { background: #EAF0FA; color: #2C4E82; }
+.dashroot .r-taste   { background: #FDF3D7; color: #7A5A12; }
+.dashroot .r-late    { background: #F2E8FA; color: #5E3B82; }
+.dashroot .r-other   { background: #F0EDEB; color: #6b5a5d; }
+
+/* The store-mistake filter chip, so it is never mistaken for a tag chip. */
+.dashroot .rfilter.fault { border-color: #B3261E; color: #B3261E; font-weight: 700; }
+.dashroot .rfilter.fault.on { background: #B3261E; border-color: #B3261E; color: #fff; }
+
+/* The page-wide switch, in the header, and the line that travels with the
+   screenshot so whoever gets it in a group knows what they are looking at. */
+.mswitch { display: inline-flex; align-items: center; gap: 8px; border: 1.5px solid #B3261E;
+  background: var(--card); color: #B3261E; border-radius: 999px; padding: 5px 14px; cursor: pointer;
+  font: inherit; font-family: var(--font-sans); font-size: 13px; font-weight: 700; }
+.mswitch.on { background: #B3261E; border-color: #B3261E; color: #fff; }
+.mswitch .dot { width: 9px; height: 9px; border-radius: 50%; background: #B3261E; }
+.mswitch.on .dot { background: #fff; }
+.mbanner { display: none; margin: 10px 0 2px; padding: 10px 14px; border-radius: var(--radius-sm);
+  background: #FCEDEB; border: 1px solid #E8A9A3; color: #7A1A14; font-size: 13px; line-height: 1.5; }
+.dashroot[data-mistake="1"] .mbanner { display: block; }
+.mbanner b { color: #5E120E; }
+.mbanner .rule { display: block; margin-top: 4px; font-size: 12px; color: #8A3A33; font-weight: 400; }
+.mnone { color: var(--muted); font-size: 12.5px; font-style: italic; margin: 4px 0 10px; }
