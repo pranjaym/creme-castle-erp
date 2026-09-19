@@ -65,8 +65,8 @@ async function resolveScope(role: Role, form: FormData):
 }
 
 
-// The recipe-module grant posted by the form, as the modules array to store: any
-// other module's grants are kept, the recipes:* entry is replaced.
+// The module grants posted by the form (recipes, coupons), as the modules array
+// to store: any other module's grants are kept, the posted entries are replaced.
 async function modulesFor(id: string | null, formData: FormData): Promise<string[]> {
   const grant = String(formData.get('recipe_grant') || '').trim();
   let current: string[] = [];
@@ -74,8 +74,10 @@ async function modulesFor(id: string | null, formData: FormData): Promise<string
     const { data } = await spine().from('profiles').select('modules').eq('id', id).maybeSingle();
     current = ((data as { modules?: string[] } | null)?.modules) ?? [];
   }
-  const kept = current.filter(m => !m.startsWith('recipes:'));
-  return grant.startsWith('recipes:') ? [...kept, grant] : kept;
+  const cgrant = String(formData.get('coupon_grant') || '').trim();
+  const kept = current.filter(m => !m.startsWith('recipes:') && !m.startsWith('coupons:'));
+  const out = grant.startsWith('recipes:') ? [...kept, grant] : kept;
+  return cgrant.startsWith('coupons:') ? [...out, cgrant] : out;
 }
 
 export async function createUser(formData: FormData): Promise<void> {

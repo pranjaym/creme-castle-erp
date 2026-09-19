@@ -36,6 +36,18 @@ export function recipePerms(u: { role: Role; modules?: string[] }) {
   };
 }
 
+// Coupon sharing module (migration 232). Management roles read it; editing the
+// deals, the glossary and the tolerance is admin plus the coupons:editor grant
+// (Pranjay, 19 Sep 2026: "you, Pawan and Rishabh edit, everyone else reads").
+export type CouponGrant = 'coupons:viewer' | 'coupons:editor';
+export const COUPON_GRANTS: CouponGrant[] = ['coupons:viewer', 'coupons:editor'];
+export function couponPerms(u: { role: Role; modules?: string[] }) {
+  const g = new Set(u.modules ?? []);
+  const edit = u.role === 'admin' || g.has('coupons:editor');
+  const view = edit || u.role === 'central' || u.role === 'viewer' || u.role === 'controls' || g.has('coupons:viewer');
+  return { view, edit };
+}
+
 export interface SessionUser {
   id: string;
   email: string;
