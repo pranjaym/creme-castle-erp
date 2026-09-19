@@ -14,8 +14,13 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getSessionUser, type Role, type SessionUser } from '@/lib/session';
 import { spine } from '@/lib/supabase/service';
+import { ROLE_DEFS } from './roles';
 
-const ROLES: Role[] = ['admin', 'central', 'area_manager', 'store', 'viewer'];
+// The roles an admin may save. Read from ROLE_DEFS, never typed out again: a
+// hand-kept second list is how chef and controls were added to the form on
+// 15 Sep 2026 and silently rejected here, which bounced the admin back to
+// step 1 with "Pick a role first" on a role they had already picked.
+const ROLES: Role[] = ROLE_DEFS.map(d => d.role);
 
 async function requireAdminAction(): Promise<SessionUser> {
   const u = await getSessionUser();
@@ -89,7 +94,7 @@ export async function createUser(formData: FormData): Promise<void> {
   const password = String(formData.get('password') || '');
   const back = `/users/new?role=${encodeURIComponent(role)}`;
 
-  if (!ROLES.includes(role)) bounce('/users/new', 'Pick a role first.', 'err');
+  if (!ROLES.includes(role)) bounce('/users/new', `"${role || 'nothing'}" is not a role this screen can save. Pick one of the cards.`, 'err');
   if (!email || !email.includes('@')) bounce(back, 'Enter a valid email address.', 'err');
   if (password.length < 8) bounce(back, 'The temporary password needs at least 8 characters.', 'err');
 
