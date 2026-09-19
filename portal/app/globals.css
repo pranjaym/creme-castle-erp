@@ -698,3 +698,62 @@ table.sheet td .sub { display: block; color: var(--muted); font-size: 11.5px; fo
 .mbanner b { color: #5E120E; }
 .mbanner .rule { display: block; margin-top: 4px; font-size: 12px; color: #8A3A33; font-weight: 400; }
 .mnone { color: var(--muted); font-size: 12.5px; font-style: italic; margin: 4px 0 10px; }
+
+/* ============================ coupon sharing (.cx) ======================
+   Scoped to .cx (coupons/layout.tsx) so nothing here can leak into the daily
+   pages (F56). Status colours are meaning-bearing: red = the platform paid less
+   than agreed, lavender = they funded more, green = on deal, grey = fully ours,
+   amber = no deal recorded yet. */
+.cx .chip { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 1px 8px; white-space: nowrap; }
+.cx .c-ok { background: #E9F2E6; color: #2F5630; }
+.cx .c-red { background: #FBEAE6; color: #872724; }
+.cx .c-amber { background: #FEF3E2; color: #92400E; }
+.cx .c-more { background: #E0D3E8; color: #5E4B6E; }
+.cx .c-grey { background: #F0EDEB; color: #6b5a5d; }
+.cx td.h-ok { background: #E9F2E6; color: #2F5630; }
+.cx td.h-red { background: #FBEAE6; color: #872724; font-weight: 700; }
+.cx td.h-more { background: #E0D3E8; color: #5E4B6E; }
+.cx td.h-amb { background: #FEF3E2; color: #92400E; }
+.cx td.h-grey { background: #F0EDEB; color: #6b5a5d; }
+.cx .apptag { display: inline-block; font-size: 10.5px; font-weight: 800; color: #fff; border-radius: 4px; padding: 0 6px; vertical-align: 1px; margin-right: 4px; }
+.cx .app-z { background: #E23744; } .cx .app-s { background: #F26522; }
+.cx .tiny { font-size: 10px; color: var(--muted); font-weight: 400; }
+.cx .fill { color: #92400E; background: #FEF3E2; border-radius: 4px; padding: 0 6px; font-size: 12px; }
+.cx .filterbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; margin: 0 0 14px; }
+.cx .filterbar label { display: inline-flex; flex-direction: column; gap: 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.cx .filterbar input, .cx .filterbar select { height: 34px; padding: 0 10px; font: inherit; font-size: 13.5px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
+.cx .filterbar .seg a { display: inline-block; padding: 7px 12px; font-size: 12.5px; font-weight: 600; color: var(--ink); text-decoration: none; }
+.cx .filterbar .seg a.on { background: var(--maroon); color: #fff; }
+.cx .filterbar .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.cx .filterbar .seg a + a { border-left: 1px solid var(--line); }
+.cx .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0 0 14px; }
+.cx .kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 11px 13px; }
+.cx .kpi .l { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.cx .kpi .v { font-size: 23px; font-weight: 700; margin-top: 1px; font-variant-numeric: tabular-nums; }
+.cx .kpi .v small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.cx .kpi .d { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.cx .kpi.hot { border-left: 4px solid #872724; }
+.cx .attn { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--coral); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; }
+.cx .attn ol { padding-left: 20px; margin: 6px 0 0; } .cx .attn li { margin-bottom: 7px; }
+.cx table.sheet td { padding: 6px 10px; white-space: nowrap; } .cx table.sheet th { padding: 8px 10px; }
+.cx table.sheet td.wrap { white-space: normal; max-width: 360px; } .cx table.sheet td.cell { font-size: 12px; background: #fcfafa; }
+.cx table.sheet th.grp { text-align: center; background: var(--head); color: var(--maroon); border-left: 1px solid var(--line); }
+.cx .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.cx .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.cx .panel .pt { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 6px; }
+.cx .kv { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px dashed var(--line); font-size: 13.5px; }
+.cx .kv:last-child { border-bottom: none; } .cx .kv b { font-variant-numeric: tabular-nums; }
+.cx .big { font-size: 30px; font-weight: 700; line-height: 1.1; } .cx .big small { font-size: 13px; font-weight: 400; color: var(--muted); }
+.cx .strip { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
+.cx .dcell { flex: 1; min-width: 86px; background: var(--head); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; text-align: center; }
+.cx .dcell .dl { font-size: 11px; color: var(--muted); } .cx .dcell .dv { font-size: 16px; font-weight: 700; } .cx .dcell .dn { font-size: 10.5px; color: var(--muted); }
+.cx .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px; }
+.cx .card h2 { font-family: var(--font-display); font-size: 17px; color: var(--maroon); margin: 0 0 8px; }
+.cx .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.cx form.inline { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.cx form.inline input, .cx form.inline select { height: 30px; padding: 0 8px; font: inherit; font-size: 12.5px; border: 1px solid var(--line); border-radius: 6px; }
+.cx form.inline input.w60 { width: 64px; } .cx form.inline input.w120 { width: 130px; } .cx form.inline input.w200 { width: 200px; }
+.cx .tabs { display: flex; gap: 6px; margin: 0 0 14px; flex-wrap: wrap; }
+.cx .tabs a { font-size: 13px; font-weight: 600; border: 1.5px solid var(--line); background: var(--card); border-radius: 999px; padding: 5px 14px; color: var(--maroon); text-decoration: none; }
+.cx .tabs a.on { background: var(--maroon); color: #fff; border-color: var(--maroon); }
+.cx .subtle { color: var(--muted); font-weight: 400; font-size: 13px; }

@@ -157,6 +157,15 @@ export default function UserForm({ basePath, chosen, outlets, existing }: {
               A grant here adds to the role without touching any other module, so a central-office
               account can be a checker in recipes and keep everything else.
             </p>
+
+            <label className="fld" htmlFor="uf-coupons">In the coupon sharing module, this person is</label>
+            <select className="txt" id="uf-coupons" name="coupon_grant"
+              defaultValue={(existing?.modules ?? []).find(m => m.startsWith('coupons:')) ?? ''}>
+              <option value="">what the role gives by default</option>
+              <option value="coupons:viewer">a viewer: sees the discounts pages</option>
+              <option value="coupons:editor">an editor: records deals, types the glossary, sets the tolerance</option>
+            </select>
+            <p className="note">Defaults: Admin edits; Central, Viewer and Controls read; other roles do not see the module.</p>
           </section>
 
           {!existing ? (

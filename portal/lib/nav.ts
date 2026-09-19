@@ -1,7 +1,7 @@
 // The navigation registry, same pattern as the OMS (lib/roles.ts NAV_ITEMS):
 // grouped sections, filtered by role, so navigation and permissions can never
 // disagree. Names per Pranjay (24 Aug): plain words that say what a thing is.
-import { recipePerms, type Role, type SessionUser } from '@/lib/session';
+import { recipePerms, couponPerms, type Role, type SessionUser } from '@/lib/session';
 
 export interface NavItem {
   href: string;
@@ -51,6 +51,16 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
     if (rp.money) items.push({ href: '/recipes/food-cost', label: 'Food cost list' }, { href: '/recipes/impact', label: 'Price impact' });
     items.push({ href: '/recipes/approvals', label: 'Changes & approvals' });
     sections.push({ title: 'Recipes & costing', items });
+  }
+  if (couponPerms(user).view) {
+    sections.push({
+      title: 'Discounts',
+      items: [
+        { href: '/coupons', label: 'Coupon sharing' },
+        { href: '/coupons/glossary', label: 'Coupon glossary' },
+        { href: '/coupons/deals', label: 'Deals & uploads' },
+      ],
+    });
   }
   if (user.role === 'area_manager') {
     sections.push({
