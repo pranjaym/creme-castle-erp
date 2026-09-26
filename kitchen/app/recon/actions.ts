@@ -6,8 +6,10 @@
 import { spine } from '@/lib/supabase/server';
 import { reconcile, summarize } from '@/lib/recon/match-core.mjs';
 import { revalidatePath } from 'next/cache';
+import { kitchenUserIn, OVERSIGHT } from '@/lib/session';
 
 export async function runRecon(businessDate: string) {
+  if (!(await kitchenUserIn(OVERSIGHT))) return { ok: false, message: 'Your role cannot run the reconciliation.' };
   const db = spine();
 
   const { data: oms, error: oe } = await db

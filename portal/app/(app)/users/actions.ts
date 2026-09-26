@@ -14,7 +14,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getSessionUser, type Role, type SessionUser } from '@/lib/session';
 import { spine } from '@/lib/supabase/service';
-import { ROLE_DEFS } from './roles';
+import { ROLE_DEFS, ROLE_LABEL } from '@/lib/roles';
 
 // The roles an admin may save. Read from ROLE_DEFS, never typed out again: a
 // hand-kept second list is how chef and controls were added to the form on
@@ -65,7 +65,7 @@ async function resolveScope(role: Role, form: FormData):
     }
     return { codes };
   }
-  // admin, central, viewer: the whole network, expressed as no scope at all.
+  // Every other role: no outlet scope; the role alone decides what it sees.
   return { codes: [] };
 }
 
@@ -118,7 +118,7 @@ export async function createUser(formData: FormData): Promise<void> {
 
   await log(actor, 'user_created', email, { role, outlets: scope.codes, full_name: fullName, recipe_grant: String(formData.get('recipe_grant') || '') });
   revalidatePath('/users');
-  bounce('/users', `${email} added as ${ROLE_WORD[role]}. Give them the temporary password in person or on a call, not by email.`);
+  bounce('/users', `${email} added as ${ROLE_LABEL(role)}. Give them the temporary password in person or on a call, not by email.`);
 }
 
 export async function updateUser(formData: FormData): Promise<void> {
@@ -148,7 +148,7 @@ export async function updateUser(formData: FormData): Promise<void> {
 
   await log(actor, 'user_updated', email || id, { role, outlets: scope.codes, active, recipe_grant: String(formData.get('recipe_grant') || '') });
   revalidatePath('/users');
-  bounce('/users', `${email || 'Account'} saved: ${ROLE_WORD[role]}${active ? '' : ', switched off'}.`);
+  bounce('/users', `${email || 'Account'} saved: ${ROLE_LABEL(role)}${active ? '' : ', switched off'}.`);
 }
 
 // Passwords were issued on paper, so "they lost it" is a routine request and
@@ -173,12 +173,3 @@ export async function resetPassword(formData: FormData): Promise<void> {
   bounce(back, `New temporary password set for ${email || 'the account'}. Give it to them directly, not by email.`);
 }
 
-const ROLE_WORD: Record<Role, string> = {
-  admin: 'an admin',
-  central: 'central office',
-  area_manager: 'an area manager',
-  store: 'a store account',
-  viewer: 'a viewer',
-  chef: 'a chef',
-  controls: 'the controls team',
-};

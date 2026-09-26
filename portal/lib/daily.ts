@@ -5,7 +5,7 @@
 import 'server-only';
 import { cache } from 'react';
 import { spine } from '@/lib/supabase/service';
-import type { SessionUser } from '@/lib/session';
+import { portalAccess, type SessionUser } from '@/lib/session';
 
 export interface DayStats {
   orders: number | null; delivered: number | null; subtotal: number | null;
@@ -153,12 +153,14 @@ export function aggregateAreas(stores: StoreStats[]): AreaAgg[] {
 }
 
 // What may this user open? Role equals scope.
+// Who sees the whole network comes from the one permission table, never a
+// hand-kept list of roles here (F60).
 export function canSeeStore(user: SessionUser, code: string): boolean {
-  if (user.role === 'admin' || user.role === 'central' || user.role === 'viewer') return true;
+  if (portalAccess(user).network) return true;
   return user.outletCodes.includes(code);
 }
 export function allowedAms(user: SessionUser, stores: StoreStats[]): string[] {
-  if (user.role === 'admin' || user.role === 'central' || user.role === 'viewer') {
+  if (portalAccess(user).network) {
     return [...new Set(stores.map(s => s.am ?? 'Unassigned'))];
   }
   return [...new Set(stores.filter(s => user.outletCodes.includes(s.code)).map(s => s.am ?? 'Unassigned'))];

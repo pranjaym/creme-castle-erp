@@ -2,7 +2,7 @@
 // grouped sections, filtered by the same permission table every page gate reads
 // (portalAccess in lib/session.ts), so navigation and permissions can never
 // disagree. Names per Pranjay (24 Aug): plain words that say what a thing is.
-import { portalAccess, type Role, type SessionUser } from '@/lib/session';
+import { portalAccess, KITCHEN_APP_URL, type SessionUser } from '@/lib/session';
 
 export interface NavItem {
   href: string;
@@ -84,6 +84,12 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
     });
   }
 
+  // The door to the kitchen app (department production), for anyone who has a
+  // role there. It is a separate app with the same login.
+  if (user.kitchenRole) {
+    sections.push({ title: 'Production', items: [{ href: KITCHEN_APP_URL, label: 'Kitchen app' }] });
+  }
+
   const account: NavItem[] = [];
   if (acc.users) account.push({ href: '/users', label: 'Users & Access' });
   account.push({ href: '/account', label: 'Change Password' });
@@ -92,12 +98,3 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
   return sections;
 }
 
-export const ROLE_LABELS: Record<Role, string> = {
-  admin: 'Admin',
-  central: 'Central',
-  area_manager: 'Area Manager',
-  store: 'Store',
-  viewer: 'Viewer',
-  chef: 'Chef',
-  controls: 'Controls',
-};

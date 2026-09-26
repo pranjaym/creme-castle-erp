@@ -1,5 +1,6 @@
 // Admin · Requests: every request across departments with its derived state.
 // GET-form filters (shareable URLs) and CSV, the OMS reports pattern.
+import { requireRoles, OVERSIGHT } from '@/lib/session';
 import { spine } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ const clock = (iso: string) =>
 export default async function AdminRequestsPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireRoles(OVERSIGHT);
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? '';
   const state = (STATES as readonly string[]).includes(one(sp.state)) ? one(sp.state) : 'all';

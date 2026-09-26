@@ -51,7 +51,10 @@ export async function createUser(input: {
   });
   if (error || !created.user) return { ok: false, message: error?.message ?? 'Could not create the account' };
 
-  // The 040 trigger already inserted an inactive viewer profile; finish it.
+  // The 040 trigger already inserted an inactive profile with portal role
+  // 'none' (237; it was 'viewer' until 26 Sep 2026, which gave every kitchen
+  // account full management read in the portal); finish it. The portal role is
+  // left alone: it is set on the portal's Users screen.
   const { error: pErr } = await db.from('profiles').update({
     full_name: input.fullName.trim() || null,
     kitchen_role: input.role,

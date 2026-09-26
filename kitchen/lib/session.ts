@@ -58,6 +58,18 @@ export async function requireKitchenUser(): Promise<KitchenUser> {
   return u;
 }
 
+/** The kitchen back office (daily ledger, requests, transfers, activity,
+ *  buffer, reconciliation): the Production Chef and Head Chef (exec_chef), the
+ *  Central Team (tech) and the Owner. Department tablets stay on their screen. */
+export const OVERSIGHT: KitchenRole[] = ['exec_chef', 'tech', 'super_admin'];
+
+/** For downloads and server actions, which cannot redirect a person home:
+ *  the signed-in kitchen user if their role is in the list, otherwise null. */
+export async function kitchenUserIn(roles: KitchenRole[]): Promise<KitchenUser | null> {
+  const u = await getKitchenUser();
+  return u && roles.includes(u.role) ? u : null;
+}
+
 /** Pages restricted to specific roles; others land on their home. */
 export async function requireRoles(roles: KitchenRole[]): Promise<KitchenUser> {
   const u = await requireKitchenUser();

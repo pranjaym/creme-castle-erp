@@ -13,18 +13,23 @@ export default async function Home() {
   const acc = portalAccess(user);
   const greeting = `Welcome, ${user.fullName || user.email}`;
 
-  // A role with no store pages (chef, controls) gets no store numbers here
-  // either: just the doors to the modules it does have.
+  // A role with no store pages (Head Chef, Costing Controller, No portal
+  // access) gets no store numbers here either: just the doors to the modules it
+  // does have, including the kitchen app for kitchen staff.
   if (!acc.ownStores) {
+    const doors = navSectionsFor(user).filter(s => s.title && s.title !== 'Account');
     return (
       <main className="dashroot" data-view="y">
         <h1 className="page">{greeting}</h1>
-        {navSectionsFor(user).filter(s => s.title && s.title !== 'Account').map(s => (
+        {doors.length === 0 ? (
+          <p className="freshline">Your account has no pages in the portal. If you need one, ask Pranjay to set your role.</p>
+        ) : null}
+        {doors.map(s => (
           <div key={s.title}>
             <h2 className="section">{s.title}</h2>
             <div className="homegrid">
               {s.items.map(i => (
-                <Link key={i.href} className="homecard" href={i.href}><div className="t">{i.label}</div></Link>
+                <Link key={i.href} className="homecard" href={i.href}><div className="t">{i.label}</div>{i.href.startsWith('http') ? <div className="d">Production: the Sponge and Liquid screens, closing counts and requests</div> : null}</Link>
               ))}
             </div>
           </div>

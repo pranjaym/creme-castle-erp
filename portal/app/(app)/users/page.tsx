@@ -61,8 +61,8 @@ export default async function UsersPage({ searchParams }:
           <h1 className="page">People and access</h1>
           <p className="hint">
             The role decides what a person sees everywhere in the portal: a store account
-            sees its one store, an area manager their area, central and admin the whole
-            network. Accounts are switched off, never deleted, and every change here is
+            sees its one store, an area manager their area, the operations head every store,
+            and each module only the roles given it. Kitchen roles are set in the kitchen app. Accounts are switched off, never deleted, and every change here is
             written to a log that cannot be edited.
           </p>
         </div>

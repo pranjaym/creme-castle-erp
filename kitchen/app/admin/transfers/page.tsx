@@ -1,6 +1,7 @@
 // Admin · Transfers: the discrepancy register (sent vs received, both names)
 // and everything still waiting for a receiver's confirmation. GET-form filters
 // and CSV, the OMS reports pattern.
+import { requireRoles, OVERSIGHT } from '@/lib/session';
 import { spine } from '@/lib/supabase/server';
 import { istCalendarDate, ymdAddDays } from '@/lib/business-day';
 
@@ -13,6 +14,7 @@ const clock = (iso: string) =>
 export default async function AdminTransfersPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireRoles(OVERSIGHT);
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? '';
   const db = spine();

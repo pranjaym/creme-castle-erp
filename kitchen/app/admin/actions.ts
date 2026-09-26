@@ -7,7 +7,7 @@
 // touched from here.
 import { spine } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import { getKitchenUser } from '@/lib/session';
+import { getKitchenUser, kitchenUserIn } from '@/lib/session';
 
 // Every master edit requires a tech or super_admin session (server-side; the
 // hidden sidebar is a courtesy, this is the door).
@@ -182,9 +182,8 @@ export async function setDeptTimes(deptCode: string, dayStart: string, closingBe
  *  the switch is reversible. Super admin only, and audited twice: by the SQL
  *  function itself and here. */
 export async function setKitchenMode(newMode: 'trial' | 'live', why: string) {
-  const u = await getKitchenUser();
-  if (!u) return { ok: false, message: 'Not signed in.' };
-  if (u.role !== 'super_admin') return { ok: false, message: 'Only a super admin can switch the module mode.' };
+  const u = await kitchenUserIn(['super_admin']);
+  if (!u) return { ok: false, message: 'Only a super admin can switch the module mode.' };
   if (newMode !== 'trial' && newMode !== 'live') return { ok: false, message: 'Unknown mode' };
   if (!why.trim()) return { ok: false, message: 'Write one line saying why, it goes on the record.' };
 

@@ -3,6 +3,7 @@
 // tie out, what is unconfirmed, what is being asked for, what went to waste.
 // Every tile is a DOOR into the filtered view that explains its number; green
 // tiles need no visit. All green = the kitchen's morning is over.
+import { requireRoles, OVERSIGHT } from '@/lib/session';
 import Link from 'next/link';
 import { spine } from '@/lib/supabase/server';
 import { istCalendarDate, ymdAddDays, weekdayForYmd } from '@/lib/business-day';
@@ -13,6 +14,7 @@ export const dynamic = 'force-dynamic';
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, ''));
 
 export default async function AdminTodayPage() {
+  await requireRoles(OVERSIGHT);
   const db = spine();
   const now = new Date();
   const today = istCalendarDate(now);

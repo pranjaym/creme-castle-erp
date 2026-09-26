@@ -1,4 +1,5 @@
 // CSV download for requests (same filters as the page).
+import { kitchenUserIn, OVERSIGHT } from '@/lib/session';
 import { NextRequest } from 'next/server';
 import { spine } from '@/lib/supabase/server';
 
@@ -10,6 +11,7 @@ const esc = (v: unknown) => {
 };
 
 export async function GET(req: NextRequest) {
+  if (!(await kitchenUserIn(OVERSIGHT))) return new Response('Not allowed for this role.', { status: 403 });
   const sp = req.nextUrl.searchParams;
   const state = sp.get('state') ?? '';
   const maker = sp.get('maker') ?? '';

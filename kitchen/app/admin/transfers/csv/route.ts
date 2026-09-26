@@ -1,4 +1,5 @@
 // CSV download for transfers: differences first, then unconfirmed sends.
+import { kitchenUserIn, OVERSIGHT } from '@/lib/session';
 import { NextRequest } from 'next/server';
 import { spine } from '@/lib/supabase/server';
 import { istCalendarDate, ymdAddDays } from '@/lib/business-day';
@@ -11,6 +12,7 @@ const esc = (v: unknown) => {
 };
 
 export async function GET(req: NextRequest) {
+  if (!(await kitchenUserIn(OVERSIGHT))) return new Response('Not allowed for this role.', { status: 403 });
   const sp = req.nextUrl.searchParams;
   const ymd = /^\d{4}-\d{2}-\d{2}$/;
   const today = istCalendarDate(new Date());
