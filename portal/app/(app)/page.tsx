@@ -3,6 +3,7 @@ import { requireUser, portalAccess } from '@/lib/session';
 import { navSectionsFor } from '@/lib/nav';
 import { getDashAll, getLatestDate, aggregateAreas, inr, lakh, n0, n1 } from '@/lib/daily';
 import { V, D } from './daily/ui';
+import { waitingFor } from '@/lib/questions';
 
 // Home: the compass. Role-aware, every number is a door (the OMS principle).
 // Central and admin land on the network read; an area manager on their area;
@@ -34,6 +35,12 @@ export default async function Home() {
 
   const latest = await getLatestDate();
   const d = await getDashAll(latest);
+  // Questions waiting for this person (26 Sep 2026): the first thing after login.
+  let waiting: { n: number; red: boolean; text: string } | null = null;
+  try { waiting = await waitingFor(user); } catch { waiting = null; }
+  const qline = waiting
+    ? <p className={waiting.red ? 'qhome due' : waiting.n ? 'qhome on' : 'qhome'}><Link href="/questions">{waiting.text}</Link></p>
+    : null;
   const dateLabel = new Date(latest + 'T00:00:00').toLocaleDateString('en-IN',
     { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -57,6 +64,7 @@ export default async function Home() {
     return (
       <main className="dashroot" data-view="y">
         <h1 className="page">{greeting}</h1>
+        {qline}
         <p className="freshline">{s.code} · data up to {dateLabel}</p>
         <div className="dctx">
           <Link href={href} className="dtile"><div className="dlabel">Orders</div><V>{n0(s.day.orders)}</V></Link>
@@ -79,6 +87,7 @@ export default async function Home() {
   return (
     <main className="dashroot" data-view="y">
       <h1 className="page">{greeting}</h1>
+      {qline}
       <p className="freshline">
         Showing <b>{dateLabel}</b>, the newest settled day (Zomato keeps revising the last 2 days, so they are hidden on purpose). Every number below opens the page that explains it.
       </p>

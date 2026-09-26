@@ -8,6 +8,7 @@ import { requireUser } from '@/lib/session';
 import { navSectionsFor, ROLE_LABELS } from '@/lib/nav';
 import { getLatestDate, dateLabel } from '@/lib/daily';
 import { logout } from '@/app/login/actions';
+import { waitingFor } from '@/lib/questions';
 import Sidebar from './sidebar';
 
 function istToday(): string {
@@ -27,6 +28,14 @@ export default async function AppShell({ children }: { children: React.ReactNode
   let latest: string | null = null;
   try { latest = await getLatestDate(); } catch { latest = null; }
 
+  // The Questions badge (26 Sep 2026): what waits for THIS person. The whole
+  // notification system of the module is this number and the home line.
+  let badges: Record<string, { n: number; red: boolean }> | undefined;
+  try {
+    const w = await waitingFor(user);
+    if (w) badges = { '/questions': { n: w.n, red: w.red } };
+  } catch { badges = undefined; }
+
   const scope = user.role === 'store' && user.outletCodes.length
     ? user.outletCodes[0]
     : user.role === 'area_manager' && user.outletCodes.length
@@ -37,6 +46,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
       <Sidebar
         sections={sections}
         foot={latest ? `Data settled to ${dateLabel(latest)}` : 'Data date unavailable'}
+        badges={badges}
       />
       <div className="main">
         <header className="topbar">

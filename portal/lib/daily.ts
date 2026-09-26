@@ -38,6 +38,7 @@ export interface DashAll {
   } | null;
 }
 export interface Receipt {
+  oid?: string | null;   // the order id (migration 235), the key a question attaches to
   d?: string; dlabel?: string; time?: string; basket?: string | null;
   // What the customer actually wrote. Zomato leaves about seven complaints in
   // ten with no reason tag at all, and this is the only place they say why.
@@ -181,6 +182,7 @@ export function shiftDate(iso: string, days: number): string {
 // ---- area page (migration 180): one call returns everything an AM needs,
 // every receipt naming its outlet. Shapes mirror dash_area_detail exactly.
 export interface AreaReceipt {
+  oid?: string | null;
   code: string; dlabel?: string; time?: string; basket?: string | null;
   review?: string | null;
   reason?: string | null; tag?: string | null; rating?: string | null;
@@ -211,6 +213,7 @@ export interface MoneyStore {
 // that day as the proof the listing was up, and the hour, because the pattern
 // is in the clock.
 export interface ShutOrder {
+  oid?: string | null;
   code: string; am: string; dlabel: string; time: string; reason: string;
   basket: string | null; value: number | null; today: boolean; hour: string;
   online_day: number | null; offmin_day: number | null;
@@ -277,10 +280,12 @@ export async function getCentralDetail(date: string): Promise<CentralDetail> {
 // values and baskets come from the billed Petpooja order matched on
 // Swiggy's own order number; ratings are one row per rated ORDER.
 export interface SwiggyCanc {
+  oid?: string | null;
   code?: string; am?: string | null; d?: string; t: string | null; why: string;
   prep?: boolean; val: number | null; basket: string | null;
 }
 export interface SwiggyRated {
+  oid?: string | null;
   code?: string; am?: string | null; d?: string; t: string | null;
   rating: number | null; basket: string | null; words: string | null;
 }

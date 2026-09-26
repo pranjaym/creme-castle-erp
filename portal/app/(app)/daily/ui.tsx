@@ -378,8 +378,8 @@ export function Basket({ text, n = 52 }: { text?: string | null; n?: number }) {
 
 // The compact store table: nine tight columns, worst-first, red only where a
 // number deserves a question. Store names open the store page.
-export function AreaStores({ stores, date }:
-  { stores: import('@/lib/daily').StoreStats[]; date: string }) {
+export function AreaStores({ stores, date, qcell }:
+  { stores: import('@/lib/daily').StoreStats[]; date: string; qcell?: (code: string) => React.ReactNode }) {
   const rows = [...stores].sort((a, b) => (a.dayRank ?? 99) - (b.dayRank ?? 99));
   const mark = (v: React.ReactNode, bad: boolean) => bad ? <span className="flag">{v}</span> : v;
   return (
@@ -387,7 +387,7 @@ export function AreaStores({ stores, date }:
       <table className="tight sortable">
         <thead><tr>
           <th>#</th><th>Store</th><th>Orders</th><th>vs avg</th><th>Online %</th>
-          <th>Rej</th><th>Comp</th><th>Rating</th><th>Wait</th>
+          <th>Rej</th><th>Comp</th><th>Rating</th><th>Wait</th>{qcell ? <th className="qth"></th> : null}
         </tr></thead>
         <tbody>
           {rows.map(s => {
@@ -407,6 +407,7 @@ export function AreaStores({ stores, date }:
                 <td>{mark(n0(d.comps), (d.comps ?? 0) >= 3)}</td>
                 <td>{d.rating ? n1(d.rating) : '-'}</td>
                 <td>{mark(d.wait === null ? '-' : n1(d.wait), (d.wait ?? 0) >= 2)}</td>
+                {qcell ? <td className="qtd">{qcell(s.code)}</td> : null}
               </tr>
             );
           })}
@@ -417,7 +418,7 @@ export function AreaStores({ stores, date }:
 }
 
 // One card per outlet that dipped below 100% online, with its own 7-day line.
-export function DipCard({ dip }: { dip: import('@/lib/daily').OnlineDip & { am?: string } }) {
+export function DipCard({ dip, q }: { dip: import('@/lib/daily').OnlineDip & { am?: string }; q?: React.ReactNode }) {
   const labels = dip.series.map(p => p.d.slice(-2));
   const tips = dip.series.map(p =>
     new Date(p.d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }));
@@ -429,6 +430,7 @@ export function DipCard({ dip }: { dip: import('@/lib/daily').OnlineDip & { am?:
       <div className="mnote">{n0(dip.offmin_day)} min offline that day · {n0(dip.offmin_wk)} min across the week</div>
       <Chart series={dip.series.map(p => p.online)} labels={labels} tips={tips}
         title="Online % per day (day of month)" unit="%" lo={lo} hi={100} width={270} height={88} />
+      {q ? <div className="qtd">{q}</div> : null}
     </div>
   );
 }
@@ -615,8 +617,9 @@ export function Funnel({ impressions, opens, orders }:
 // one section on either page that is about a thing that should be zero.
 import type { ShutBlock } from '@/lib/daily';
 
-export function ShutShop({ block, dshort, wkLabel, showAm }:
-  { block: ShutBlock; dshort: string; wkLabel: string; showAm: boolean }) {
+export function ShutShop({ block, dshort, wkLabel, showAm, qcell }:
+  { block: ShutBlock; dshort: string; wkLabel: string; showAm: boolean;
+    qcell?: (r: import('@/lib/daily').ShutOrder) => React.ReactNode }) {
   const { shut_orders: orders, shut_stores: stores, shut_hours: hours } = block;
   const total = orders.reduce((t, r) => t + (r.value ?? 0), 0);
   const today = orders.filter(r => r.today);
@@ -645,6 +648,7 @@ export function ShutShop({ block, dshort, wkLabel, showAm }:
     if (showAm) cells.push(r.am);
     cells.push(r.dlabel, r.time, <Tag key="t" reason={r.reason} />,
       <Basket key="b" text={r.basket} />, inr(r.value), online);
+    if (qcell) cells.push(<span key="q">{qcell(r)}</span>);
     return cells;
   };
 
@@ -658,7 +662,7 @@ export function ShutShop({ block, dshort, wkLabel, showAm }:
             : `${listedOpen} of the ${orders.length} came to a store that was listed open all day.`}
           {peak ? ` The busiest hour for it is ${peak.hour}:00, with ${peak.orders} of them.` : ''}
         </p>
-        <Rows cols={cols} rows={orders.map(row)} />
+        <Rows cols={qcell ? [...cols, ''] : cols} rows={orders.map(row)} />
         <p className="note">The last column is the store&apos;s online percentage for that whole day, from
           Zomato&apos;s own report. It is here as proof: Zomato only sends an order to a store whose listing it
           believes is open, so a store showing 100% online has been telling customers it is trading. The shop being

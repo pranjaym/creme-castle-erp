@@ -75,6 +75,11 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
       items: [{ href: '/daily', label: 'My Store' }],
     });
   }
+  // Questions asked on the daily pages (26 Sep 2026). One entry for everyone
+  // who may read them; the rail badge next to it is filled by the shell.
+  if (acc.questions.view) {
+    sections.push({ title: 'Follow-up', items: [{ href: '/questions', label: 'Questions' }] });
+  }
 
   const account: NavItem[] = [];
   if (acc.users) account.push({ href: '/users', label: 'Users & Access' });
