@@ -3,6 +3,7 @@
 // so the portal and the future mailer can never disagree: the definitions live
 // in the database. Ranks and area rollups are simple arithmetic done here.
 import 'server-only';
+import { cache } from 'react';
 import { spine } from '@/lib/supabase/service';
 import type { SessionUser } from '@/lib/session';
 
@@ -79,9 +80,12 @@ async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-export async function getLatestDate(): Promise<string> {
+// Deduped per request (React cache, 26 Sep 2026): the page gate and the view
+// both need the latest date and the network read, and each network read is
+// half a second. One call per request, not two.
+export const getLatestDate = cache(async function getLatestDate(): Promise<string> {
   return rpc<string>('dash_latest_date', {});
-}
+});
 
 // Clean-day score: complaints % + rejections % + offline penalty; lower is
 // better. Ties break on rating then orders (same rule as the sample pages and
@@ -91,7 +95,7 @@ function score(cpct: number | null, rpct: number | null, online: number | null):
   return (cpct ?? 0) + (rpct ?? 0) + (100 - (online ?? 100));
 }
 
-export async function getDashAll(date: string): Promise<DashAll> {
+export const getDashAll = cache(async function getDashAll(date: string): Promise<DashAll> {
   const d = await rpc<DashAll>('dash_all', { p_date: date });
   for (const s of d.stores) {
     s.dayScore = score(s.day.cpct, s.day.rpct, s.day.online);
@@ -108,7 +112,7 @@ export async function getDashAll(date: string): Promise<DashAll> {
   rank('dayScore', s => s.day.rating ?? 0, s => s.day.orders ?? 0, 'dayRank');
   rank('wkScore', s => s.wk.rating ?? 0, s => s.wk.orders ?? 0, 'wkRank');
   return d;
-}
+});
 
 export async function getStoreDetail(code: string, date: string): Promise<StoreDetail> {
   return rpc<StoreDetail>('dash_store_detail', { p_code: code, p_date: date });

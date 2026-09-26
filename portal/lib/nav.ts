@@ -20,6 +20,14 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
 
   sections.push({ title: null, items: [{ href: '/', label: 'Home' }] });
 
+  // Questions asked on the daily pages (26 Sep 2026): the follow-up loop, so
+  // it sits right under Home for everyone who may read them (Pranjay, same
+  // evening: "where is the questions section in the left"). The rail badge
+  // next to it is filled by the shell.
+  if (acc.questions.view) {
+    sections.push({ title: 'Follow-up', items: [{ href: '/questions', label: 'Questions' }] });
+  }
+
   if (acc.network) {
     sections.push({
       title: 'Store Performance',
@@ -74,11 +82,6 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
       title: 'Store Performance',
       items: [{ href: '/daily', label: 'My Store' }],
     });
-  }
-  // Questions asked on the daily pages (26 Sep 2026). One entry for everyone
-  // who may read them; the rail badge next to it is filled by the shell.
-  if (acc.questions.view) {
-    sections.push({ title: 'Follow-up', items: [{ href: '/questions', label: 'Questions' }] });
   }
 
   const account: NavItem[] = [];

@@ -25,14 +25,18 @@ export default async function AreaView({ am, date, latest, user, sp }:
   { am: string; date: string; latest: string; user?: SessionUser | null;
     sp?: { q?: string; ask?: string; ok?: string; err?: string } }) {
   const all = await getDashAll(date);
-  const [A, SW] = await Promise.all([getAreaDetail(am, date), getAreaSwiggy(am, date)]);
+  // Questions on this page's rows (migration 234), fetched alongside the two
+  // detail calls (the area's codes are already in the network read). Without
+  // a session (the local harness) there are no cells and no drawer.
+  const amCodes = all.stores.filter(s => s.am === am).map(s => s.code);
+  const [A, SW, qmap] = await Promise.all([
+    getAreaDetail(am, date), getAreaSwiggy(am, date),
+    user ? questionsForOutlets(amCodes) : Promise.resolve(new Map<string, import('@/lib/questions').QuestionRow>()),
+  ]);
   const mine = all.stores.filter(s => A.stores.includes(s.code));
   if (!mine.length) redirect('/daily');
   const areas = aggregateAreas(all.stores);
 
-  // Questions on this page's rows (migration 234). Without a session (the
-  // local harness) there are no cells and no drawer.
-  const qmap = user ? await questionsForOutlets(A.stores) : new Map();
   const Q = questionKit({ page: 'area', pageDate: date, basePath: `/daily/area/${encodeURIComponent(am)}`, user, qmap });
   const S1 = `Your stores on ${new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
   const S2 = 'Outlets not fully online', S3 = 'Orders turned away because the shop was shut',

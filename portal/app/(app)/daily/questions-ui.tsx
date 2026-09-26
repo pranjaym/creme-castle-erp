@@ -44,7 +44,12 @@ export function questionKit(o: {
     if (!canSee) return null;
     const r = o.qmap.get(key);
     if (r) return <Chip r={r} href={`${back}&q=${r.id}`} />;
-    if (canAsk && catalog[key]) return <Link className="qask" href={`${back}&ask=${encodeURIComponent(key)}`}>Ask</Link>;
+    // data-qkey lets dash.js open the drawer on the spot from the catalog on
+    // the page; the href is the same drawer served by the server, for the
+    // moment before the script is bound. A plain anchor, not a router Link:
+    // the router acts on the element before a document-level listener runs,
+    // so a Link could not be stopped and the page navigated instead.
+    if (canAsk && catalog[key]) return <a className="qask" data-qkey={key} href={`${back}&ask=${encodeURIComponent(key)}`}>Ask</a>;
     return null;
   };
   const cell: Kit['cell'] = (key, e) => { register(key, e); return cellFor(key); };
@@ -140,7 +145,7 @@ export async function QuestionDrawer({ kit, user, sp }: {
   }
 
   const id = Number(sp.q);
-  if (!id) return null;
+  if (!id) return p.ask ? <AskTemplate kit={kit} /> : null;
   const r = await getQuestion(id);
   if (!r) return null;
   // scope: a field role sees only its own outlets' questions
@@ -159,6 +164,35 @@ export async function QuestionDrawer({ kit, user, sp }: {
         ? <div className="readonly">Sent. Waiting for {r.raised_by_name ?? 'central'} to accept or push back.</div> : null}
       {r.status === 'closed' ? <div className="readonly">Closed. The trail stays here for good; nothing is ever deleted.</div> : null}
     </Drawer>
+  );
+}
+
+// The instant Ask drawer (26 Sep 2026, Pranjay: "very slow"). Opening the
+// server-rendered drawer costs a whole page round trip, and asking is the
+// thing central does most. So every row's labelled fields are on the page
+// once, as JSON, and one hidden drawer with a real AskForm sits ready;
+// dash.js fills it from the clicked row and shows it. The submit is the same
+// server action as before. Without the script the links still work.
+function AskTemplate({ kit }: { kit: Kit }) {
+  const json = JSON.stringify(kit.catalog).replace(/</g, '\\u003c');
+  const empty = { key: '', anchor_type: 'order', outlet: '', page: 'area', pageDate: kit.back.split('date=')[1] ?? '', section: '',
+    platform: null, businessDate: null, fields: [] as Field[] };
+  return (
+    <>
+      <script type="application/json" id="qcatalog" dangerouslySetInnerHTML={{ __html: json }} />
+      <div id="qask-tpl" hidden>
+        <a className="qoverlay" href={kit.back} data-qclose="1" aria-label="Close" />
+        <aside className="qdrawer">
+          <a className="qd-close" href={kit.back} data-qclose="1" aria-label="Close">&times;</a>
+          <div className="qd-head"><div className="sub">New question to the area manager</div><h3 data-qtitle="1"></h3></div>
+          <div className="qd-body">
+            <div className="qd-row"><div className="qd-sec">The row this question is about</div><div className="qd-sectitle" data-qsection="1"></div>
+              <table className="vrow"><tbody data-qfields="1"></tbody></table></div>
+            <AskForm entry={empty} back={kit.back} to="the area manager" />
+          </div>
+        </aside>
+      </div>
+    </>
   );
 }
 

@@ -25,16 +25,14 @@ export default async function AppShell({ children }: { children: React.ReactNode
   // The data date is a fact the whole app depends on, so it sits in the shell
   // rather than being repeated on every page. If the spine is unreachable the
   // shell must still render, so this never throws the page away.
-  let latest: string | null = null;
-  try { latest = await getLatestDate(); } catch { latest = null; }
-
   // The Questions badge (26 Sep 2026): what waits for THIS person. The whole
   // notification system of the module is this number and the home line.
+  // Fetched alongside the date, not after it.
+  let latest: string | null = null;
   let badges: Record<string, { n: number; red: boolean }> | undefined;
-  try {
-    const w = await waitingFor(user);
-    if (w) badges = { '/questions': { n: w.n, red: w.red } };
-  } catch { badges = undefined; }
+  const [lr, wr] = await Promise.allSettled([getLatestDate(), waitingFor(user)]);
+  if (lr.status === 'fulfilled') latest = lr.value;
+  if (wr.status === 'fulfilled' && wr.value) badges = { '/questions': { n: wr.value.n, red: wr.value.red } };
 
   const scope = user.role === 'store' && user.outletCodes.length
     ? user.outletCodes[0]
