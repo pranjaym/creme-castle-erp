@@ -48,6 +48,30 @@ export function couponPerms(u: { role: Role; modules?: string[] }) {
   return { view, edit };
 }
 
+// The whole portal's permission table, in one place (26 Sep 2026). The menu
+// (lib/nav.ts) and every page gate read these same answers, so a page can no
+// longer be missing from someone's menu yet open to them when they type its
+// address, which is what Discounts, the sales dashboard and the glossaries were
+// for area managers and stores until today. Every entry is an allow-list: a role
+// not named here gets nothing, so a new role starts with no access.
+// scripts/check-gates.mjs fails the build if any page skips this.
+export function portalAccess(u: { role: Role; modules?: string[] }) {
+  const mgmt = u.role === 'admin' || u.role === 'central' || u.role === 'viewer';
+  return {
+    network: mgmt,                                                      // all-stores overview, area pages, any store
+    storeList: mgmt || u.role === 'area_manager',                       // the stores list (an AM sees only theirs)
+    ownStores: mgmt || u.role === 'area_manager' || u.role === 'store', // /daily, scoped to their outlets
+    sales: mgmt,                                                        // daily sales dashboard
+    reports: mgmt,                                                      // reports and downloads
+    glossary: mgmt,                                                     // item and outlet glossary, read
+    glossaryEdit: u.role === 'admin' || u.role === 'central',
+    recipes: recipePerms(u),
+    coupons: couponPerms(u),
+    users: u.role === 'admin',
+  };
+}
+export type PortalAccess = ReturnType<typeof portalAccess>;
+
 export interface SessionUser {
   id: string;
   email: string;
@@ -90,6 +114,15 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 export async function requireUser(): Promise<SessionUser> {
   const u = await getSessionUser();
   if (!u) redirect('/login');
+  return u;
+}
+
+// For every gated page: turn away anyone the table above does not allow. Home
+// ('/') is open to every signed-in person, so it is the default place to send
+// them and can never loop.
+export async function requireAccess(allowed: (a: PortalAccess) => boolean, elsewhere = '/'): Promise<SessionUser> {
+  const u = await requireUser();
+  if (!allowed(portalAccess(u))) redirect(elsewhere);
   return u;
 }
 

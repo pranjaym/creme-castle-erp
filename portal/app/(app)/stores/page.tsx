@@ -1,4 +1,4 @@
-import { requireUser } from '@/lib/session';
+import { requireAccess } from '@/lib/session';
 import { getDashAll, getLatestDate } from '@/lib/daily';
 import { redirect } from 'next/navigation';
 import { DashHead, DashScript, StoresTables } from '../daily/ui';
@@ -7,8 +7,7 @@ import { DashHead, DashScript, StoresTables } from '../daily/ui';
 // how admin and central preview exactly what a store manager sees.
 export default async function StoresPage({ searchParams }:
   { searchParams: Promise<{ date?: string }> }) {
-  const user = await requireUser();
-  if (user.role === 'store') redirect('/daily');
+  const user = await requireAccess(a => a.storeList, '/daily');
 
   const latest = await getLatestDate();
   const sp = await searchParams;

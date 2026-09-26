@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { requireUser, recipePerms } from '@/lib/session';
+import { requireAccess, recipePerms } from '@/lib/session';
 import { one } from '@/lib/db';
 import { uploadRecipes } from '../actions';
 import { Crumbs, Flash } from '../ui';
@@ -12,9 +12,8 @@ import type { UploadResult } from '@/lib/recipes-upload';
 export const dynamic = 'force-dynamic';
 
 export default async function UploadPage({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string; result?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.recipes.draft, '/recipes');
   const perms = recipePerms(user);
-  if (!perms.draft) redirect('/recipes');
   const sp = await searchParams;
   let result: UploadResult | null = null;
   if (sp.result) { const r = await one<{ data: UploadResult }>('select data from recipes.event where id = $1 and entity = $2', [Number(sp.result), 'upload']); result = r?.data ?? null; }

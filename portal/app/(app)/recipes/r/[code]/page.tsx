@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { requireUser, recipePerms } from '@/lib/session';
+import { requireAccess, recipePerms } from '@/lib/session';
 import { getRecipe, getSettings } from '@/lib/recipes';
 import { inr, pct, rateLabel, unitShort } from '@/lib/recipes-engine';
 import { startDraft, setPrice, retireRecipe } from '../../actions';
@@ -12,9 +12,8 @@ import { Crumbs, Flash, Kind, Status, State, Verdict, RefLink, Strip, soldAs } f
 export const dynamic = 'force-dynamic';
 
 export default async function RecipePage({ params, searchParams }: { params: Promise<{ code: string }>; searchParams: Promise<{ ok?: string; err?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.recipes.view);
   const perms = recipePerms(user);
-  if (!perms.view) redirect('/');
   const { code } = await params; const sp = await searchParams;
   const d = await getRecipe(decodeURIComponent(code));
   if (!d) notFound();

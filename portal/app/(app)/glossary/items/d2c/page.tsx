@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireUser } from '@/lib/session';
+import { requireAccess } from '@/lib/session';
 import { spine } from '@/lib/supabase/service';
 
 // Items on channels Pranjay does not track. Kept out of the item queue on purpose.
@@ -23,7 +23,7 @@ function rs(n: number | null | undefined): string {
 
 export default async function UntrackedItemsPage({ searchParams }:
   { searchParams: Promise<{ n?: string }> }) {
-  await requireUser();
+  await requireAccess(a => a.glossary);
   const sp = await searchParams;
   const limit = Math.min(Math.max(Number(sp.n ?? 100), 25), 2000);
 

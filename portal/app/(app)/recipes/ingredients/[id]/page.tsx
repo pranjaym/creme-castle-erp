@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { requireUser, recipePerms } from '@/lib/session';
+import { requireAccess, recipePerms } from '@/lib/session';
 import { getIngredient, engineModel, getSettings } from '@/lib/recipes';
 import { makeEngine, reach, rateLabel, fromBase, perLabel, unitShort, inr, pct } from '@/lib/recipes-engine';
 import { setRate } from '../../actions';
@@ -11,9 +11,8 @@ import { Crumbs, Flash, Kind } from '../../ui';
 export const dynamic = 'force-dynamic';
 
 export default async function IngredientPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ ok?: string; err?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.recipes.view);
   const perms = recipePerms(user);
-  if (!perms.view) redirect('/');
   const { id } = await params; const sp = await searchParams;
   const data = await getIngredient(Number(id));
   if (!data) notFound();

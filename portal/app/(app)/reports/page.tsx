@@ -1,14 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { requireUser } from '@/lib/session';
+import { requireAccess } from '@/lib/session';
 import { REPORTS, REPORT_GROUPS } from '@/lib/reports';
 
 // The reports hub: cards grouped in sections, the OMS finance-reports pattern.
 // Every live dataset in the spine has a card; a card opens the report page
 // with a date range, a preview, and the download. Management roles only.
 export default async function ReportsHub() {
-  const user = await requireUser();
-  if (!['admin', 'central', 'viewer'].includes(user.role)) redirect('/');
+  await requireAccess(a => a.reports);
 
   const defs = Object.values(REPORTS);
   return (

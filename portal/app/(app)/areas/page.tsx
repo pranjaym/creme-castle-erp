@@ -1,14 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { requireUser } from '@/lib/session';
+import { requireAccess } from '@/lib/session';
 import { getDashAll, getLatestDate, aggregateAreas, inr, n0 } from '@/lib/daily';
 import { DashHead, DashScript, AreasTables } from '../daily/ui';
 
 // The five areas: cards plus the comparison table. Management view.
 export default async function AreasPage({ searchParams }:
   { searchParams: Promise<{ date?: string }> }) {
-  const user = await requireUser();
-  if (user.role === 'store' || user.role === 'area_manager') redirect('/daily');
+  await requireAccess(a => a.network, '/daily');
 
   const latest = await getLatestDate();
   const sp = await searchParams;

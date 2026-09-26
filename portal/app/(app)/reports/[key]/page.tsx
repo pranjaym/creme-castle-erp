@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { requireUser } from '@/lib/session';
+import { requireAccess } from '@/lib/session';
 import { REPORTS, MAX_RANGE_DAYS, isValidDate, fetchReportRows } from '@/lib/reports';
 import { getLatestDate } from '@/lib/daily';
 
@@ -10,8 +10,7 @@ const PREVIEW_ROWS = 30;
 // itself streams from the existing /reports/download route.
 export default async function ReportPage({ params, searchParams }:
   { params: Promise<{ key: string }>; searchParams: Promise<{ from?: string; to?: string }> }) {
-  const user = await requireUser();
-  if (!['admin', 'central', 'viewer'].includes(user.role)) redirect('/');
+  await requireAccess(a => a.reports);
 
   const { key } = await params;
   const def = REPORTS[key];

@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { requireUser } from '@/lib/session';
+import { requireUser, portalAccess } from '@/lib/session';
+import { navSectionsFor } from '@/lib/nav';
 import { getDashAll, getLatestDate, aggregateAreas, inr, lakh, n0, n1 } from '@/lib/daily';
 import { V, D } from './daily/ui';
 
@@ -8,12 +9,35 @@ import { V, D } from './daily/ui';
 // a store on their own numbers. All figures are the latest loaded day.
 export default async function Home() {
   const user = await requireUser();
+  const acc = portalAccess(user);
+  const greeting = `Welcome, ${user.fullName || user.email}`;
+
+  // A role with no store pages (chef, controls) gets no store numbers here
+  // either: just the doors to the modules it does have.
+  if (!acc.ownStores) {
+    return (
+      <main className="dashroot" data-view="y">
+        <h1 className="page">{greeting}</h1>
+        {navSectionsFor(user).filter(s => s.title && s.title !== 'Account').map(s => (
+          <div key={s.title}>
+            <h2 className="section">{s.title}</h2>
+            <div className="homegrid">
+              {s.items.map(i => (
+                <Link key={i.href} className="homecard" href={i.href}><div className="t">{i.label}</div></Link>
+              ))}
+            </div>
+          </div>
+        ))}
+      </main>
+    );
+  }
+
   const latest = await getLatestDate();
   const d = await getDashAll(latest);
   const dateLabel = new Date(latest + 'T00:00:00').toLocaleDateString('en-IN',
     { weekday: 'long', day: 'numeric', month: 'long' });
 
-  const mine = (user.role === 'store' || user.role === 'area_manager')
+  const mine = !acc.network
     ? d.stores.filter(s => user.outletCodes.includes(s.code))
     : d.stores;
   const areas = aggregateAreas(d.stores);
@@ -25,8 +49,6 @@ export default async function Home() {
   const srej = sum(s => s.day.srej);
   const frWk = sum(s => s.wk.fr);
   const moneyWk = sum(s => s.wk.stockout) + sum(s => s.wk.refunds);
-
-  const greeting = `Welcome, ${user.fullName || user.email}`;
 
   // Store account: their tiles plus the door to their page.
   if (user.role === 'store' && mine.length === 1) {
@@ -52,7 +74,7 @@ export default async function Home() {
   const lev = d.levers;
   const worst = [...mine].sort((a, b) => (b.dayRank ?? 0) - (a.dayRank ?? 0)).slice(0, 3);
   const best = [...mine].sort((a, b) => (a.dayRank ?? 99) - (b.dayRank ?? 99)).slice(0, 3);
-  const dailyHref = user.role === 'area_manager' ? '/daily' : '/daily/central';
+  const dailyHref = acc.network ? '/daily/central' : '/daily';
 
   return (
     <main className="dashroot" data-view="y">
@@ -64,7 +86,7 @@ export default async function Home() {
       <div className="dctx">
         <Link href={dailyHref} className="dtile"><div className="dlabel">Orders</div>
           <V>{n0(orders)}</V><D>{mine.length} stores</D></Link>
-        {user.role !== 'area_manager' ? (
+        {acc.network ? (
           <Link href={dailyHref} className="dtile"><div className="dlabel">Net sales</div>
             <V>{lakh(lev?.seg_day?.net_sales)}</V><D>subtotal {lakh(lev?.seg_day?.subtotal)}</D></Link>
         ) : null}
@@ -78,7 +100,7 @@ export default async function Home() {
           <V>{inr(moneyWk)}</V><D>stockouts + refunds</D></Link>
       </div>
 
-      {user.role !== 'area_manager' ? (
+      {acc.network ? (
         <>
           <h2 className="section">Areas</h2>
           <div className="homegrid">

@@ -1,7 +1,8 @@
 // The navigation registry, same pattern as the OMS (lib/roles.ts NAV_ITEMS):
-// grouped sections, filtered by role, so navigation and permissions can never
+// grouped sections, filtered by the same permission table every page gate reads
+// (portalAccess in lib/session.ts), so navigation and permissions can never
 // disagree. Names per Pranjay (24 Aug): plain words that say what a thing is.
-import { recipePerms, couponPerms, type Role, type SessionUser } from '@/lib/session';
+import { portalAccess, type Role, type SessionUser } from '@/lib/session';
 
 export interface NavItem {
   href: string;
@@ -13,13 +14,13 @@ export interface NavSection {
 }
 
 export function navSectionsFor(user: SessionUser): NavSection[] {
-  const mgmt = user.role === 'admin' || user.role === 'central' || user.role === 'viewer';
-  const rp = recipePerms(user);
+  const acc = portalAccess(user);
+  const rp = acc.recipes;
   const sections: NavSection[] = [];
 
   sections.push({ title: null, items: [{ href: '/', label: 'Home' }] });
 
-  if (mgmt) {
+  if (acc.network) {
     sections.push({
       title: 'Store Performance',
       items: [
@@ -28,19 +29,17 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
         { href: '/stores', label: 'Store Pages' },
       ],
     });
+  }
+  if (acc.sales) {
     sections.push({
       title: 'Sales',
       items: [{ href: '/dashboards', label: 'Daily Sales Dashboard' }],
     });
-    sections.push({
-      title: 'Data',
-      items: [
-        { href: '/reports', label: 'Reports & Downloads' },
-        { href: '/glossary/items', label: 'Item Glossary' },
-        { href: '/glossary/outlets', label: 'Outlet Glossary' },
-      ],
-    });
   }
+  const data: NavItem[] = [];
+  if (acc.reports) data.push({ href: '/reports', label: 'Reports & Downloads' });
+  if (acc.glossary) data.push({ href: '/glossary/items', label: 'Item Glossary' }, { href: '/glossary/outlets', label: 'Outlet Glossary' });
+  if (data.length) sections.push({ title: 'Data', items: data });
   if (rp.view) {
     const items: NavItem[] = [
       { href: '/recipes', label: 'Recipes home' },
@@ -52,7 +51,7 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
     items.push({ href: '/recipes/approvals', label: 'Changes & approvals' });
     sections.push({ title: 'Recipes & costing', items });
   }
-  if (couponPerms(user).view) {
+  if (acc.coupons.view) {
     sections.push({
       title: 'Discounts',
       items: [
@@ -78,7 +77,7 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
   }
 
   const account: NavItem[] = [];
-  if (user.role === 'admin') account.push({ href: '/users', label: 'Users & Access' });
+  if (acc.users) account.push({ href: '/users', label: 'Users & Access' });
   account.push({ href: '/account', label: 'Change Password' });
   sections.push({ title: 'Account', items: account });
 

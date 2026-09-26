@@ -1,13 +1,12 @@
 import { redirect } from 'next/navigation';
-import { requireUser, recipePerms } from '@/lib/session';
+import { requireAccess, recipePerms } from '@/lib/session';
 import { createRecipe } from '../actions';
 import { Crumbs, Flash } from '../ui';
 
 export const dynamic = 'force-dynamic';
 
 export default async function NewRecipePage({ searchParams }: { searchParams: Promise<{ kind?: string; ok?: string; err?: string }> }) {
-  const user = await requireUser();
-  if (!recipePerms(user).draft) redirect('/recipes');
+  const user = await requireAccess(a => a.recipes.draft, '/recipes');
   const sp = await searchParams;
   const finished = sp.kind === 'finished';
   return (

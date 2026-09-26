@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireUser, recipePerms } from '@/lib/session';
+import { requireAccess, recipePerms } from '@/lib/session';
 import { homeCounts, getSettings, recentEvents } from '@/lib/recipes';
 import { redirect } from 'next/navigation';
 import { saveSettings } from './actions';
@@ -11,9 +11,8 @@ import { Flash } from './ui';
 export const dynamic = 'force-dynamic';
 
 export default async function RecipesHome({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.recipes.view);
   const perms = recipePerms(user);
-  if (!perms.view) redirect('/');
   const sp = await searchParams;
   const [c, settings, events] = await Promise.all([homeCounts(), getSettings(), recentEvents(20)]);
 

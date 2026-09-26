@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireUser } from '@/lib/session';
+import { requireAccess, portalAccess } from '@/lib/session';
 import { spine } from '@/lib/supabase/service';
 import { saveOutlet } from '../actions';
 
@@ -28,10 +28,10 @@ const WATCH_SAYS: Record<string, string> = {
 
 export default async function OutletGlossaryPage({ searchParams }:
   { searchParams: Promise<{ ok?: string; err?: string; all?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.glossary);
   const sp = await searchParams;
   const showAll = sp.all === '1';
-  const canEdit = user.role === 'admin' || user.role === 'central';
+  const canEdit = portalAccess(user).glossaryEdit;
 
   const db = spine();
   const [gapsRes, watchRes, allRes, renameRes] = await Promise.all([

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { requireUser, recipePerms } from '@/lib/session';
+import { requireAccess, recipePerms } from '@/lib/session';
 import { foodCostList, getSettings } from '@/lib/recipes';
 import { inr, pct } from '@/lib/recipes-engine';
 import { Crumbs, Flash, Toolbar, Legend, Verdict } from '../ui';
@@ -13,9 +13,8 @@ export const dynamic = 'force-dynamic';
 const NO_GLOSSARY = 'Not in the glossary';
 
 export default async function FoodCostPage({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string; cat?: string; show?: string; q?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.recipes.money, '/recipes');
   const perms = recipePerms(user);
-  if (!perms.money) redirect('/recipes');
   const sp = await searchParams; const qq = (sp.q ?? '').trim(); const cat = sp.cat ?? ''; const show = sp.show ?? '';
   const settings = await getSettings();
   const all = (await foodCostList()).filter(r => r.status === 'active');

@@ -1,11 +1,12 @@
 import { redirect } from 'next/navigation';
-import { requireUser } from '@/lib/session';
+import { requireAccess, portalAccess } from '@/lib/session';
 import { spine } from '@/lib/supabase/service';
 
 // /daily lands each role where they belong: store accounts on their store,
-// area managers on their area, everyone else on the central view.
+// area managers on their area, management on the central view. A role with no
+// store pages at all (chef, controls) is sent home, never into a redirect loop.
 export default async function DailyIndex() {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.ownStores);
 
   if (user.role === 'store' && user.outletCodes.length === 1) {
     redirect(`/daily/store/${encodeURIComponent(user.outletCodes[0])}`);
@@ -16,5 +17,5 @@ export default async function DailyIndex() {
     const am = (data as { area_manager?: string } | null)?.area_manager;
     if (am) redirect(`/daily/area/${encodeURIComponent(am)}`);
   }
-  redirect('/daily/central');
+  redirect(portalAccess(user).network ? '/daily/central' : '/');
 }

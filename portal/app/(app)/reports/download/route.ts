@@ -1,7 +1,7 @@
 // Streams a report as CSV, gated by login. Validates the report key and the date
 // window, then streams straight from the spine's private landing schema.
 import { NextResponse } from 'next/server';
-import { requireUser } from '@/lib/session';
+import { getSessionUser, portalAccess } from '@/lib/session';
 import {
   REPORTS, MAX_RANGE_DAYS, isValidDate, daysBetween, fetchReportRows, rowsToCsvStream,
 } from '@/lib/reports';
@@ -10,8 +10,8 @@ import {
 export const maxDuration = 300;
 
 export async function GET(req: Request) {
-  const user = await requireUser();
-  if (!['admin', 'central', 'viewer'].includes(user.role)) return bad('Not allowed for this role.');
+  const user = await getSessionUser();
+  if (!user || !portalAccess(user).reports) return bad('Not allowed for this role.');
   const url = new URL(req.url);
   const reportKey = url.searchParams.get('report') || '';
   const from = url.searchParams.get('from') || '';

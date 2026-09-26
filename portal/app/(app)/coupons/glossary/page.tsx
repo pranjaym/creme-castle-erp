@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireUser, couponPerms } from '@/lib/session';
+import { requireAccess, couponPerms } from '@/lib/session';
 import { glossaryRows, inr, pct, num, dateLabel, type GlossaryRow } from '@/lib/coupons';
 import { Tag, Agreed, Tabs, Flash } from '../ui';
 import { saveCoupon } from '../actions';
@@ -14,7 +14,7 @@ const WHOM = ['', 'New user', 'Repeat user', 'All users', 'New to platform', 'Hi
 const SEG = ['', 'LA/MM', 'UM', 'All'];
 
 export default async function GlossaryPage({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string; all?: string; p?: string; q?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.coupons.view);
   const sp = await searchParams;
   const canEdit = couponPerms(user).edit;
   let rows = await glossaryRows();
