@@ -5,6 +5,8 @@
   "description": "Creme Castle kitchen spine: canonical data layer, D2C reconciliation (Build 1a), intermediates logbook (Build 3a).",
   "scripts": {
     "dev": "next dev",
+    "check:gates": "node scripts/check-gates.mjs",
+    "prebuild": "node scripts/check-gates.mjs",
     "build": "next build",
     "start": "next start",
     "test": "node --test",

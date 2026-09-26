@@ -1,6 +1,7 @@
 // Admin · Day ledger: the management view of every department's day, any date
 // range. Filter bar is a GET form (shareable URLs), the table downloads as CSV
 // (the OMS reports pattern). Consumption/gap is derived, never entered.
+import { requireRoles, OVERSIGHT } from '@/lib/session';
 import { spine } from '@/lib/supabase/server';
 import { istCalendarDate, ymdAddDays } from '@/lib/business-day';
 
@@ -11,6 +12,7 @@ const fmt = (n: number | null) => (n == null ? '' : Number.isInteger(n) ? String
 export default async function AdminLedgerPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireRoles(OVERSIGHT);
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? '';
   const db = spine();

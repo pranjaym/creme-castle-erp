@@ -6,9 +6,15 @@ import { redirect } from 'next/navigation';
 import { authClient } from '@/lib/supabase/authClient';
 import { spine } from '@/lib/supabase/service';
 
-// Phase 2 roles (migration 140). 'viewer' predates the role-equals-scope model and
-// is treated as read-only central until reassigned in /users.
-export type Role = 'admin' | 'central' | 'area_manager' | 'store' | 'viewer' | 'chef' | 'controls';
+// Portal roles (migration 140, chef and controls 229, operations and none 236).
+// Their names and blurbs live in lib/roles.ts; what each may open is
+// portalAccess() below. 'viewer' is RETIRED (26 Sep 2026) and opens nothing:
+// it was the column default, so every account made for the kitchen app had
+// silently inherited full management read. The default is now 'none'.
+export type Role = 'admin' | 'central' | 'operations' | 'area_manager' | 'store' | 'chef' | 'controls' | 'none' | 'viewer';
+
+// The kitchen app (department production), same login, its own role column.
+export const KITCHEN_APP_URL = 'https://cremecastle-kitchen.vercel.app';
 
 // Recipe module permissions (migration 229). A person's reach in this module is
 // their portal role's default PLUS any module grant in profiles.modules, so a
@@ -24,42 +30,42 @@ export function recipePerms(u: { role: Role; modules?: string[] }) {
   const g = new Set(u.modules ?? []);
   const role = u.role;
   const admin = role === 'admin' || g.has('recipes:admin');
-  const checker = admin || role === 'controls' || g.has('recipes:checker');
+  // Central Team and the Costing Controller check (Pranjay, 26 Sep 2026).
+  const checker = admin || role === 'central' || role === 'controls' || g.has('recipes:checker');
   const chef = checker || role === 'chef' || g.has('recipes:chef');
-  const reader = role === 'central' || role === 'viewer';
   return {
-    view: chef || reader,
+    view: chef,
     draft: chef,
     check: checker,          // Narendra's step: rates, prices, checking
     approve: admin,          // Pranjay's step
-    money: checker || reader, // the food cost list, price impact, prices: not for a plain chef
+    money: checker,          // the food cost list, price impact, prices: not for a plain chef
   };
 }
 
-// Coupon sharing module (migration 232). Management roles read it; editing the
-// deals, the glossary and the tolerance is admin plus the coupons:editor grant
-// (Pranjay, 19 Sep 2026: "you, Pawan and Rishabh edit, everyone else reads").
+// Coupon sharing module (migration 232). Owner and Central Team edit (Pranjay,
+// 19 Sep 2026: "you, Pawan and Rishabh edit"); nobody else sees it unless given
+// a grant. Controls lost its read on 26 Sep 2026 ("Narender, just recipes").
 export type CouponGrant = 'coupons:viewer' | 'coupons:editor';
 export const COUPON_GRANTS: CouponGrant[] = ['coupons:viewer', 'coupons:editor'];
 export function couponPerms(u: { role: Role; modules?: string[] }) {
   const g = new Set(u.modules ?? []);
-  const edit = u.role === 'admin' || g.has('coupons:editor');
-  const view = edit || u.role === 'central' || u.role === 'viewer' || u.role === 'controls' || g.has('coupons:viewer');
+  const edit = u.role === 'admin' || u.role === 'central' || g.has('coupons:editor');
+  const view = edit || g.has('coupons:viewer');
   return { view, edit };
 }
 
 // Questions on the daily pages (migration 234, 26 Sep 2026). Phase 1 as
 // Pranjay decided: admin and central ASK, area managers (and a store, for its
-// own outlet) ANSWER, admin and central CLOSE or push back. Everyone who can
+// own outlet) ANSWER, admin and central CLOSE or push back. The Operations Head
+// (26 Sep 2026) asks and closes too: managing the area managers is the job. Everyone who can
 // see a store page can read the questions on it; the list page scopes itself
 // by the same outlet rule as the daily pages. No mail anywhere: the push is
 // the rail badge, the home line and "Where you are needed".
 export function questionPerms(u: { role: Role; modules?: string[] }) {
-  const mgmt = u.role === 'admin' || u.role === 'central';
-  const reader = u.role === 'viewer';
+  const mgmt = u.role === 'admin' || u.role === 'central' || u.role === 'operations';
   const field = u.role === 'area_manager' || u.role === 'store';
   return {
-    view: mgmt || reader || field,
+    view: mgmt || field,
     ask: mgmt,
     answer: field,   // the answer is the area manager's (or the store's), never central's
     close: mgmt,
@@ -73,16 +79,18 @@ export function questionPerms(u: { role: Role; modules?: string[] }) {
 // for area managers and stores until today. Every entry is an allow-list: a role
 // not named here gets nothing, so a new role starts with no access.
 // scripts/check-gates.mjs fails the build if any page skips this.
+// The role and module map this implements: erp-plan/portal-access-matrix.md.
 export function portalAccess(u: { role: Role; modules?: string[] }) {
-  const mgmt = u.role === 'admin' || u.role === 'central' || u.role === 'viewer';
+  const mgmt = u.role === 'admin' || u.role === 'central';
+  const network = mgmt || u.role === 'operations';
   return {
-    network: mgmt,                                                      // all-stores overview, area pages, any store
-    storeList: mgmt || u.role === 'area_manager',                       // the stores list (an AM sees only theirs)
-    ownStores: mgmt || u.role === 'area_manager' || u.role === 'store', // /daily, scoped to their outlets
+    network,                                                            // all-stores overview, area pages, any store
+    storeList: network || u.role === 'area_manager',                    // the stores list (an AM sees only theirs)
+    ownStores: network || u.role === 'area_manager' || u.role === 'store', // /daily, scoped to their outlets
     sales: mgmt,                                                        // daily sales dashboard
-    reports: mgmt,                                                      // reports and downloads
-    glossary: mgmt,                                                     // item and outlet glossary, read
-    glossaryEdit: u.role === 'admin' || u.role === 'central',
+    reports: mgmt,                                                      // reports and downloads (customer details)
+    glossary: mgmt,                                                     // item and outlet glossary
+    glossaryEdit: mgmt,
     recipes: recipePerms(u),
     coupons: couponPerms(u),
     questions: questionPerms(u),
@@ -99,8 +107,11 @@ export interface SessionUser {
   // Module grants beyond the role default (profiles.modules), e.g. recipes:checker.
   modules: string[];
   // Scope: store = one internal_code, area_manager = their outlets,
-  // admin/central/viewer = empty meaning all.
+  // everyone else = empty meaning all (their role decides whether they see any).
   outletCodes: string[];
+  // Their role in the kitchen app, if any (department, exec_chef, tech,
+  // super_admin); the portal only uses it to show the door to that app.
+  kitchenRole: string | null;
 }
 
 // Returns the logged-in user with their profile, or null if not signed in / not
@@ -113,7 +124,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   const { data: profile, error } = await spine()
     .from('profiles')
-    .select('role, full_name, active, outlet_codes, modules')
+    .select('role, full_name, active, outlet_codes, modules, kitchen_role')
     .eq('id', user.id)
     .single();
 
@@ -123,9 +134,10 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     id: user.id,
     email: user.email ?? '',
     fullName: profile.full_name ?? null,
-    role: (profile.role as Role) ?? 'viewer',
+    role: (profile.role as Role) ?? 'none',
     outletCodes: ((profile as { outlet_codes?: string[] }).outlet_codes) ?? [],
     modules: ((profile as { modules?: string[] }).modules) ?? [],
+    kitchenRole: ((profile as { kitchen_role?: string | null }).kitchen_role) ?? null,
   };
 }
 

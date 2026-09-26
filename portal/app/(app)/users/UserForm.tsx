@@ -141,7 +141,7 @@ export default function UserForm({ basePath, chosen, outlets, existing }: {
             ) : null}
 
             {roleDef(chosen).needs === 'nothing' ? (
-              <p className="note">Nothing else to set: this role sees the whole network.</p>
+              <p className="note">Nothing else to set: the role decides what this person sees.</p>
             ) : null}
 
             <label className="fld" htmlFor="uf-recipes">In the recipe module, this person is</label>
@@ -153,7 +153,7 @@ export default function UserForm({ basePath, chosen, outlets, existing }: {
               <option value="recipes:admin">an admin of the module: can also approve</option>
             </select>
             <p className="note">
-              Defaults: Admin does everything; Chef drafts; Controls checks; Central and Viewer read.
+              Defaults: Owner does everything; Central Team and Costing Controller check; Head Chef drafts; nobody else sees the module.
               A grant here adds to the role without touching any other module, so a central-office
               account can be a checker in recipes and keep everything else.
             </p>
@@ -165,7 +165,7 @@ export default function UserForm({ basePath, chosen, outlets, existing }: {
               <option value="coupons:viewer">a viewer: sees the discounts pages</option>
               <option value="coupons:editor">an editor: records deals, types the glossary, sets the tolerance</option>
             </select>
-            <p className="note">Defaults: Admin edits; Central, Viewer and Controls read; other roles do not see the module.</p>
+            <p className="note">Defaults: Owner and Central Team edit; other roles do not see the module.</p>
           </section>
 
           {!existing ? (

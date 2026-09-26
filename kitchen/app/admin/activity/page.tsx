@@ -1,6 +1,7 @@
 // Admin · Activity: the append-only audit trail (spine_events), readable at
 // last. Every write in this module lands here: entries, receipts, closings,
 // requests, master edits. Filterable by area; newest first.
+import { requireRoles, OVERSIGHT } from '@/lib/session';
 import { spine } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,7 @@ function describe(data: any): string {
 export default async function AdminActivityPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireRoles(OVERSIGHT);
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? '';
   const area = AREAS.some((a) => a.key === one(sp.area)) ? one(sp.area) : 'all';
