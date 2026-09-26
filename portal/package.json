@@ -5,6 +5,8 @@
   "description": "Creme Castle ERP portal: team-facing window onto the spine (login, daily dashboards, report downloads).",
   "scripts": {
     "dev": "next dev",
+    "check:gates": "node scripts/check-gates.mjs",
+    "prebuild": "node scripts/check-gates.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { requireUser, recipePerms } from '@/lib/session';
+import { requireAccess, recipePerms } from '@/lib/session';
 import { listIngredients } from '@/lib/recipes';
 import { rateLabel, unitShort } from '@/lib/recipes-engine';
 import { Crumbs, Flash, Toolbar, Legend } from '../ui';
@@ -8,9 +8,8 @@ import { Crumbs, Flash, Toolbar, Legend } from '../ui';
 export const dynamic = 'force-dynamic';
 
 export default async function IngredientsPage({ searchParams }: { searchParams: Promise<{ q?: string; ok?: string; err?: string; show?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.recipes.view);
   const perms = recipePerms(user);
-  if (!perms.view) redirect('/');
   const sp = await searchParams; const qq = (sp.q ?? '').trim(); const show = sp.show ?? '';
   const all = await listIngredients(qq);
   let rows = all;

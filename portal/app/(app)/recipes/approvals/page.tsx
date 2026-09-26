@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { requireUser, recipePerms } from '@/lib/session';
+import { requireAccess, recipePerms } from '@/lib/session';
 import { pendingVersions } from '@/lib/recipes';
 import { inr } from '@/lib/recipes-engine';
 import { Crumbs, Flash, Kind, State } from '../ui';
@@ -10,9 +10,8 @@ import { Crumbs, Flash, Kind, State } from '../ui';
 export const dynamic = 'force-dynamic';
 
 export default async function ApprovalsPage({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string; state?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.recipes.view);
   const perms = recipePerms(user);
-  if (!perms.view) redirect('/');
   const sp = await searchParams;
   const all = await pendingVersions();
   const groups = [

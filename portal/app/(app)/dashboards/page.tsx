@@ -1,10 +1,10 @@
 import Link from 'next/link';
-import { requireUser } from '@/lib/session';
+import { requireAccess } from '@/lib/session';
 import { listDashboards, prettyDate } from '@/lib/dashboards';
 
 // The archive: every daily dashboard, newest first. Click a day to open it.
 export default async function DashboardsPage() {
-  const user = await requireUser();
+  await requireAccess(a => a.sales);
   const all = await listDashboards();
 
   return (

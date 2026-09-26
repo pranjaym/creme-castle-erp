@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { requireUser, recipePerms } from '@/lib/session';
+import { requireAccess, recipePerms } from '@/lib/session';
 import { listRecipes, getSettings } from '@/lib/recipes';
 import { inr, pct } from '@/lib/recipes-engine';
 import { Crumbs, Flash, Toolbar, Legend, Status, Verdict, soldAs } from '../ui';
@@ -13,9 +13,8 @@ export const dynamic = 'force-dynamic';
 const NO_GLOSSARY = 'Not in the glossary';
 
 export default async function FinishedPage({ searchParams }: { searchParams: Promise<{ q?: string; ok?: string; err?: string; cat?: string; show?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.recipes.view);
   const perms = recipePerms(user);
-  if (!perms.view) redirect('/');
   const sp = await searchParams; const qq = (sp.q ?? '').trim();
   const all = await listRecipes('finished', qq);
   const settings = await getSettings();

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { requireUser } from '@/lib/session';
+import { requireAccess } from '@/lib/session';
 import { getDashAll, getLatestDate, allowedAms } from '@/lib/daily';
 import AreaView from './view';
 
@@ -8,7 +8,9 @@ import AreaView from './view';
 // and central pages.
 export default async function AreaDaily({ params, searchParams }:
   { params: Promise<{ am: string }>; searchParams: Promise<{ date?: string }> }) {
-  const user = await requireUser();
+  // An area page lists every store in the area, so a store account (whose part
+  // is its own store) is sent back to its own page. AMs see only their own area.
+  const user = await requireAccess(a => a.storeList, '/daily');
   const { am: amRaw } = await params;
   const am = decodeURIComponent(amRaw);
 

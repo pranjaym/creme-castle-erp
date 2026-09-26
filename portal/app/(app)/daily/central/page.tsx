@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { requireUser } from '@/lib/session';
+import { requireAccess } from '@/lib/session';
 import { getLatestDate } from '@/lib/daily';
 import CentralView from './view';
 
@@ -8,9 +8,8 @@ import CentralView from './view';
 // is how its design was checked before it shipped.
 export default async function CentralDaily({ searchParams }:
   { searchParams: Promise<{ date?: string }> }) {
-  const user = await requireUser();
   // Store and area accounts have their own pages; the network view is central's.
-  if (user.role === 'store' || user.role === 'area_manager') redirect('/daily');
+  await requireAccess(a => a.network, '/daily');
 
   const latest = await getLatestDate();
   const sp = await searchParams;

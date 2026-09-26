@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requireUser, couponPerms } from '@/lib/session';
+import { requireAccess, couponPerms } from '@/lib/session';
 import { parseFilters, qs, couponDetail, tiers, tolerance, status, cities, outlets, inr, pct, num, dateLabel, dayLabel, STATUS_HEAT, type Platform } from '@/lib/coupons';
 import { Tag, Chip, Agreed, FilterBar, Flash } from '../../../ui';
 import { setDeal } from '../../../actions';
@@ -11,7 +11,7 @@ import { setDeal } from '../../../actions';
 export const dynamic = 'force-dynamic';
 
 export default async function CouponPage({ params, searchParams }: { params: Promise<{ platform: string; code: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.coupons.view);
   const { platform: p, code: rawCode } = await params;
   if (p !== 'zomato' && p !== 'swiggy') notFound();
   const platform = p as Platform;

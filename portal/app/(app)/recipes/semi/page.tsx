@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { requireUser, recipePerms } from '@/lib/session';
+import { requireAccess, recipePerms } from '@/lib/session';
 import { listRecipes } from '@/lib/recipes';
 import { inr, rateLabel, unitShort, pct } from '@/lib/recipes-engine';
 import { Crumbs, Flash, Toolbar, Legend, Status } from '../ui';
@@ -8,9 +8,8 @@ import { Crumbs, Flash, Toolbar, Legend, Status } from '../ui';
 export const dynamic = 'force-dynamic';
 
 export default async function SemiPage({ searchParams }: { searchParams: Promise<{ q?: string; ok?: string; err?: string; show?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.recipes.view);
   const perms = recipePerms(user);
-  if (!perms.view) redirect('/');
   const sp = await searchParams; const qq = (sp.q ?? '').trim(); const show = sp.show ?? '';
   const all = await listRecipes('intermediate', qq);
   let rows = all;

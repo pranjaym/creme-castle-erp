@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { requireUser } from '@/lib/session';
+import { requireAccess } from '@/lib/session';
 import { getLatestDate, canSeeStore } from '@/lib/daily';
 import StoreView from './view';
 
@@ -8,7 +8,7 @@ import StoreView from './view';
 // its data are checked before anything ships. Same split as the central page.
 export default async function StoreDaily({ params, searchParams }:
   { params: Promise<{ code: string }>; searchParams: Promise<{ date?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.ownStores);
   const { code: codeRaw } = await params;
   const code = decodeURIComponent(codeRaw);
   if (!canSeeStore(user, code)) redirect('/daily');

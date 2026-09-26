@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { requireUser, recipePerms } from '@/lib/session';
+import { requireAccess, recipePerms } from '@/lib/session';
 import { listIngredients } from '@/lib/recipes';
 import { lastPurchases, type FulfilmentRow } from '@/lib/supplynote';
 import { rateLabel, unitShort } from '@/lib/recipes-engine';
@@ -14,9 +14,8 @@ import { Crumbs, Flash } from '../../ui';
 export const dynamic = 'force-dynamic';
 
 export default async function SupplyNotePage({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string; days?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.recipes.check, '/recipes/ingredients');
   const perms = recipePerms(user);
-  if (!perms.check) redirect('/recipes/ingredients');
   const sp = await searchParams;
   const days = Math.min(Math.max(Number(sp.days ?? 120) || 120, 7), 366);
   const ings = await listIngredients();

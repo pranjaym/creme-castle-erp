@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { requireUser, recipePerms } from '@/lib/session';
+import { requireAccess, recipePerms } from '@/lib/session';
 import { getRecipe, getVersion, versionLines, costOfVersion, pickLists, getSettings, diffLines } from '@/lib/recipes';
 import { inr, pct, rateLabel, unitShort } from '@/lib/recipes-engine';
 import { submitForCheck, markChecked, sendBack, rejectVersion, approveVersion } from '../../../../actions';
@@ -13,9 +13,8 @@ import Editor from './Editor';
 export const dynamic = 'force-dynamic';
 
 export default async function VersionPage({ params, searchParams }: { params: Promise<{ code: string; vid: string }>; searchParams: Promise<{ ok?: string; err?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.recipes.view);
   const perms = recipePerms(user);
-  if (!perms.view) redirect('/');
   const { code, vid } = await params; const sp = await searchParams;
   const d = await getRecipe(decodeURIComponent(code));
   const v = await getVersion(Number(vid));

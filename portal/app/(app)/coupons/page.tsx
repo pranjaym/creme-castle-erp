@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireUser, couponPerms } from '@/lib/session';
+import { requireAccess, couponPerms } from '@/lib/session';
 import {
   parseFilters, qs, summary, couponRows, cityCells, cities, outlets, dayStatus, missingDays, tolerance, status,
   inr, lakh, pct, num, dateLabel, STATUS_HEAT, type Filters, type Platform, type CouponRow,
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 const CITY_ORDER = ['Delhi', 'Gurugram', 'Gurgaon', 'Noida', 'Faridabad', 'Ghaziabad', 'Jaipur', 'Chandigarh', 'Meerut', 'Lucknow', 'Ludhiana'];
 
 export default async function CouponsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.coupons.view);
   const sp = await searchParams;
   const f = parseFilters(sp);
   const tol = await tolerance();

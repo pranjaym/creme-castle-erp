@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireUser, couponPerms } from '@/lib/session';
+import { requireAccess, couponPerms } from '@/lib/session';
 import { deals, glossaryRows, currentUpload, uploadVsLive, tolerance, recentEvents, parseFilters, inr, pct, num, dateLabel, outlets, type UploadGrid } from '@/lib/coupons';
 import { Tag, Agreed, Tabs, Flash } from '../ui';
 import { setDeal, setTolerance } from '../actions';
@@ -11,7 +11,7 @@ import { setDeal, setTolerance } from '../actions';
 export const dynamic = 'force-dynamic';
 
 export default async function DealsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.coupons.view);
   const sp = await searchParams;
   const canEdit = couponPerms(user).edit;
   const f = parseFilters(sp);

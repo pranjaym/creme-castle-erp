@@ -13,12 +13,12 @@
 // (canonical rule 6: nothing is ever silently overwritten without a trail).
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { getSessionUser, type SessionUser } from '@/lib/session';
+import { getSessionUser, portalAccess, type SessionUser } from '@/lib/session';
 import { spine } from '@/lib/supabase/service';
 
 async function requireEditor(): Promise<SessionUser> {
   const u = await getSessionUser();
-  if (!u || (u.role !== 'admin' && u.role !== 'central')) redirect('/');
+  if (!u || !portalAccess(u).glossaryEdit) redirect('/');
   return u;
 }
 

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { requireUser, recipePerms } from '@/lib/session';
+import { requireAccess, recipePerms } from '@/lib/session';
 import { engineModel, getSettings } from '@/lib/recipes';
 import { q } from '@/lib/db';
 import { Crumbs } from '../ui';
@@ -10,9 +10,8 @@ import ImpactClient from './ImpactClient';
 export const dynamic = 'force-dynamic';
 
 export default async function ImpactPage({ searchParams }: { searchParams: Promise<{ sku?: string }> }) {
-  const user = await requireUser();
+  const user = await requireAccess(a => a.recipes.money, '/recipes');
   const perms = recipePerms(user);
-  if (!perms.money) redirect('/recipes');
   const sp = await searchParams;
   const [model, settings, prices] = await Promise.all([engineModel(), getSettings(),
     q<{ recipe_id: number; selling_price: string | null; packaging_charge: string | null }>(`select recipe_id, selling_price, packaging_charge from recipes.current_price where channel = 'aggregator'`)]);
