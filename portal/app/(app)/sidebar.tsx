@@ -13,8 +13,8 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { NavSection } from '@/lib/nav';
 
-export default function Sidebar({ sections, foot }:
-  { sections: NavSection[]; foot: string }) {
+export default function Sidebar({ sections, foot, badges }:
+  { sections: NavSection[]; foot: string; badges?: Record<string, { n: number; red: boolean }> }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -49,6 +49,9 @@ export default function Sidebar({ sections, foot }:
                 <Link key={item.href} href={item.href}
                   className={active ? 'nav-link active' : 'nav-link'}>
                   {item.label}
+                  {badges?.[item.href]?.n
+                    ? <span className={badges[item.href].red ? 'qbadge due' : 'qbadge'}>{badges[item.href].n}</span>
+                    : null}
                 </Link>
               );
             })}

@@ -48,6 +48,24 @@ export function couponPerms(u: { role: Role; modules?: string[] }) {
   return { view, edit };
 }
 
+// Questions on the daily pages (migration 234, 26 Sep 2026). Phase 1 as
+// Pranjay decided: admin and central ASK, area managers (and a store, for its
+// own outlet) ANSWER, admin and central CLOSE or push back. Everyone who can
+// see a store page can read the questions on it; the list page scopes itself
+// by the same outlet rule as the daily pages. No mail anywhere: the push is
+// the rail badge, the home line and "Where you are needed".
+export function questionPerms(u: { role: Role; modules?: string[] }) {
+  const mgmt = u.role === 'admin' || u.role === 'central';
+  const reader = u.role === 'viewer';
+  const field = u.role === 'area_manager' || u.role === 'store';
+  return {
+    view: mgmt || reader || field,
+    ask: mgmt,
+    answer: field,   // the answer is the area manager's (or the store's), never central's
+    close: mgmt,
+  };
+}
+
 // The whole portal's permission table, in one place (26 Sep 2026). The menu
 // (lib/nav.ts) and every page gate read these same answers, so a page can no
 // longer be missing from someone's menu yet open to them when they type its
@@ -67,6 +85,7 @@ export function portalAccess(u: { role: Role; modules?: string[] }) {
     glossaryEdit: u.role === 'admin' || u.role === 'central',
     recipes: recipePerms(u),
     coupons: couponPerms(u),
+    questions: questionPerms(u),
     users: u.role === 'admin',
   };
 }

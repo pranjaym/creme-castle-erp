@@ -74,15 +74,15 @@ function vsAvgS(r: SwiggyStoreRow): React.ReactNode {
 // mirrored one for one (Open % for Online %, Canc for Rej, 1-2 star for
 // Comp), Wait empty because Swiggy publishes no timing. # is the store's
 // rank in the Swiggy league (cancellations + 1-2 star + hours offline).
-export function SwiggyStoresTable({ rows, date, showAm }:
-  { rows: SwiggyStoreRow[]; date: string; showAm?: boolean }) {
+export function SwiggyStoresTable({ rows, date, showAm, qcell }:
+  { rows: SwiggyStoreRow[]; date: string; showAm?: boolean; qcell?: (code: string) => React.ReactNode }) {
   const sorted = [...rows].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
   return (
     <div className="scroll-x">
       <table className="tight sortable">
         <thead><tr>
           <th>#</th><th>Store</th>{showAm ? <th>AM</th> : null}<th>Orders</th><th>vs avg</th>
-          <th>Open %</th><th>Canc</th><th>1-2&#9733;</th><th>Rating</th><th>Wait</th>
+          <th>Open %</th><th>Canc</th><th>1-2&#9733;</th><th>Rating</th><th>Wait</th>{qcell ? <th className="qth"></th> : null}
         </tr></thead>
         <tbody>
           {sorted.map(r => (
@@ -99,6 +99,7 @@ export function SwiggyStoresTable({ rows, date, showAm }:
               <td>{mark(n0(r.low), r.low >= 1)}</td>
               <td>{r.rating === null ? '-' : n1(r.rating)}</td>
               <td>-</td>
+              {qcell ? <td className="qtd">{qcell(r.code)}</td> : null}
             </tr>
           ))}
         </tbody>
@@ -108,7 +109,7 @@ export function SwiggyStoresTable({ rows, date, showAm }:
 }
 
 // One card per store with Swiggy hours missing, mirroring DipCard.
-export function ShortCard({ s }: { s: SwiggyShortSeries }) {
+export function ShortCard({ s, q }: { s: SwiggyShortSeries; q?: React.ReactNode }) {
   const labels = s.series.map(p => p.d.slice(-2));
   const tips = s.series.map(p =>
     new Date(p.d + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }));
@@ -118,6 +119,7 @@ export function ShortCard({ s }: { s: SwiggyShortSeries }) {
       <div className="mval">{n1(s.wk_short)} <small>hrs short this week</small></div>
       <Chart series={s.series.map(p => p.short)} labels={labels} tips={tips}
         title="Hours not open per day (day of month)" unit="" lo={0} width={270} height={88} />
+      {q ? <div className="qtd">{q}</div> : null}
     </div>
   );
 }

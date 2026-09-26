@@ -8,6 +8,9 @@ import {
   Chart, Verdict, Period, Fold, Rows, Tag, Words, Basket, MistakeChip,
 } from '../../ui';
 import { AppTag, AppFilter, AppRows, FaultTag } from '../../swiggy-ui';
+import { questionKit, QuestionDrawer, QuestionsLine, QCOL, fields } from '../../questions-ui';
+import { questionsForOutlets } from '@/lib/questions';
+import type { SessionUser } from '@/lib/session';
 
 // Why Petpooja will not agree with this page, in one place so the three pages
 // and the three mails can never drift apart. Updated 30 Aug 2026 when Swiggy
@@ -23,14 +26,21 @@ const RECONCILE = '<b>Reading this next to Petpooja?</b> Differences are definit
 // speed stays Zomato-only (Swiggy publishes no timing); "What customers said"
 // is its own section; unhappy and turned-away carry % of orders for impact.
 
-export default async function StoreView({ code, date, latest }:
-  { code: string; date: string; latest: string }) {
+export default async function StoreView({ code, date, latest, user, sp }:
+  { code: string; date: string; latest: string; user?: SessionUser | null;
+    sp?: { q?: string; ask?: string; ok?: string; err?: string } }) {
   const [all, det, reasons, sw] = await Promise.all([
     getDashAll(date), getStoreDetail(code, date), getStoreReasons(code, date),
     getStoreSwiggy(code, date),
   ]);
   const me = all.stores.find(s => s.code === code);
   if (!me) redirect('/daily');
+
+  // Questions on this page's rows (migration 234). No session, no cells.
+  const qmap = user ? await questionsForOutlets([code]) : new Map();
+  const Q = questionKit({ page: 'store', pageDate: date, basePath: `/daily/store/${encodeURIComponent(code)}`, user, qmap });
+  const S1 = 'Were you open?', S2 = 'Did you deliver what came?', S2R = 'Cancelled after the rider picked up',
+    S3 = 'Was it right?', S4 = 'Was it fast, and was "ready" honest?', S6 = 'What customers said';
   const day = me.day, wk = me.wk;
   const sday = sw.mapped ? sw.day : null;
 
@@ -126,7 +136,7 @@ export default async function StoreView({ code, date, latest }:
           <div className="ddelta">best-RUN store of the day, not the busiest</div></div>
       </div>
 
-      <div className="attention"><h2>Things for today</h2><ol>{things.slice(0, 3)}</ol></div>
+      <div className="attention"><h2>Things for today</h2><ol><QuestionsLine kit={Q} user={user} scopeCodes={[code]} />{things.slice(0, 3)}</ol></div>
 
       <SecHead num="1">Were you open?</SecHead>
       <div className="dcard">
@@ -143,7 +153,11 @@ export default async function StoreView({ code, date, latest }:
             ) : null}
           </div>
           <p className="note">Zomato reports minutes offline per day; Swiggy reports hours open against its expected
-            window. Neither says the clock time: if a day shows time missing, ask the store what happened.</p>
+            window. Neither says the clock time: if a day shows time missing, ask the store what happened.
+            <span className="qtd" style={{ marginLeft: 8 }}>{Q.day(code, date, 'ZS', S1, fields([['Store', code], ['Day', dayLabel],
+              ['Zomato online', day.online === null ? null : n1(day.online) + '%'], ['Zomato minutes offline', n0(day.offmin)],
+              ['Swiggy open hours', sday ? `${n1((sday.ih ?? 0) - (sday.short ?? 0))} of ${n1(sday.ih)}` : null],
+              ['Swiggy hours missing', sday ? n1(sday.short) : null]]))}</span></p>
         </Period>
         <Period label={weekLabel}>
           <div className="chartrow">
@@ -165,15 +179,17 @@ export default async function StoreView({ code, date, latest }:
               ? <small> &nbsp;{n1(turnPct)}% of what came</small> : null}</div>
             <Verdict ok={turnDay === 0} good="accepted and delivered everything"
               bad={`${inr(det.stockout_day + sCancDayVal)} of orders lost`} /></div></div>
-          <AppRows id="turn-day" cols={['Time', 'App', 'Reason', 'What the customer had ordered', 'Value lost']}
+          <AppRows id="turn-day" cols={['Time', 'App', 'Reason', 'What the customer had ordered', 'Value lost', QCOL]}
             rows={[
               ...det.rejections_day.map(r => ({ app: 'Z' as const, mistake: true,
                 cells: [r.time, <AppTag key="a" app="Z" />,
-                <FaultTag key="t" why={r.reason ?? 'no reason'} store />, <Basket key="b" text={r.basket} />, inr(r.value)] })),
+                <FaultTag key="t" why={r.reason ?? 'no reason'} store />, <Basket key="b" text={r.basket} />, inr(r.value),
+                Q.order('Z', r.oid, code, S2, date, fields([['List', dayLabel], ['Store', code], ['Time', r.time], ['App', 'Zomato'], ['Reason', r.reason ?? 'no reason'], ['What the customer had ordered', r.basket], ['Value lost', inr(r.value)]]))] })),
               ...sw.canc_day.map(c => ({ app: 'S' as const, mistake: true,
                 cells: [clockTime(c.t), <AppTag key="a" app="S" />,
                 <FaultTag key="t" why={c.why} store />, <Basket key="b" text={c.basket} />,
-                c.val === null ? 'n/a' : inr(c.val)] })),
+                c.val === null ? 'n/a' : inr(c.val),
+                Q.order('S', c.oid, code, S2, c.d ?? date, fields([['List', dayLabel], ['Store', code], ['Time', clockTime(c.t)], ['App', 'Swiggy'], ['Reason', c.why], ['What the customer had ordered', c.basket], ['Value lost', c.val === null ? 'n/a' : inr(c.val)]]))] })),
             ]}
             empty="Nothing was turned away on either app yesterday." />
         </Period>
@@ -184,15 +200,17 @@ export default async function StoreView({ code, date, latest }:
           <Chart series={det.trend.map(t => t.srej)} labels={tLabels}
             title="Zomato: store-caused rejections per day" lo={0} />
           <Fold label="Earlier this week, both apps" count={det.rejections_wk.length + sw.canc_wk.filter(c => c.d !== date).length}>
-            <AppRows id="turn-wk" cols={['Day', 'Time', 'App', 'Reason', 'What the customer had ordered', 'Value lost']}
+            <AppRows id="turn-wk" cols={['Day', 'Time', 'App', 'Reason', 'What the customer had ordered', 'Value lost', QCOL]}
               rows={[
                 ...det.rejections_wk.map(r => ({ app: 'Z' as const, mistake: true,
                   cells: [r.dlabel, r.time, <AppTag key="a" app="Z" />,
-                  <FaultTag key="t" why={r.reason ?? 'no reason'} store />, <Basket key="b" text={r.basket} />, inr(r.value)] })),
+                  <FaultTag key="t" why={r.reason ?? 'no reason'} store />, <Basket key="b" text={r.basket} />, inr(r.value),
+                  Q.order('Z', r.oid, code, S2, null, fields([['List', 'Earlier this week'], ['Store', code], ['Day', r.dlabel], ['Time', r.time], ['App', 'Zomato'], ['Reason', r.reason ?? 'no reason'], ['What the customer had ordered', r.basket], ['Value lost', inr(r.value)]]))] })),
                 ...sw.canc_wk.filter(c => c.d !== date).map(c => ({ app: 'S' as const, mistake: true,
                   cells: [dShort(c.d), clockTime(c.t),
                   <AppTag key="a" app="S" />, <FaultTag key="t" why={c.why} store />,
-                  <Basket key="b" text={c.basket} />, c.val === null ? 'n/a' : inr(c.val)] })),
+                  <Basket key="b" text={c.basket} />, c.val === null ? 'n/a' : inr(c.val),
+                  Q.order('S', c.oid, code, S2, c.d ?? null, fields([['List', 'Earlier this week'], ['Store', code], ['Day', dShort(c.d)], ['Time', clockTime(c.t)], ['App', 'Swiggy'], ['Reason', c.why], ['What the customer had ordered', c.basket], ['Value lost', c.val === null ? 'n/a' : inr(c.val)]]))] })),
               ]} />
           </Fold>
           <p className="note">Customer- and rider-caused cancellations are not listed and not counted against the
@@ -203,10 +221,12 @@ export default async function StoreView({ code, date, latest }:
           <div className="krow"><div className="kpi"><div className="dlabel"><AppTag app="Z" />Returned orders this week</div>
             <div className="dvalue">{n0(det.returned_day.length + det.returned_wk.length)}</div>
             <div className="ddelta">{inr(det.returned_loss_wk)} net loss after Zomato&apos;s compensation</div></div></div>
-          <Rows cols={['Day', 'Time', 'What the customer had ordered', 'Bill', 'Zomato paid', 'Net loss']}
+          <Rows cols={['Day', 'Time', 'What the customer had ordered', 'Bill', 'Zomato paid', 'Net loss', QCOL]}
             rows={[
-              ...det.returned_day.map(r => R(r, dShort(date), r.time, <Basket key="b" text={r.basket} />, inr(r.value), inr(r.comp), inr(r.net))),
-              ...det.returned_wk.map(r => R(r, r.dlabel, r.time, <Basket key="b" text={r.basket} />, inr(r.value), inr(r.comp), inr(r.net))),
+              ...det.returned_day.map(r => R(r, dShort(date), r.time, <Basket key="b" text={r.basket} />, inr(r.value), inr(r.comp), inr(r.net),
+                Q.order('Z', r.oid, code, S2R, date, fields([['Store', code], ['Day', dShort(date)], ['Time', r.time], ['App', 'Zomato'], ['What the customer had ordered', r.basket], ['Bill', inr(r.value)], ['Zomato paid', inr(r.comp)], ['Net loss', inr(r.net)]])))),
+              ...det.returned_wk.map(r => R(r, r.dlabel, r.time, <Basket key="b" text={r.basket} />, inr(r.value), inr(r.comp), inr(r.net),
+                Q.order('Z', r.oid, code, S2R, null, fields([['Store', code], ['Day', r.dlabel], ['Time', r.time], ['App', 'Zomato'], ['What the customer had ordered', r.basket], ['Bill', inr(r.value)], ['Zomato paid', inr(r.comp)], ['Net loss', inr(r.net)]])))),
             ]}
             empty="No order came back after pickup this week." />
           <p className="note">The store accepted, made and handed these over; Zomato then cancelled them because the
@@ -229,9 +249,10 @@ export default async function StoreView({ code, date, latest }:
               <div className="ddelta">Zomato counts only some as official complaints</div></div>
           </div>
           <div className="tlabel">Every order with an issue yesterday, with its tag</div>
-          <Rows id="comp-day" cols={['Time', 'Tag on the order', 'What was in the order', 'What the customer wrote', 'Refunded']}
+          <Rows id="comp-day" cols={['Time', 'Tag on the order', 'What was in the order', 'What the customer wrote', 'Refunded', QCOL]}
             rows={det.complaints_day.map(r => R(r, r.time, <Tag reason={r.tag ?? ''} />, r.basket ?? '-',
-              <Words text={r.review} />, r.refund ? inr(r.refund) : '-'))}
+              <Words text={r.review} />, r.refund ? inr(r.refund) : '-',
+              Q.order('Z', r.oid, code, S3, date, fields([['List', dayLabel], ['Store', code], ['Time', r.time], ['App', 'Zomato'], ['Tag on the order', r.tag], ['What was in the order', r.basket], ['What the customer wrote', r.review], ['Refunded', r.refund ? inr(r.refund) : null]]))))}
             mistakes={det.complaints_day.map(r => isStoreMistake(r.tag))}
             empty="No issues reported yesterday." />
           <p className="note">Swiggy publishes no complaint feed; its unhappy signal is the 1-2 star ratings, in the
@@ -265,7 +286,7 @@ export default async function StoreView({ code, date, latest }:
             <summary>Orders with issues earlier this week ({det.complaints_wk.length + sLowWkEarlier.length}) &rsaquo; tap to close</summary>
             <div className="scroll-x">
               <table id="comp-wk" className="faultable">
-                <thead><tr><th>Day</th><th>Time</th><th>App</th><th>Tag on the order</th><th>What was in the order</th><th>What the customer wrote</th><th>Refunded</th></tr></thead>
+                <thead><tr><th>Day</th><th>Time</th><th>App</th><th>Tag on the order</th><th>What was in the order</th><th>What the customer wrote</th><th>Refunded</th><th className="qth"></th></tr></thead>
                 <tbody>
                   {det.complaints_wk.map((r, i) => (
                     <tr key={`z${i}`} data-app="Z" data-reason={r.tag ?? 'reason not tagged by Zomato'}
@@ -273,6 +294,7 @@ export default async function StoreView({ code, date, latest }:
                       <td>{r.dlabel}</td><td>{r.time}</td><td><AppTag app="Z" /></td><td><Tag reason={r.tag ?? ''} /></td>
                       <td>{r.basket ?? '-'}</td><td><Words text={r.review} /></td>
                       <td>{r.refund ? inr(r.refund) : '-'}</td>
+                      <td className="qtd">{Q.order('Z', r.oid, code, S3, null, fields([['List', 'Earlier this week'], ['Store', code], ['Day', r.dlabel], ['Time', r.time], ['App', 'Zomato'], ['Tag on the order', r.tag], ['What was in the order', r.basket], ['What the customer wrote', r.review], ['Refunded', r.refund ? inr(r.refund) : null]]))}</td>
                     </tr>
                   ))}
                   {sLowWkEarlier.map((r, i) => (
@@ -280,6 +302,7 @@ export default async function StoreView({ code, date, latest }:
                       <td>{dShort(r.d)}</td><td>{clockTime(r.t)}</td><td><AppTag app="S" /></td>
                       <td><span className="rchip r-taste">{r.rating} star{r.rating === 1 ? '' : 's'}</span></td>
                       <td><Basket text={r.basket} /></td><td><Words text={r.words} /></td><td>-</td>
+                      <td className="qtd">{Q.order('S', r.oid, code, S3, r.d ?? null, fields([['List', 'Earlier this week'], ['Store', code], ['Day', dShort(r.d)], ['Time', clockTime(r.t)], ['App', 'Swiggy'], ['Stars', r.rating == null ? null : n0(r.rating)], ['What was in the order', r.basket], ['What the customer wrote', r.words]]))}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -311,8 +334,9 @@ export default async function StoreView({ code, date, latest }:
                 bad="pressed ready before the food was ready" /></div>
           </div>
           <Fold label="Yesterday's false ready-presses, order by order" count={det.false_ready_day.length} open>
-            <Rows cols={['Time', 'Marked ready after', 'Rider then waited', 'What was in the order']}
-              rows={det.false_ready_day.map(r => R(r, r.time, `${r.ready_secs} sec`, `${r.waited_min} min`, r.basket ?? '-'))} />
+            <Rows cols={['Time', 'Marked ready after', 'Rider then waited', 'What was in the order', QCOL]}
+              rows={det.false_ready_day.map(r => R(r, r.time, `${r.ready_secs} sec`, `${r.waited_min} min`, r.basket ?? '-',
+                Q.order('Z', r.oid, code, S4, date, fields([['List', dayLabel], ['Store', code], ['Time', r.time], ['App', 'Zomato'], ['Marked ready after', `${r.ready_secs} sec`], ['Rider then waited', `${r.waited_min} min`], ['What was in the order', r.basket]]))))} />
           </Fold>
         </Period>
         <Period label={weekLabel}>
@@ -325,8 +349,9 @@ export default async function StoreView({ code, date, latest }:
           </div>
           <Chart series={det.trend.map(t => t.wait)} labels={tLabels} title="Average rider wait per day" unit=" min" lo={0} />
           <Fold label="Worst false ready-presses earlier this week" count={det.false_ready_wk.length}>
-            <Rows cols={['Day', 'Time', 'Marked ready after', 'Rider then waited', 'What was in the order']}
-              rows={det.false_ready_wk.map(r => R(r, r.dlabel, r.time, `${r.ready_secs} sec`, `${r.waited_min} min`, r.basket ?? '-'))} />
+            <Rows cols={['Day', 'Time', 'Marked ready after', 'Rider then waited', 'What was in the order', QCOL]}
+              rows={det.false_ready_wk.map(r => R(r, r.dlabel, r.time, `${r.ready_secs} sec`, `${r.waited_min} min`, r.basket ?? '-',
+                Q.order('Z', r.oid, code, S4, null, fields([['List', 'Earlier this week'], ['Store', code], ['Day', r.dlabel], ['Time', r.time], ['App', 'Zomato'], ['Marked ready after', `${r.ready_secs} sec`], ['Rider then waited', `${r.waited_min} min`], ['What was in the order', r.basket]]))))} />
           </Fold>
           <p className="note">Swiggy&apos;s report publishes no preparation or rider timing at all, so this section
             cannot exist for Swiggy. On Zomato, rider wait is the honest speed measure, cross-checked across two
@@ -363,11 +388,13 @@ export default async function StoreView({ code, date, latest }:
               &nbsp;<AppTag app="S" />{sday?.rating != null ? n1(sday.rating) : '-'} <small>/ 5</small></div>
             <div className="ddelta">{det.rated_day.length + (sw.rated_day?.length ?? 0)} orders rated; every one is
               listed so none hides</div></div></div>
-          <Rows cols={['Time', 'App', 'Stars', 'What was in the order', 'The customer’s words']}
+          <Rows cols={['Time', 'App', 'Stars', 'What was in the order', 'The customer’s words', QCOL]}
             rows={[
-              ...det.rated_day.map(r => R(r, r.time, <AppTag key="a" app="Z" />, r.rating, r.basket ?? '-', <Words text={r.review} />)),
+              ...det.rated_day.map(r => R(r, r.time, <AppTag key="a" app="Z" />, r.rating, r.basket ?? '-', <Words text={r.review} />,
+                Q.order('Z', r.oid, code, S6, date, fields([['List', dayLabel], ['Store', code], ['Time', r.time], ['App', 'Zomato'], ['Stars', r.rating], ['What was in the order', r.basket], ['The customer\u2019s words', r.review]])))),
               ...(sw.rated_day ?? []).map(r => [clockTime(r.t), <AppTag key="a" app="S" />,
-                r.rating == null ? '-' : n0(r.rating), <Basket key="b" text={r.basket} />, <Words key="w" text={r.words} />]),
+                r.rating == null ? '-' : n0(r.rating), <Basket key="b" text={r.basket} />, <Words key="w" text={r.words} />,
+                Q.order('S', r.oid, code, S6, date, fields([['List', dayLabel], ['Store', code], ['Time', clockTime(r.t)], ['App', 'Swiggy'], ['Stars', r.rating == null ? null : n0(r.rating)], ['What was in the order', r.basket], ['The customer\u2019s words', r.words]]))]),
             ]}
             empty="No orders rated yesterday on either app." />
         </Period>
@@ -384,22 +411,25 @@ export default async function StoreView({ code, date, latest }:
             <>
               <div className="tlabel">Every written Swiggy comment of the week, in the customer&apos;s own words
                 (Zomato reviews appear in the lists above and below)</div>
-              <Rows cols={['Day', 'Time', 'Stars', 'Items', 'The customer’s words']}
+              <Rows cols={['Day', 'Time', 'Stars', 'Items', 'The customer’s words', QCOL]}
                 rows={sw.comments_wk.map(r => [dShort(r.d), clockTime(r.t),
-                  r.rating == null ? '-' : n0(r.rating), <Basket key="b" text={r.basket} />, <Words key="w" text={r.words} />])} />
+                  r.rating == null ? '-' : n0(r.rating), <Basket key="b" text={r.basket} />, <Words key="w" text={r.words} />,
+                  Q.order('S', r.oid, code, S6, r.d ?? null, fields([['Store', code], ['Day', dShort(r.d)], ['Time', clockTime(r.t)], ['App', 'Swiggy'], ['Stars', r.rating == null ? null : n0(r.rating)], ['Items', r.basket], ['The customer\u2019s words', r.words]]))])} />
             </>
           ) : null}
           <Fold label="Every 1 and 2-star order of the week, both apps"
             count={det.low_ratings_wk.length + sw.low_wk.length}>
-            <AppRows id="low-wk" cols={['Day', 'Time', 'App', 'Stars', 'What was in the order', 'The customer’s words', 'Tag if any']}
+            <AppRows id="low-wk" cols={['Day', 'Time', 'App', 'Stars', 'What was in the order', 'The customer’s words', 'Tag if any', QCOL]}
               rows={[
                 ...det.low_ratings_wk.map(r => ({ app: 'Z' as const, why: r.tag ?? null,
                   cells: [r.dlabel, r.time, <AppTag key="a" app="Z" />, r.rating,
-                  r.basket ?? '-', <Words key="w" text={r.review} />, r.tag ? <Tag key="t" reason={r.tag} /> : '-'] })),
+                  r.basket ?? '-', <Words key="w" text={r.review} />, r.tag ? <Tag key="t" reason={r.tag} /> : '-',
+                  Q.order('Z', r.oid, code, S6, null, fields([['Store', code], ['Day', r.dlabel], ['Time', r.time], ['App', 'Zomato'], ['Stars', r.rating], ['What was in the order', r.basket], ['The customer\u2019s words', r.review], ['Tag', r.tag]]))] })),
                 ...sw.low_wk.map(r => ({ app: 'S' as const, why: null,
                   cells: [dShort(r.d), clockTime(r.t), <AppTag key="a" app="S" />,
                   r.rating == null ? '-' : n0(r.rating), <Basket key="b" text={r.basket} />,
-                  <Words key="w" text={r.words} />, '-'] })),
+                  <Words key="w" text={r.words} />, '-',
+                  Q.order('S', r.oid, code, S6, r.d ?? null, fields([['Store', code], ['Day', dShort(r.d)], ['Time', clockTime(r.t)], ['App', 'Swiggy'], ['Stars', r.rating == null ? null : n0(r.rating)], ['What was in the order', r.basket], ['The customer\u2019s words', r.words]]))] })),
               ]} />
           </Fold>
         </Period>
@@ -450,6 +480,7 @@ export default async function StoreView({ code, date, latest }:
           never on a name.</p>
       </div>
       <DashScript />
+      <QuestionDrawer kit={Q} user={user} sp={sp ?? {}} />
     </main>
   );
 }
