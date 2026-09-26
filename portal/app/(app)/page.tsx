@@ -34,10 +34,9 @@ export default async function Home() {
   }
 
   const latest = await getLatestDate();
-  const d = await getDashAll(latest);
   // Questions waiting for this person (26 Sep 2026): the first thing after login.
-  let waiting: { n: number; red: boolean; text: string } | null = null;
-  try { waiting = await waitingFor(user); } catch { waiting = null; }
+  const [d, wres] = await Promise.all([getDashAll(latest), waitingFor(user).catch(() => null)]);
+  const waiting: { n: number; red: boolean; text: string } | null = wres;
   const qline = waiting
     ? <p className={waiting.red ? 'qhome due' : waiting.n ? 'qhome on' : 'qhome'}><Link href="/questions">{waiting.text}</Link></p>
     : null;

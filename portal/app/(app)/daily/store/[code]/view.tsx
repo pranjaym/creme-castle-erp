@@ -29,15 +29,16 @@ const RECONCILE = '<b>Reading this next to Petpooja?</b> Differences are definit
 export default async function StoreView({ code, date, latest, user, sp }:
   { code: string; date: string; latest: string; user?: SessionUser | null;
     sp?: { q?: string; ask?: string; ok?: string; err?: string } }) {
-  const [all, det, reasons, sw] = await Promise.all([
+  // Questions on this page's rows (migration 234) ride along with the four
+  // detail calls. No session, no cells.
+  const [all, det, reasons, sw, qmap] = await Promise.all([
     getDashAll(date), getStoreDetail(code, date), getStoreReasons(code, date),
     getStoreSwiggy(code, date),
+    user ? questionsForOutlets([code]) : Promise.resolve(new Map<string, import('@/lib/questions').QuestionRow>()),
   ]);
   const me = all.stores.find(s => s.code === code);
   if (!me) redirect('/daily');
 
-  // Questions on this page's rows (migration 234). No session, no cells.
-  const qmap = user ? await questionsForOutlets([code]) : new Map();
   const Q = questionKit({ page: 'store', pageDate: date, basePath: `/daily/store/${encodeURIComponent(code)}`, user, qmap });
   const S1 = 'Were you open?', S2 = 'Did you deliver what came?', S2R = 'Cancelled after the rider picked up',
     S3 = 'Was it right?', S4 = 'Was it fast, and was "ready" honest?', S6 = 'What customers said';

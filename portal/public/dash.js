@@ -182,6 +182,52 @@
     // Click-to-sort on any .sortable table header
     var th = t.closest('table.sortable thead th');
     if (th) { sortBy(th); return; }
+
+    // Questions (26 Sep 2026): open the Ask drawer on the spot. The row's
+    // labelled fields are in #qcatalog and one hidden drawer with a real form
+    // waits in #qask-tpl; fill it and show it. If either is missing the link
+    // navigates to the server-rendered drawer instead, which is the same thing
+    // one page load later.
+    var ask = t.closest('a.qask[data-qkey]');
+    if (ask) {
+      var tpl = document.getElementById('qask-tpl');
+      var cat = document.getElementById('qcatalog');
+      if (!tpl || !cat) return;
+      var entries;
+      try { entries = JSON.parse(cat.textContent || '{}'); } catch (e) { return; }
+      var e = entries[ask.dataset.qkey];
+      if (!e) return;
+      ev.preventDefault();
+      var set = function (name, val) {
+        var inp = tpl.querySelector('input[name="' + name + '"], textarea[name="' + name + '"]');
+        if (inp) inp.value = val == null ? '' : String(val);
+      };
+      set('anchor_key', e.key); set('anchor_type', e.anchor_type); set('outlet', e.outlet);
+      set('page', e.page); set('page_date', e.pageDate); set('section', e.section);
+      set('platform', e.platform); set('business_date', e.businessDate);
+      set('snapshot', JSON.stringify(e.fields)); set('prompt', '');
+      var title = tpl.querySelector('[data-qtitle]'); if (title) title.textContent = e.outlet;
+      var sec = tpl.querySelector('[data-qsection]'); if (sec) sec.textContent = e.section;
+      var body = tpl.querySelector('[data-qfields]');
+      if (body) {
+        body.textContent = '';
+        (e.fields || []).forEach(function (f) {
+          var tr = document.createElement('tr');
+          var th2 = document.createElement('th'); th2.textContent = f.label;
+          var td = document.createElement('td'); td.textContent = f.value;
+          tr.appendChild(th2); tr.appendChild(td); body.appendChild(tr);
+        });
+      }
+      tpl.hidden = false;
+      var ta = tpl.querySelector('textarea[name="prompt"]'); if (ta) ta.focus();
+      return;
+    }
+    var qc = t.closest('[data-qclose]');
+    if (qc) {
+      var tpl2 = document.getElementById('qask-tpl');
+      if (tpl2 && !tpl2.hidden) { ev.preventDefault(); tpl2.hidden = true; }
+      return;
+    }
   });
 
   function cellKey(td) {
