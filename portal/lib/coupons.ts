@@ -52,17 +52,22 @@ export const pct = (v: number | null | undefined, d = 1): string => v == null ? 
 export const num = (v: number | null | undefined): string => v == null ? '' : Math.round(v).toLocaleString('en-IN');
 
 // ---------- the status rule ----------
-export type StatusKey = 'ok' | 'more' | 'red' | 'allours' | 'nolist';
+// 'part' (28 Sep 2026): on deal on average, but some orders were charged above
+// it. Zomato ran every coupon at 75/25 instead of 70/30 from 30 Aug to 1 Sep 2026;
+// averaged over a month that weekend disappears, so any order above deal plus
+// tolerance marks the coupon, whatever its average says.
+export type StatusKey = 'ok' | 'more' | 'red' | 'part' | 'allours' | 'nolist';
 export const STATUS_LABEL: Record<StatusKey, string> = {
-  ok: 'On deal', more: 'They fund more', red: 'Above deal: they pay less', allours: 'All ours (100%)', nolist: 'No deal recorded',
+  ok: 'On deal', more: 'They fund more', red: 'Above deal: they pay less', part: 'They paid less on some orders', allours: 'All ours (100%)', nolist: 'No deal recorded',
 };
-export const STATUS_CHIP: Record<StatusKey, string> = { ok: 'c-ok', more: 'c-more', red: 'c-red', allours: 'c-grey', nolist: 'c-amber' };
-export const STATUS_HEAT: Record<StatusKey, string> = { ok: 'h-ok', more: 'h-more', red: 'h-red', allours: 'h-grey', nolist: 'h-amb' };
-export function status(share: number | null, agreed: number | null, tol: number): StatusKey {
+export const STATUS_CHIP: Record<StatusKey, string> = { ok: 'c-ok', more: 'c-more', red: 'c-red', part: 'c-red', allours: 'c-grey', nolist: 'c-amber' };
+export const STATUS_HEAT: Record<StatusKey, string> = { ok: 'h-ok', more: 'h-more', red: 'h-red', part: 'h-red', allours: 'h-grey', nolist: 'h-amb' };
+export function status(share: number | null, agreed: number | null, tol: number, aboveDeal = 0): StatusKey {
   if (agreed == null) return 'nolist';
   if (agreed >= 99.5) return 'allours';
   if (share == null) return 'nolist';
   if (share > agreed + tol) return 'red';
+  if (aboveDeal >= 1) return 'part';
   if (share < agreed - tol) return 'more';
   return 'ok';
 }
@@ -82,6 +87,13 @@ function where(f: Filters, alias = 'o'): { sql: string; params: unknown[] } {
   if (f.outlet) { params.push(f.outlet); sql += ` and ${alias}.outlet_code = $${params.length}`; }
   return { sql, params };
 }
+
+// Rupees paid above the deal. Tolerance is applied per ORDER: an order within
+// tolerance of its deal is whole-rupee rounding and counts nothing; an order
+// beyond it counts its full excess over the deal. Summing the raw excess of
+// every order would add up rounding pennies into a phantom overpayment.
+const TOL_SQL = `(select value::numeric from coupons.setting where key = 'tolerance_pts')`;
+const ABOVE_SQL = `case when dl.max_our_share_pct < 99.5 and o.ours > (dl.max_our_share_pct + ${TOL_SQL}) * o.burn / 100 then o.ours - dl.max_our_share_pct * o.burn / 100 else 0 end`;
 
 // the deal that applies to an order row, outlet-specific first, then network-wide
 const DEAL_LATERAL = `left join lateral (
@@ -103,7 +115,7 @@ async function summaryFor(f: Filters) {
     select o.platform, count(*) filter (where o.is_coupon) coupon_orders,
            sum(o.burn) filter (where o.is_coupon) burn, sum(o.ours) filter (where o.is_coupon) ours, sum(o.theirs) filter (where o.is_coupon) theirs,
            sum(o.extras) extras, avg(o.bill) filter (where o.is_coupon and o.bill > 0) avg_bill,
-           sum(greatest(0, o.ours - dl.max_our_share_pct * o.burn / 100)) filter (where o.is_coupon and dl.max_our_share_pct is not null and dl.max_our_share_pct < 99.5) above_deal
+           sum(${ABOVE_SQL}) filter (where o.is_coupon) above_deal
     from coupons.order_share o ${DEAL_LATERAL}
     where ${w.sql} group by o.platform`, w.params);
   // all orders, both platforms, from Petpooja (Swiggy's file only lists coupon orders)
@@ -150,7 +162,7 @@ export async function summary(f: Filters): Promise<SummaryRow[]> {
 // ---------- every coupon, by name ----------
 export interface CouponRow {
   platform: Platform; code: string; n: number; burn: number; ours: number; theirs: number; extras: number; share: number | null;
-  avg_bill: number | null; min_bill: number | null; outlets: number; constructs: string | null; agreed: number | null; above_deal: number;
+  avg_bill: number | null; min_bill: number | null; outlets: number; constructs: string | null; agreed: number | null; above_deal: number; above_orders: number;
   what_it_is: string | null; for_whom: string | null; kind: string | null; status: StatusKey;
 }
 export async function couponRows(f: Filters, tol: number): Promise<CouponRow[]> {
@@ -159,7 +171,7 @@ export async function couponRows(f: Filters, tol: number): Promise<CouponRow[]> 
     select o.platform, o.code, count(*) n, sum(o.burn) burn, sum(o.ours) ours, sum(o.theirs) theirs, sum(o.extras) extras,
            avg(o.bill) filter (where o.bill > 0) avg_bill, min(o.bill) filter (where o.bill > 0) min_bill,
            count(distinct o.outlet_code) outlets, string_agg(distinct o.construct, ' / ') constructs,
-           sum(greatest(0, o.ours - dl.max_our_share_pct * o.burn / 100)) filter (where dl.max_our_share_pct is not null and dl.max_our_share_pct < 99.5) above_deal,
+           sum(${ABOVE_SQL}) above_deal, count(*) filter (where ${ABOVE_SQL} > 0) above_orders,
            c.what_it_is, c.for_whom, c.kind,
            (select max_our_share_pct from coupons.deal d where d.platform = o.platform and d.code = o.code and d.outlet_code is null
               and d.effective_from <= $2 and (d.effective_to is null or d.effective_to >= $2) order by d.effective_from desc limit 1) agreed
@@ -171,8 +183,8 @@ export async function couponRows(f: Filters, tol: number): Promise<CouponRow[]> 
   return rows.map(r => {
     const burn = n0(r.burn), ours = n0(r.ours); const share = burn ? 100 * ours / burn : null; const agreed = nn(r.agreed);
     return { platform: r.platform as Platform, code: String(r.code), n: n0(r.n), burn, ours, theirs: n0(r.theirs), extras: n0(r.extras), share,
-      avg_bill: nn(r.avg_bill), min_bill: nn(r.min_bill), outlets: n0(r.outlets), constructs: (r.constructs as string | null), agreed, above_deal: n0(r.above_deal),
-      what_it_is: r.what_it_is as string | null, for_whom: r.for_whom as string | null, kind: r.kind as string | null, status: status(share, agreed, tol) };
+      avg_bill: nn(r.avg_bill), min_bill: nn(r.min_bill), outlets: n0(r.outlets), constructs: (r.constructs as string | null), agreed, above_deal: n0(r.above_deal), above_orders: n0(r.above_orders),
+      what_it_is: r.what_it_is as string | null, for_whom: r.for_whom as string | null, kind: r.kind as string | null, status: status(share, agreed, tol, n0(r.above_deal)) };
   });
 }
 
@@ -210,9 +222,9 @@ export async function missingDays(f: Filters): Promise<string[]> {
 }
 
 // ---------- one coupon ----------
-export interface OutletShare { outlet_code: string; city: string | null; n: number; burn: number; ours: number; share: number | null; avg_bill: number | null; agreed: number | null }
-export interface DayShare { business_date: string; n: number; burn: number; ours: number; share: number | null }
-export interface WeekShare { week: string; n: number; burn: number; ours: number; share: number | null }
+export interface OutletShare { outlet_code: string; city: string | null; n: number; burn: number; ours: number; share: number | null; avg_bill: number | null; agreed: number | null; above: number }
+export interface DayShare { business_date: string; n: number; burn: number; ours: number; share: number | null; above: number }
+export interface WeekShare { week: string; n: number; burn: number; ours: number; share: number | null; above: number }
 export interface OrderRow { order_no: string; business_date: string; outlet_code: string | null; city: string | null; code: string | null; construct: string | null; bill: number | null; burn: number; ours: number; theirs: number; extras: number; share_pct: number | null }
 export async function couponDetail(platform: Platform, code: string, f: Filters, tol: number) {
   const ff: Filters = { ...f, platform };
@@ -221,13 +233,13 @@ export async function couponDetail(platform: Platform, code: string, f: Filters,
   const codeIx = params.length;
   const [head, byOutlet, byDay, byWeek, siblings, orders, glossary] = await Promise.all([
     couponRows(ff, tol).then(rows => rows.find(r => r.code === code) ?? null),
-    q(`select o.outlet_code, o.city, count(*) n, sum(o.burn) burn, sum(o.ours) ours, avg(o.bill) filter (where o.bill > 0) avg_bill,
+    q(`select o.outlet_code, o.city, count(*) n, sum(o.burn) burn, sum(o.ours) ours, avg(o.bill) filter (where o.bill > 0) avg_bill, sum(${ABOVE_SQL}) above,
           (select max_our_share_pct from coupons.deal d where d.platform = o.platform and d.code = o.code
              and (d.outlet_code = o.outlet_code or d.outlet_code is null) and d.effective_from <= $2 and (d.effective_to is null or d.effective_to >= $2)
              order by d.outlet_code nulls last, d.effective_from desc limit 1) agreed
-       from coupons.order_share o where ${w.sql} and o.is_coupon and o.code = $${codeIx} group by o.platform, o.code, o.outlet_code, o.city order by count(*) desc`, params),
-    q(`select o.business_date, count(*) n, sum(o.burn) burn, sum(o.ours) ours from coupons.order_share o where ${w.sql} and o.is_coupon and o.code = $${codeIx} group by 1 order by 1`, params),
-    q(`select date_trunc('week', o.business_date)::date week, count(*) n, sum(o.burn) burn, sum(o.ours) ours from coupons.order_share o
+       from coupons.order_share o ${DEAL_LATERAL} where ${w.sql} and o.is_coupon and o.code = $${codeIx} group by o.platform, o.code, o.outlet_code, o.city order by count(*) desc`, params),
+    q(`select o.business_date, count(*) n, sum(o.burn) burn, sum(o.ours) ours, sum(${ABOVE_SQL}) above from coupons.order_share o ${DEAL_LATERAL} where ${w.sql} and o.is_coupon and o.code = $${codeIx} group by 1 order by 1`, params),
+    q(`select date_trunc('week', o.business_date)::date week, count(*) n, sum(o.burn) burn, sum(o.ours) ours, sum(${ABOVE_SQL}) above from coupons.order_share o ${DEAL_LATERAL}
        where o.platform = $1 and o.code = $2 and o.is_coupon and o.business_date >= (current_date - 120) group by 1 order by 1`, [platform, code]),
     platform === 'zomato' ? q(`select o.code, count(*) n, sum(o.burn) burn, sum(o.ours) ours from coupons.order_share o
        where ${w.sql} and o.is_coupon and o.code <> $${codeIx} and o.construct in (select distinct construct from coupons.order_share x where x.platform = 'zomato' and x.code = $${codeIx} and x.business_date between $1 and $2 and x.construct is not null)
@@ -239,9 +251,9 @@ export async function couponDetail(platform: Platform, code: string, f: Filters,
   const sh = (b: unknown, o: unknown) => { const bb = n0(b); return bb ? 100 * n0(o) / bb : null; };
   return {
     head, glossary,
-    byOutlet: byOutlet.map(r => ({ outlet_code: String(r.outlet_code), city: r.city as string | null, n: n0(r.n), burn: n0(r.burn), ours: n0(r.ours), share: sh(r.burn, r.ours), avg_bill: nn(r.avg_bill), agreed: nn(r.agreed) })) as OutletShare[],
-    byDay: byDay.map(r => ({ business_date: String(r.business_date), n: n0(r.n), burn: n0(r.burn), ours: n0(r.ours), share: sh(r.burn, r.ours) })) as DayShare[],
-    byWeek: byWeek.map(r => ({ week: String(r.week), n: n0(r.n), burn: n0(r.burn), ours: n0(r.ours), share: sh(r.burn, r.ours) })) as WeekShare[],
+    byOutlet: byOutlet.map(r => ({ outlet_code: String(r.outlet_code), city: r.city as string | null, n: n0(r.n), burn: n0(r.burn), ours: n0(r.ours), share: sh(r.burn, r.ours), avg_bill: nn(r.avg_bill), agreed: nn(r.agreed), above: n0(r.above) })) as OutletShare[],
+    byDay: byDay.map(r => ({ business_date: String(r.business_date), n: n0(r.n), burn: n0(r.burn), ours: n0(r.ours), share: sh(r.burn, r.ours), above: n0(r.above) })) as DayShare[],
+    byWeek: byWeek.map(r => ({ week: String(r.week), n: n0(r.n), burn: n0(r.burn), ours: n0(r.ours), share: sh(r.burn, r.ours), above: n0(r.above) })) as WeekShare[],
     siblings: siblings.map(r => ({ code: String(r.code), n: n0(r.n), share: sh(r.burn, r.ours) })),
     orders: orders.map(r => ({ ...(r as unknown as OrderRow), bill: nn(r.bill), burn: n0(r.burn), ours: n0(r.ours), theirs: n0(r.theirs), extras: n0(r.extras), share_pct: nn(r.share_pct) })) as OrderRow[],
   };
@@ -300,13 +312,42 @@ export async function deals(includeHistory = false): Promise<DealRow[]> {
   return rows.map(r => ({ ...(r as unknown as DealRow), id: n0(r.id), max_our_share_pct: n0(r.max_our_share_pct) }));
 }
 
-// ---------- the uploaded discount sheet ----------
-export interface UploadHead { id: number; platform: Platform; label: string; source: string | null; uploaded_by: string | null; uploaded_at: string; row_count: number | null }
+// ---------- the uploaded discount sheet, as dated versions ----------
+// Each upload is one version of the team's discount sheet, effective from the
+// 1st of its month (28 Sep 2026: the history back to Nov 2025 was loaded from
+// Learnings&Improvements.xlsx). The version that governs a date is the latest
+// one effective on or before it; superseded_at marks a version replaced by a
+// corrected load of the same month (or an early undated load), never a delete.
+export interface UploadHead { id: number; platform: Platform; label: string; effective_from: string | null; source: string | null; uploaded_by: string | null; uploaded_at: string; row_count: number | null; superseded_at: string | null }
 export interface UploadGrid { head: UploadHead; cols: { col_no: number; slot_group: string | null; slot: string | null }[]; rows: { outlet_code: string; rid: string | null; cells: Record<number, string> }[] }
-export async function currentUpload(platform: Platform): Promise<UploadGrid | null> {
-  const head = await one(`select id, platform, label, source, uploaded_by, uploaded_at, row_count from coupons.upload where platform = $1 and superseded_at is null order by uploaded_at desc limit 1`, [platform]);
+const UP_COLS = `id, platform, label, effective_from, source, uploaded_by, uploaded_at, row_count, superseded_at`;
+const shapeHead = (h: Record<string, unknown>): UploadHead => ({ ...(h as unknown as UploadHead), id: n0(h.id), row_count: nn(h.row_count) });
+
+export async function listUploads(platform: Platform): Promise<(UploadHead & { changed: number | null; prev_label: string | null })[]> {
+  const heads = (await q(`select ${UP_COLS} from coupons.upload where platform = $1 order by superseded_at is not null, effective_from desc nulls last, uploaded_at desc`, [platform])).map(shapeHead);
+  const dated = heads.filter(h => h.effective_from && !h.superseded_at).sort((x, y) => String(x.effective_from).localeCompare(String(y.effective_from)));
+  const changes = await q<{ cur: string; n: string }>(`
+    with v as (select id, effective_from, lag(id) over (order by effective_from) prev from coupons.upload where platform = $1 and superseded_at is null and effective_from is not null)
+    select v.id cur, count(*) n from v
+    join coupons.upload_cell c on c.upload_id = v.id
+    left join coupons.upload_cell p on p.upload_id = v.prev and p.outlet_code = c.outlet_code and p.slot_group is not distinct from c.slot_group and p.slot is not distinct from c.slot
+    where v.prev is not null and (p.id is null or p.construct is distinct from c.construct)
+      and exists (select 1 from coupons.upload_cell x where x.upload_id = v.prev and x.outlet_code = c.outlet_code)
+    group by v.id`, [platform]);
+  const ch = new Map(changes.map(r => [n0(r.cur), n0(r.n)]));
+  return heads.map(h => {
+    const i = dated.findIndex(d => d.id === h.id);
+    return { ...h, changed: i > 0 ? (ch.get(h.id) ?? 0) : null, prev_label: i > 0 ? dated[i - 1].label : null };
+  });
+}
+export async function uploadAt(platform: Platform, asOf: string): Promise<UploadHead | null> {
+  const h = await one(`select ${UP_COLS} from coupons.upload where platform = $1 and superseded_at is null and effective_from is not null and effective_from <= $2 order by effective_from desc limit 1`, [platform, asOf]);
+  return h ? shapeHead(h) : null;
+}
+export async function getUpload(id: number): Promise<UploadGrid | null> {
+  const head = await one(`select ${UP_COLS} from coupons.upload where id = $1`, [id]);
   if (!head) return null;
-  const cells = await q(`select outlet_code, platform_rid, col_no, slot_group, slot, construct from coupons.upload_cell where upload_id = $1 order by outlet_code, col_no`, [head.id]);
+  const cells = await q(`select outlet_code, platform_rid, col_no, slot_group, slot, construct from coupons.upload_cell where upload_id = $1 order by outlet_code, col_no`, [id]);
   const colMap = new Map<number, { col_no: number; slot_group: string | null; slot: string | null }>();
   const rowMap = new Map<string, { outlet_code: string; rid: string | null; cells: Record<number, string> }>();
   for (const c of cells) {
@@ -315,31 +356,63 @@ export async function currentUpload(platform: Platform): Promise<UploadGrid | nu
     const r = rowMap.get(String(c.outlet_code)) ?? { outlet_code: String(c.outlet_code), rid: c.platform_rid as string | null, cells: {} };
     r.cells[col] = String(c.construct); rowMap.set(r.outlet_code, r);
   }
-  return { head: { ...(head as unknown as UploadHead), id: n0(head.id), row_count: nn(head.row_count) }, cols: [...colMap.values()].sort((a, b) => a.col_no - b.col_no), rows: [...rowMap.values()] };
+  return { head: shapeHead(head), cols: [...colMap.values()].sort((a, b) => a.col_no - b.col_no), rows: [...rowMap.values()] };
 }
+export async function currentUpload(platform: Platform): Promise<UploadGrid | null> {
+  const h = await uploadAt(platform, istToday());
+  if (h) return getUpload(h.id);
+  const latest = await one<{ id: number }>(`select id from coupons.upload where platform = $1 and superseded_at is null order by uploaded_at desc limit 1`, [platform]);
+  return latest ? getUpload(n0(latest.id)) : null;
+}
+// What changed between two versions, cell by cell, keyed by outlet and slot (the
+// column headings, so a re-ordered sheet still compares correctly).
+export interface UploadChange { outlet_code: string; slot_group: string | null; slot: string | null; before: string | null; after: string | null }
+export async function uploadDiff(prevId: number, curId: number): Promise<UploadChange[]> {
+  const rows = await q(`
+    select coalesce(c.outlet_code, p.outlet_code) outlet_code, coalesce(c.slot_group, p.slot_group) slot_group, coalesce(c.slot, p.slot) slot, p.construct before, c.construct after
+    from (select * from coupons.upload_cell where upload_id = $2) c
+    full join (select * from coupons.upload_cell where upload_id = $1) p
+      on p.outlet_code = c.outlet_code and p.slot_group is not distinct from c.slot_group and p.slot is not distinct from c.slot
+    where p.construct is distinct from c.construct
+    order by 1, coalesce(c.col_no, p.col_no)`, [prevId, curId]);
+  return rows.map(r => ({ outlet_code: String(r.outlet_code), slot_group: r.slot_group as string | null, slot: r.slot as string | null, before: r.before as string | null, after: r.after as string | null }));
+}
+export async function previousVersion(platform: Platform, id: number): Promise<UploadHead | null> {
+  const h = await one(`select ${UP_COLS} from coupons.upload where platform = $1 and superseded_at is null and effective_from < (select effective_from from coupons.upload where id = $2) order by effective_from desc limit 1`, [platform, id]);
+  return h ? shapeHead(h) : null;
+}
+
 // Uploaded versus live: per outlet, what fired that the sheet does not list, and
-// what the sheet lists that did not fire (Zomato, where the order names its construct).
+// what the sheet lists that did not fire (Zomato, where the order names its
+// construct). The sheet version is the one in force on the last day of the
+// period. Zomato runs an "X% upto Y" slot as "Flat Y, MOV 199", so both sides
+// are compared in flat form (Pranjay's reading, verified 26 Sep 2026).
+const flatForm = (c: string) => c.replace(/^(\d+)% off upto Rs\.(\d+)$/, 'Flat Rs.$2 off');
 export interface UploadCheckRow { outlet_code: string; unexpected: { construct: string; n: number }[]; silent: string[] }
-export async function uploadVsLive(f: Filters): Promise<{ rows: UploadCheckRow[]; matched: number; unexpected: number; silent: number } | null> {
-  const up = await currentUpload('zomato');
+export async function uploadVsLive(f: Filters): Promise<{ rows: UploadCheckRow[]; matched: number; unexpected: number; silent: number; version: UploadHead } | null> {
+  const h = (await uploadAt('zomato', f.to));
+  const up = h ? await getUpload(h.id) : await currentUpload('zomato');
   if (!up) return null;
   const w = where({ ...f, platform: 'zomato' });
-  const live = await q(`select o.outlet_code, o.construct, count(*) n from coupons.order_share o where ${w.sql} and o.is_coupon and o.construct is not null group by 1, 2 having count(*) >= 5`, w.params);
+  const live = await q(`select o.outlet_code, o.construct, count(*) n from coupons.order_share o where ${w.sql} and o.is_coupon and o.construct is not null group by 1, 2`, w.params);
   const norm = await q<{ outlet_code: string; construct_norm: string }>(`select distinct outlet_code, construct_norm from coupons.upload_cell where upload_id = $1 and construct_norm is not null`, [up.head.id]);
   const sheet = new Map<string, Set<string>>();
-  for (const r of norm) { const k = r.outlet_code.trim().toLowerCase(); if (!sheet.has(k)) sheet.set(k, new Set()); sheet.get(k)!.add(r.construct_norm); }
+  for (const r of norm) { const k = r.outlet_code.trim().toLowerCase(); if (!sheet.has(k)) sheet.set(k, new Set()); sheet.get(k)!.add(flatForm(r.construct_norm)); }
   const liveMap = new Map<string, Map<string, number>>();
-  for (const r of live) { const k = String(r.outlet_code).trim().toLowerCase(); if (!liveMap.has(k)) liveMap.set(k, new Map()); liveMap.get(k)!.set(String(r.construct), n0(r.n)); }
+  for (const r of live) {
+    const k = String(r.outlet_code).trim().toLowerCase(); if (!liveMap.has(k)) liveMap.set(k, new Map());
+    const c = flatForm(String(r.construct)); const m = liveMap.get(k)!; m.set(c, (m.get(c) ?? 0) + n0(r.n));
+  }
   const rows: UploadCheckRow[] = []; let unexpected = 0, silent = 0, matched = 0;
   for (const r of up.rows) {
     const k = r.outlet_code.trim().toLowerCase(); const lv = liveMap.get(k); const sh = sheet.get(k) ?? new Set<string>();
     if (!lv) continue; matched++;
-    const un = [...lv.entries()].filter(([c]) => !sh.has(c)).map(([construct, n]) => ({ construct, n })).sort((a, b) => b.n - a.n);
+    const un = [...lv.entries()].filter(([c, n]) => n >= 5 && !sh.has(c)).map(([construct, n]) => ({ construct, n })).sort((a, b) => b.n - a.n);
     const si = [...sh].filter(c => !lv.has(c)).sort();
     unexpected += un.length; silent += si.length;
     rows.push({ outlet_code: r.outlet_code, unexpected: un, silent: si });
   }
-  return { rows, matched, unexpected, silent };
+  return { rows, matched, unexpected, silent, version: up.head };
 }
 
 export async function recentEvents(limit = 30) {

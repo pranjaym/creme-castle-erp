@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireAccess, couponPerms } from '@/lib/session';
-import { deals, glossaryRows, currentUpload, uploadVsLive, tolerance, recentEvents, parseFilters, inr, pct, num, dateLabel, outlets, type UploadGrid } from '@/lib/coupons';
+import { deals, glossaryRows, listUploads, uploadAt, getUpload, previousVersion, uploadDiff, uploadVsLive, tolerance, recentEvents, parseFilters, istToday, inr, pct, num, dateLabel, outlets, type UploadGrid, type UploadHead, type UploadChange, type Platform } from '@/lib/coupons';
 import { Tag, Agreed, Tabs, Flash } from '../ui';
 import { setDeal, setTolerance } from '../actions';
 
@@ -15,9 +15,10 @@ export default async function DealsPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const canEdit = couponPerms(user).edit;
   const f = parseFilters(sp);
-  const [open, history, gl, zUp, sUp, check, tol, events, outletList] = await Promise.all([
-    deals(false), deals(true), glossaryRows(), currentUpload('zomato'), currentUpload('swiggy'), uploadVsLive(f), tolerance(), recentEvents(25), outlets(),
+  const [open, history, gl, zSheet, sSheet, check, tol, events, outletList] = await Promise.all([
+    deals(false), deals(true), glossaryRows(), sheetView('zomato', sp.zv), sheetView('swiggy', sp.sv), uploadVsLive(f), tolerance(), recentEvents(25), outlets(),
   ]);
+  const keep = (k: string, v: string) => { const p = new URLSearchParams(); for (const [a, b] of Object.entries(sp)) if (b && a !== k && a !== 'ok' && a !== 'err') p.set(a, b); p.set(k, v); return '/coupons/deals?' + p.toString() + '#sheet-' + (k === 'zv' ? 'zomato' : 'swiggy'); };
   const waiting = gl.filter(r => r.n28 >= 40 && r.agreed == null).sort((a, b) => b.ours28 - a.ours28);
   const who = (r: { platform: string; code: string }) => gl.find(g => g.platform === r.platform && g.code === r.code);
 
@@ -96,11 +97,11 @@ export default async function DealsPage({ searchParams }: { searchParams: Promis
         ) : null}
       </div>
 
-      {[zUp, sUp].map(up => up ? <UploadCard key={up.head.platform} up={up} /> : null)}
+      {[zSheet, sSheet].map(v => v ? <UploadCard key={v.grid.head.platform} v={v} href={(id: number) => keep(v.grid.head.platform === 'zomato' ? 'zv' : 'sv', String(id))} /> : null)}
 
       {check ? (
         <div className="card">
-          <h2>Uploaded versus live, Zomato <span className="subtle">{dateLabel(f.from)} to {dateLabel(f.to)}</span></h2>
+          <h2>Uploaded versus live, Zomato <span className="subtle">{dateLabel(f.from)} to {dateLabel(f.to)}, against the &ldquo;{check.version.label}&rdquo; sheet</span></h2>
           <p className="note" style={{ marginTop: 0 }}>
             Across the {check.matched} sheet outlets that match the outlet master: <b>{check.unexpected}</b> constructs fired that the sheet does not list, <b>{check.silent}</b> sheet constructs did not fire.
             Rows with something to say first.
@@ -115,7 +116,11 @@ export default async function DealsPage({ searchParams }: { searchParams: Promis
               </tr>
             ))}</tbody>
           </table></div>
-          <p className="note">Only constructs with 5+ orders at the outlet count as &ldquo;fired&rdquo;. Swiggy has no such check yet: its orders carry the code, not the construct.</p>
+          <p className="note">
+            Zomato runs an &ldquo;X% upto Y&rdquo; slot as &ldquo;Flat Y, MOV 199&rdquo;, so both sides are compared in that form (60% upto 120 and Flat 120 count as the same coupon).
+            Only constructs with 5+ orders at the outlet count as &ldquo;fired&rdquo;. Outlets are matched on Zomato&rsquo;s restaurant id. Change the dates to check another month against its own sheet.
+            Swiggy has no such check yet: its orders carry the code, not the construct.
+          </p>
         </div>
       ) : null}
 
@@ -133,27 +138,66 @@ export default async function DealsPage({ searchParams }: { searchParams: Promis
   );
 }
 
-function UploadCard({ up }: { up: UploadGrid }) {
+interface SheetView { grid: UploadGrid; versions: (UploadHead & { changed: number | null; prev_label: string | null })[]; prev: UploadHead | null; prevOutlets: Set<string>; diff: UploadChange[] }
+async function sheetView(platform: Platform, pick?: string): Promise<SheetView | null> {
+  const versions = await listUploads(platform);
+  const chosen = pick && /^\d+$/.test(pick) ? versions.find(v => v.id === Number(pick)) : null;
+  const head = chosen ?? (await uploadAt(platform, istToday())) ?? versions[0] ?? null;
+  if (!head) return null;
+  const grid = await getUpload(head.id);
+  if (!grid) return null;
+  const prev = head.effective_from && !head.superseded_at ? await previousVersion(platform, head.id) : null;
+  const [diff, prevGrid] = prev ? await Promise.all([uploadDiff(prev.id, head.id), getUpload(prev.id)]) : [[], null];
+  return { grid, versions, prev, prevOutlets: new Set(prevGrid ? prevGrid.rows.map(r => r.outlet_code) : []), diff };
+}
+
+function UploadCard({ v, href }: { v: SheetView; href: (id: number) => string }) {
+  const up = v.grid;
   // group headings span their columns, as on the sheet
   const groups: { title: string; span: number }[] = [];
   for (const c of up.cols) {
     const t = c.slot_group ?? '';
     if (groups.length && groups[groups.length - 1].title === t) groups[groups.length - 1].span++; else groups.push({ title: t, span: 1 });
   }
+  const changed = new Set(v.diff.filter(d => d.after != null).map(d => `${d.outlet_code}|${d.slot_group ?? ''}|${d.slot ?? ''}`));
+  const newOutlets = new Set(v.prev ? up.rows.filter(r => !v.prevOutlets.has(r.outlet_code)).map(r => r.outlet_code) : []);
+  const dated = v.versions.filter(x => x.effective_from && !x.superseded_at).sort((a, b) => String(a.effective_from).localeCompare(String(b.effective_from)));
   const rows = up.rows;
+  const platformName = up.head.platform === 'zomato' ? 'Zomato' : 'Swiggy';
   return (
-    <div className="card">
-      <h2>What we uploaded: <Tag p={up.head.platform} />{up.head.platform === 'zomato' ? 'Zomato' : 'Swiggy'} <span className="subtle">&ldquo;{up.head.label}&rdquo; · {rows.length} outlets · loaded {String(up.head.uploaded_at).slice(0, 10)} by {up.head.uploaded_by ?? ''}</span></h2>
+    <div className="card" id={'sheet-' + up.head.platform}>
+      <h2>What we uploaded: <Tag p={up.head.platform} />{platformName} <span className="subtle">&ldquo;{up.head.label}&rdquo;{up.head.effective_from ? ` · in force from ${dateLabel(up.head.effective_from)}` : ''} · {rows.length} outlets</span></h2>
+      <div className="tabs" style={{ marginBottom: 10 }}>
+        {dated.map(x => (
+          <Link key={x.id} href={href(x.id)} className={x.id === up.head.id ? 'on' : ''}>
+            {x.label}{x.changed != null ? <span className="tiny" style={{ color: 'inherit', opacity: .8 }}> · {x.changed} changed</span> : null}
+          </Link>
+        ))}
+      </div>
+      {v.prev ? (
+        <details style={{ marginBottom: 10 }}>
+          <summary className="note" style={{ cursor: 'pointer', marginTop: 0 }}><b>{v.diff.filter(d => !newOutlets.has(d.outlet_code)).length} cells changed from {v.prev.label}</b>{newOutlets.size ? `, including ${newOutlets.size} new outlet${newOutlets.size > 1 ? 's' : ''}` : ''}. Changed cells are shaded below; tap to list them.</summary>
+          <div className="scroll-x"><table className="sheet">
+            <thead><tr><th>Outlet</th><th>Column</th><th>{v.prev.label}</th><th>{up.head.label}</th></tr></thead>
+            <tbody>{v.diff.filter(d => !newOutlets.has(d.outlet_code)).map((d, i) => (
+              <tr key={i}><td className="name">{d.outlet_code.replace('CC-', '')}</td><td className="small">{d.slot_group} / {d.slot}</td>
+                <td className="small">{d.before ?? <span className="muted">not on the sheet</span>}</td><td className="small"><b>{d.after ?? <span className="muted">removed</span>}</b></td></tr>
+            ))}</tbody>
+          </table></div>
+          {newOutlets.size ? <p className="note">New outlets on this version: {[...newOutlets].map(o => o.replace('CC-', '')).join(', ')}.</p> : null}
+        </details>
+      ) : <p className="note" style={{ marginTop: 0 }}>{up.head.effective_from ? 'The earliest version we hold; nothing to compare it with.' : 'An early load without a month; the dated versions above replace it.'}</p>}
       <div className="scroll-x"><table className="sheet">
         <thead>
           <tr><th rowSpan={2}>Outlet</th>{groups.map((g, i) => <th key={i} colSpan={g.span} className="grp">{g.title}</th>)}</tr>
           <tr>{up.cols.map(c => <th key={c.col_no}>{c.slot ?? ''}</th>)}</tr>
         </thead>
         <tbody>{rows.map(r => (
-          <tr key={r.outlet_code}><td className="name">{r.outlet_code.replace('CC-', '')}</td>{up.cols.map(c => <td key={c.col_no} className="cell">{r.cells[c.col_no] ?? ''}</td>)}</tr>
+          <tr key={r.outlet_code}><td className="name">{r.outlet_code.replace('CC-', '')}{newOutlets.has(r.outlet_code) ? <span className="chip c-amber" style={{ marginLeft: 6 }}>new</span> : null}</td>
+            {up.cols.map(c => <td key={c.col_no} className={'cell' + (!newOutlets.has(r.outlet_code) && changed.has(`${r.outlet_code}|${c.slot_group ?? ''}|${c.slot ?? ''}`) ? ' chg' : '')}>{r.cells[c.col_no] ?? ''}</td>)}</tr>
         ))}</tbody>
       </table></div>
-      <p className="note">The sheet as the team keeps it. A new version is loaded with <span className="mono">kitchen/workers/coupons/import_sheet.py</span>; the previous version is kept, never overwritten.</p>
+      <p className="note">The sheet as the team keeps it, one version per month, matched to our outlets on {platformName}&rsquo;s restaurant id. A new month is loaded with <span className="mono">kitchen/workers/coupons/import_sheet.py --history</span>; earlier versions are kept, never overwritten.</p>
     </div>
   );
 }
