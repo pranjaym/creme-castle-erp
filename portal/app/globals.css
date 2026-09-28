@@ -868,3 +868,6 @@ a.qd-close { position: absolute; right: 14px; top: 10px; font-size: 22px; color:
 .qx .qc-col .tags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
 .qx .ptag, .qd-body .ptag { display: inline-block; background: var(--pink); color: var(--maroon); border-radius: 999px; padding: 2px 9px; font-size: 12px; }
 .qx .dim { color: var(--muted); }
+.cx table.sheet td.chg { background: #FEF3E2; color: #92400E; font-weight: 600; }
+.cx .dcell.bad { background: #FBEAE6; border-color: #e7b9ae; }
+.cx .dcell.bad .dv { color: #872724; }

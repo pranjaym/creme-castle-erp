@@ -78,13 +78,13 @@ export default async function CouponPage({ params, searchParams }: { params: Pro
           <div className="card">
             <h2>Day by day</h2>
             <div className="strip">{d.byDay.map(x => (
-              <div className="dcell" key={x.business_date}><div className="dl">{dayLabel(x.business_date)}</div><div className="dv">{pct(x.share)}</div><div className="dn">{num(x.n)} orders</div></div>
+              <div className={'dcell' + (x.above >= 1 ? ' bad' : '')} key={x.business_date} title={x.above >= 1 ? `${inr(x.above)} above deal` : undefined}><div className="dl">{dayLabel(x.business_date)}</div><div className="dv">{pct(x.share)}</div><div className="dn">{num(x.n)} orders{x.above >= 1 ? <> · <b>{inr(x.above)} over</b></> : null}</div></div>
             ))}</div>
             {d.byWeek.length > 1 ? (
               <>
                 <div className="pt" style={{ fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--muted)', marginTop: 8 }}>Week by week, last 120 days</div>
                 <div className="strip">{d.byWeek.map(x => (
-                  <div className={'dcell'} key={x.week}><div className="dl">wk of {dayLabel(x.week)}</div><div className="dv">{pct(x.share)}</div><div className="dn">{num(x.n)} orders</div></div>
+                  <div className={'dcell' + (x.above >= 1 ? ' bad' : '')} key={x.week}><div className="dl">wk of {dayLabel(x.week)}</div><div className="dv">{pct(x.share)}</div><div className="dn">{num(x.n)} orders{x.above >= 1 ? <> · <b>{inr(x.above)} over</b></> : null}</div></div>
                 ))}</div>
               </>
             ) : null}
@@ -112,7 +112,7 @@ export default async function CouponPage({ params, searchParams }: { params: Pro
                 <tbody>{d.byOutlet.map(o => (
                   <tr key={o.outlet_code}><td className="name"><Link href={base + qs({ ...f, outlet: o.outlet_code }, { p: null })}>{o.outlet_code.replace('CC-', '')}</Link></td><td className="small">{o.city ?? ''}</td>
                     <td className="num">{num(o.n)}</td><td className="num">{inr(o.burn)}</td><td className="num">{inr(o.ours)}</td>
-                    <td className={'num ' + STATUS_HEAT[status(o.share, o.agreed, tol)]}><b>{pct(o.share)}</b></td><td className="num"><Agreed v={o.agreed} /></td><td className="num">{o.avg_bill == null ? '' : '₹' + Math.round(o.avg_bill)}</td></tr>
+                    <td className={'num ' + STATUS_HEAT[status(o.share, o.agreed, tol, o.above)]}><b>{pct(o.share)}</b></td><td className="num"><Agreed v={o.agreed} /></td><td className="num">{o.avg_bill == null ? '' : '₹' + Math.round(o.avg_bill)}</td></tr>
                 ))}</tbody>
               </table></div>
             </details>

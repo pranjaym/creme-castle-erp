@@ -32,7 +32,7 @@ export default async function CouponsPage({ searchParams }: { searchParams: Prom
   // data completeness: a day whose platform rows are mostly missing is not a clean day
   const thin = ds.filter(d => d.orders > 0 && d.matched < d.orders * 0.9);
 
-  const red = rows.filter(r => r.status === 'red').sort((a, b) => b.above_deal - a.above_deal);
+  const red = rows.filter(r => r.status === 'red' || r.status === 'part').sort((a, b) => b.above_deal - a.above_deal);
   const nolist = rows.filter(r => r.status === 'nolist' && r.n >= 40).sort((a, b) => b.ours - a.ours);
   const more = rows.filter(r => r.status === 'more' && r.n >= 40).sort((a, b) => b.n - a.n);
   const allours = rows.filter(r => r.status === 'allours');
@@ -129,7 +129,9 @@ export default async function CouponsPage({ searchParams }: { searchParams: Prom
         <h2 className="section" style={{ margin: 0 }}>Needs your attention</h2>
         <ol>
           {red.length ? red.slice(0, 6).map(r => (
-            <li key={r.platform + r.code}><Chip s="red" /> <b><Tag p={r.platform} /><Link href={couponHref(r.platform, r.code, f)}>{r.code}</Link></b>: our share {pct(r.share)} against an agreed {r.agreed}%, <b>{inr(r.above_deal)}</b> paid above the deal on {num(r.n)} orders.</li>
+            <li key={r.platform + r.code}><Chip s={r.status} /> <b><Tag p={r.platform} /><Link href={couponHref(r.platform, r.code, f)}>{r.code}</Link></b>: {r.status === 'red'
+              ? <>our share {pct(r.share)} against an agreed {r.agreed}%, <b>{inr(r.above_deal)}</b> paid above the deal on {num(r.above_orders)} of {num(r.n)} orders.</>
+              : <>on deal on average ({pct(r.share)} against {r.agreed}%), but <b>{num(r.above_orders)} orders</b> were charged above it, <b>{inr(r.above_deal)}</b> in all. Open it to see which days.</>}</li>
           )) : <li><Chip s="red" /> No coupon is above its agreed share in this period{rows.some(r => r.agreed != null) ? '.' : ', but no deals are recorded yet, so nothing can be. Record them on the deals page.'}</li>}
           {nolist.length ? (
             <li><Chip s="nolist" /> <b>{nolist.length} coupon{nolist.length > 1 ? 's' : ''} with 40+ orders and no deal recorded</b>: {nolist.slice(0, 8).map((r, i) => <span key={r.platform + r.code}>{i ? ', ' : ''}<Tag p={r.platform} /><Link href={couponHref(r.platform, r.code, f)}>{r.code}</Link> ({pct(r.share)} ours)</span>)}{nolist.length > 8 ? ` and ${nolist.length - 8} more` : ''}. {canEdit ? <Link href="/coupons/deals">Record the deals</Link> : 'Ask an editor to record the deals'} so the module can tell you when they change.</li>
