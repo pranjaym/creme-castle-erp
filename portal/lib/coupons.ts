@@ -415,6 +415,51 @@ export async function uploadVsLive(f: Filters): Promise<{ rows: UploadCheckRow[]
   return { rows, matched, unexpected, silent, version: up.head };
 }
 
+// Uploaded versus live for Swiggy (28 Sep 2026). Swiggy's order carries the code,
+// never the construct, so the match is by VALUE: a sheet cell's value is its cap
+// ("60% upto 120" is 120) or its flat amount ("Flat 150 MOV 499" is 150), and a
+// live code's value at an outlet is the largest discount that at least 10% of its
+// orders there received (a % code reaches its cap on roughly half its orders; a
+// flat code on all of them). Verified 26 Sep 2026: TRYNEW, SWIGGYIT, FLAVORFUL,
+// FLAT150, FLAT175 and CELEBRATIONS land on their sheet cell at every outlet.
+const sheetValue = (c: string): number | null => {
+  const pctm = c.match(/^\s*\d+%\s*upto\s*(\d+)\s*$/i);
+  if (pctm) return Number(pctm[1]);
+  const flat = c.match(/^\s*Flat\s*(\d+)(?:\s*MOV\s*\d+)?\s*$/i);
+  return flat ? Number(flat[1]) : null;
+};
+export async function swiggyVsLive(f: Filters): Promise<{ rows: UploadCheckRow[]; matched: number; unexpected: number; silent: number; version: UploadHead } | null> {
+  const h = await uploadAt('swiggy', f.to);
+  const up = h ? await getUpload(h.id) : await currentUpload('swiggy');
+  if (!up) return null;
+  const w = where({ ...f, platform: 'swiggy' });
+  const live = await q(`
+    with v as (select o.outlet_code, o.code, round(o.burn) val, count(*) n from coupons.order_share o
+               where ${w.sql} and o.is_coupon and o.code is not null and o.outlet_code is not null group by 1, 2, 3),
+         t as (select outlet_code, code, sum(n) total from v group by 1, 2)
+    select v.outlet_code, v.code, max(v.val) filter (where v.n >= 0.1 * t.total) val, t.total n
+    from v join t using (outlet_code, code) group by v.outlet_code, v.code, t.total`, w.params);
+  const liveMap = new Map<string, { code: string; val: number; n: number }[]>();
+  for (const r of live) {
+    const k = String(r.outlet_code).trim().toLowerCase();
+    if (!liveMap.has(k)) liveMap.set(k, []);
+    liveMap.get(k)!.push({ code: String(r.code), val: n0(r.val), n: n0(r.n) });
+  }
+  const rows: UploadCheckRow[] = []; let unexpected = 0, silent = 0, matched = 0;
+  for (const r of up.rows) {
+    const k = r.outlet_code.trim().toLowerCase(); const lv = liveMap.get(k);
+    if (!lv) continue; matched++;
+    const texts = up.cols.map(c => r.cells[c.col_no]).filter((t): t is string => !!t);
+    const values = new Set(texts.map(sheetValue).filter((v): v is number => v != null));
+    const liveValues = new Set(lv.filter(x => x.n >= 5).map(x => x.val));
+    const un = lv.filter(x => x.n >= 5 && !values.has(x.val)).map(x => ({ construct: `${x.code}, up to ₹${x.val}`, n: x.n })).sort((a, b) => b.n - a.n);
+    const si = [...new Set(texts.filter(t => { const v = sheetValue(t); return v != null && !liveValues.has(v); }))].sort();
+    unexpected += un.length; silent += si.length;
+    rows.push({ outlet_code: r.outlet_code, unexpected: un, silent: si });
+  }
+  return { rows, matched, unexpected, silent, version: up.head };
+}
+
 export async function recentEvents(limit = 30) {
   return q<{ entity: string; action: string; actor: string | null; data: Record<string, unknown> | null; at: string }>(`select entity, action, actor, data, at from coupons.event order by at desc limit $1`, [limit]);
 }

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { requireAccess, couponPerms } from '@/lib/session';
-import { deals, glossaryRows, listUploads, uploadAt, getUpload, previousVersion, uploadDiff, uploadVsLive, tolerance, recentEvents, parseFilters, istToday, inr, pct, num, dateLabel, outlets, type UploadGrid, type UploadHead, type UploadChange, type Platform } from '@/lib/coupons';
+import { deals, glossaryRows, listUploads, uploadAt, getUpload, previousVersion, uploadDiff, uploadVsLive, swiggyVsLive, tolerance, recentEvents, parseFilters, istToday, inr, pct, num, dateLabel, outlets, type UploadGrid, type UploadHead, type UploadChange, type UploadCheckRow, type Platform } from '@/lib/coupons';
 import { Tag, Agreed, Tabs, Flash } from '../ui';
 import { setDeal, setTolerance } from '../actions';
 
@@ -15,8 +15,8 @@ export default async function DealsPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const canEdit = couponPerms(user).edit;
   const f = parseFilters(sp);
-  const [open, history, gl, zSheet, sSheet, check, tol, events, outletList] = await Promise.all([
-    deals(false), deals(true), glossaryRows(), sheetView('zomato', sp.zv), sheetView('swiggy', sp.sv), uploadVsLive(f), tolerance(), recentEvents(25), outlets(),
+  const [open, history, gl, zSheet, sSheet, check, sCheck, tol, events, outletList] = await Promise.all([
+    deals(false), deals(true), glossaryRows(), sheetView('zomato', sp.zv), sheetView('swiggy', sp.sv), uploadVsLive(f), swiggyVsLive(f), tolerance(), recentEvents(25), outlets(),
   ]);
   const keep = (k: string, v: string) => { const p = new URLSearchParams(); for (const [a, b] of Object.entries(sp)) if (b && a !== k && a !== 'ok' && a !== 'err') p.set(a, b); p.set(k, v); return '/coupons/deals?' + p.toString() + '#sheet-' + (k === 'zv' ? 'zomato' : 'swiggy'); };
   const waiting = gl.filter(r => r.n28 >= 40 && r.agreed == null).sort((a, b) => b.ours28 - a.ours28);
@@ -99,30 +99,13 @@ export default async function DealsPage({ searchParams }: { searchParams: Promis
 
       {[zSheet, sSheet].map(v => v ? <UploadCard key={v.grid.head.platform} v={v} href={(id: number) => keep(v.grid.head.platform === 'zomato' ? 'zv' : 'sv', String(id))} /> : null)}
 
-      {check ? (
-        <div className="card">
-          <h2>Uploaded versus live, Zomato <span className="subtle">{dateLabel(f.from)} to {dateLabel(f.to)}, against the &ldquo;{check.version.label}&rdquo; sheet</span></h2>
-          <p className="note" style={{ marginTop: 0 }}>
-            Across the {check.matched} sheet outlets that match the outlet master: <b>{check.unexpected}</b> constructs fired that the sheet does not list, <b>{check.silent}</b> sheet constructs did not fire.
-            Rows with something to say first.
-          </p>
-          <div className="scroll-x"><table className="sheet">
-            <thead><tr><th>Outlet</th><th>Fired but not in the sheet <span className="tiny">(orders)</span></th><th>In the sheet, did not fire</th></tr></thead>
-            <tbody>{[...check.rows].sort((a, b) => (b.unexpected.length + b.silent.length) - (a.unexpected.length + a.silent.length)).map(r => (
-              <tr key={r.outlet_code}>
-                <td className="name">{r.outlet_code.replace('CC-', '')}</td>
-                <td className="wrap small">{r.unexpected.length ? r.unexpected.slice(0, 6).map((u, i) => <span key={u.construct}>{i ? ', ' : ''}{u.construct} <span className="tiny">({u.n})</span></span>) : <span className="muted">none</span>}</td>
-                <td className="wrap small">{r.silent.length ? r.silent.slice(0, 6).join(', ') : <span className="muted">none</span>}</td>
-              </tr>
-            ))}</tbody>
-          </table></div>
-          <p className="note">
-            Zomato runs an &ldquo;X% upto Y&rdquo; slot as &ldquo;Flat Y, MOV 199&rdquo;, so both sides are compared in that form (60% upto 120 and Flat 120 count as the same coupon).
-            Only constructs with 5+ orders at the outlet count as &ldquo;fired&rdquo;. Outlets are matched on Zomato&rsquo;s restaurant id. Change the dates to check another month against its own sheet.
-            Swiggy has no such check yet: its orders carry the code, not the construct.
-          </p>
-        </div>
-      ) : null}
+      {check ? <CheckCard platform="zomato" check={check} from={f.from} to={f.to} note={<>
+        Zomato runs an &ldquo;X% upto Y&rdquo; slot as &ldquo;Flat Y, MOV 199&rdquo;, so both sides are compared in that form (60% upto 120 and Flat 120 count as the same coupon).
+        Only constructs with 5+ orders at the outlet count as &ldquo;fired&rdquo;. Outlets are matched on Zomato&rsquo;s restaurant id. Change the dates to check another month against its own sheet.</>} /> : null}
+      {sCheck ? <CheckCard platform="swiggy" check={sCheck} from={f.from} to={f.to} note={<>
+        Swiggy prints the coupon code, never what it gives, so each code is matched to the sheet by its value: the most a code gave at that outlet (on at least a tenth of its orders)
+        against the sheet&rsquo;s cap or flat amount (&ldquo;60% upto 120&rdquo; is 120, &ldquo;Flat 150 MOV 499&rdquo; is 150). A code at a value the sheet does not have at that outlet is listed with its value.
+        Only codes with 5+ orders at the outlet count. Outlets are matched on Swiggy&rsquo;s restaurant id.</>} /> : null}
 
       <div className="card">
         <h2>Recent changes</h2>
@@ -149,6 +132,30 @@ async function sheetView(platform: Platform, pick?: string): Promise<SheetView |
   const prev = head.effective_from && !head.superseded_at ? await previousVersion(platform, head.id) : null;
   const [diff, prevGrid] = prev ? await Promise.all([uploadDiff(prev.id, head.id), getUpload(prev.id)]) : [[], null];
   return { grid, versions, prev, prevOutlets: new Set(prevGrid ? prevGrid.rows.map(r => r.outlet_code) : []), diff };
+}
+
+function CheckCard({ platform, check, from, to, note }: { platform: Platform; check: { rows: UploadCheckRow[]; matched: number; unexpected: number; silent: number; version: UploadHead }; from: string; to: string; note: React.ReactNode }) {
+  const name = platform === 'zomato' ? 'Zomato' : 'Swiggy';
+  const what = platform === 'zomato' ? 'constructs' : 'codes';
+  return (
+    <div className="card">
+      <h2>Uploaded versus live: <Tag p={platform} />{name} <span className="subtle">{dateLabel(from)} to {dateLabel(to)}, against the &ldquo;{check.version.label}&rdquo; sheet</span></h2>
+      <p className="note" style={{ marginTop: 0 }}>
+        Across the {check.matched} sheet outlets with orders in the period: <b>{check.unexpected}</b> {what} fired that the sheet does not list, <b>{check.silent}</b> sheet entries did not fire. Rows with something to say first.
+      </p>
+      <div className="scroll-x"><table className="sheet">
+        <thead><tr><th>Outlet</th><th>Fired but not in the sheet <span className="tiny">(orders)</span></th><th>In the sheet, did not fire</th></tr></thead>
+        <tbody>{[...check.rows].sort((a, b) => (b.unexpected.length + b.silent.length) - (a.unexpected.length + a.silent.length)).map(r => (
+          <tr key={r.outlet_code}>
+            <td className="name">{r.outlet_code.replace('CC-', '')}</td>
+            <td className="wrap small">{r.unexpected.length ? r.unexpected.slice(0, 6).map((u, i) => <span key={u.construct}>{i ? ', ' : ''}{u.construct} <span className="tiny">({u.n})</span></span>) : <span className="muted">none</span>}</td>
+            <td className="wrap small">{r.silent.length ? r.silent.slice(0, 6).join(', ') : <span className="muted">none</span>}</td>
+          </tr>
+        ))}</tbody>
+      </table></div>
+      <p className="note">{note}</p>
+    </div>
+  );
 }
 
 function UploadCard({ v, href }: { v: SheetView; href: (id: number) => string }) {
