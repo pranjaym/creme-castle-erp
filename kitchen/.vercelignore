@@ -5,7 +5,10 @@ node_modules
 .env.*.local
 seed_data
 migrations
-scripts
+# scripts/ holds the migration runner and seed tools, which have no place on the
+# web server; the build check is the one file the build itself needs (F63).
+scripts/*
+!scripts/check-gates.mjs
 workers
 tests
 docs
