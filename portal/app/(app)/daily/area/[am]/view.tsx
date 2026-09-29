@@ -23,7 +23,7 @@ const RECONCILE = '<b>Reading this next to Petpooja?</b> Differences are definit
 
 export default async function AreaView({ am, date, latest, user, sp }:
   { am: string; date: string; latest: string; user?: SessionUser | null;
-    sp?: { q?: string; ask?: string; ok?: string; err?: string } }) {
+    sp?: { q?: string; ask?: string; explain?: string; ok?: string; err?: string } }) {
   const all = await getDashAll(date);
   // Questions on this page's rows (migration 234), fetched alongside the two
   // detail calls (the area's codes are already in the network read). Without
@@ -37,7 +37,7 @@ export default async function AreaView({ am, date, latest, user, sp }:
   if (!mine.length) redirect('/daily');
   const areas = aggregateAreas(all.stores);
 
-  const Q = questionKit({ page: 'area', pageDate: date, basePath: `/daily/area/${encodeURIComponent(am)}`, user, qmap });
+  const Q = questionKit({ page: 'area', pageDate: date, basePath: `/daily/area/${encodeURIComponent(am)}`, user, qmap, codes: amCodes });
   const S1 = `Your stores on ${new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
   const S2 = 'Outlets not fully online', S3 = 'Orders turned away because the shop was shut',
     S4 = 'Turned away or cancelled on the store', S4R = 'Cancelled after the rider picked up', S5 = 'Complaints',

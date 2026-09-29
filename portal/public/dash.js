@@ -206,6 +206,8 @@
       set('page', e.page); set('page_date', e.pageDate); set('section', e.section);
       set('platform', e.platform); set('business_date', e.businessDate);
       set('snapshot', JSON.stringify(e.fields)); set('prompt', '');
+      set('what', ''); set('prevention', ''); set('person', '');
+      var cs = tpl.querySelector('select[name="cause"]'); if (cs) cs.value = '';
       var title = tpl.querySelector('[data-qtitle]'); if (title) title.textContent = e.outlet;
       var sec = tpl.querySelector('[data-qsection]'); if (sec) sec.textContent = e.section;
       var body = tpl.querySelector('[data-qfields]');
@@ -219,7 +221,7 @@
         });
       }
       tpl.hidden = false;
-      var ta = tpl.querySelector('textarea[name="prompt"]'); if (ta) ta.focus();
+      var ta = tpl.querySelector('textarea[name="prompt"], textarea[name="what"]'); if (ta) ta.focus();
       return;
     }
     var qc = t.closest('[data-qclose]');

@@ -7,7 +7,7 @@ import StoreView from './view';
 // rendered in a local harness without a session, which is how its design and
 // its data are checked before anything ships. Same split as the central page.
 export default async function StoreDaily({ params, searchParams }:
-  { params: Promise<{ code: string }>; searchParams: Promise<{ date?: string; q?: string; ask?: string; ok?: string; err?: string }> }) {
+  { params: Promise<{ code: string }>; searchParams: Promise<{ date?: string; q?: string; ask?: string; explain?: string; ok?: string; err?: string }> }) {
   const user = await requireAccess(a => a.ownStores);
   const { code: codeRaw } = await params;
   const code = decodeURIComponent(codeRaw);

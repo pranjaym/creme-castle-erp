@@ -17,7 +17,7 @@ const plain = (e: unknown): string => (e instanceof Error ? e.message : String(e
 function withQs(back: string, extra: Record<string, string>): string {
   const [path, qs] = back.split('?');
   const p = new URLSearchParams(qs ?? '');
-  p.delete('ask'); p.delete('ok'); p.delete('err');
+  p.delete('ask'); p.delete('explain'); p.delete('ok'); p.delete('err');
   for (const [k, v] of Object.entries(extra)) p.set(k, v);
   const s = p.toString();
   return s ? `${path}?${s}` : path;
@@ -69,6 +69,28 @@ export async function askQuestion(form: FormData) {
   } catch (e) { redirect(withQs(back, { err: plain(e) })); }
   refresh(back);
   redirect(withQs(back, { q: String(id), ok: 'Asked. It now waits for the area manager.' }));
+}
+
+// The field role starting the record unasked (migration 241, 29 Sep 2026).
+export async function explainQuestion(form: FormData) {
+  const u = await needAnswer();
+  const back = safeBack(str(form.get('back')));
+  const key = str(form.get('anchor_key')); const outlet = str(form.get('outlet'));
+  if (!key || !outlet) redirect(withQs(back, { err: 'No row was posted.' }));
+  if (!inScope(u, outlet)) redirect('/questions');
+  let snapshot: unknown = [];
+  try { snapshot = JSON.parse(str(form.get('snapshot')) ?? '[]'); } catch { snapshot = []; }
+  let id: number;
+  try {
+    const r = await one<{ id: string }>('select ops.explain($1,$2,$3,$4,$5::date,$6,$7,$8,$9,$10::date,$11::jsonb,$12,$13,$14,$15,$16) as id', [
+      u.email, who(u), outlet, str(form.get('page')) ?? 'area', str(form.get('page_date')), str(form.get('section')) ?? '',
+      str(form.get('anchor_type')) ?? 'order', key, str(form.get('platform')), str(form.get('business_date')),
+      JSON.stringify(snapshot), str(form.get('what')), str(form.get('cause')), str(form.get('person')),
+      str(form.get('person_role')), str(form.get('prevention'))]);
+    id = Number(r?.id);
+  } catch (e) { redirect(withQs(back, { err: plain(e) })); }
+  refresh(back);
+  redirect(withQs(back, { q: String(id), ok: 'Recorded. It now waits for central to accept.' }));
 }
 
 export async function answerQuestion(form: FormData) {

@@ -6,10 +6,10 @@
 import Link from 'next/link';
 import { questionPerms, type SessionUser } from '@/lib/session';
 import {
-  getQuestion, getEvents, causes, peopleAt, chipClass, chipLabel, orderKey, dayKey, weekKey,
+  getQuestion, getEvents, causes, peopleAt, peopleAtAny, chipClass, chipLabel, orderKey, dayKey, weekKey,
   type QuestionRow, type Field, type AnchorType,
 } from '@/lib/questions';
-import { RowBox, Thread, Flash, AskForm, AnswerForm, CloseForm, Chip } from '../questions/ui';
+import { RowBox, Thread, Flash, AskForm, ExplainForm, AnswerForm, CloseForm, Chip } from '../questions/ui';
 
 export interface CatalogEntry {
   key: string; anchor_type: AnchorType; outlet: string; page: 'area' | 'store'; pageDate: string;
@@ -26,6 +26,8 @@ export interface Kit {
   week: (outlet: string, weekStart: string, metric: string, section: string, fields: Field[]) => React.ReactNode;
   qmap: Map<string, QuestionRow>;
   canAsk: boolean;
+  canExplain: boolean;   // a field role, on this page's outlets (migration 241)
+  codes: string[];       // the page's outlets, for the people list of the instant drawer
   back: string;
 }
 
@@ -33,10 +35,14 @@ export interface Kit {
 // every link and every form returns to.
 export function questionKit(o: {
   page: 'area' | 'store'; pageDate: string; basePath: string; user?: SessionUser | null;
-  qmap: Map<string, QuestionRow>;
+  qmap: Map<string, QuestionRow>; codes?: string[];
 }): Kit {
   const canAsk = !!o.user && questionPerms(o.user).ask;
   const canSee = !!o.user && questionPerms(o.user).view;
+  const codes = o.codes ?? [];
+  // the field may explain a row on its own outlets only
+  const canExplain = !!o.user && questionPerms(o.user).explain;
+  const mine = (outlet: string) => !!o.user && o.user.outletCodes.includes(outlet);
   const back = `${o.basePath}?date=${o.pageDate}`;
   const catalog: Record<string, CatalogEntry> = {};
   const register: Kit['register'] = (key, e) => { catalog[key] = { key, page: o.page, pageDate: o.pageDate, ...e }; };
@@ -50,11 +56,12 @@ export function questionKit(o: {
     // the router acts on the element before a document-level listener runs,
     // so a Link could not be stopped and the page navigated instead.
     if (canAsk && catalog[key]) return <a className="qask" data-qkey={key} href={`${back}&ask=${encodeURIComponent(key)}`}>Ask</a>;
+    if (canExplain && catalog[key] && mine(catalog[key].outlet)) return <a className="qask" data-qkey={key} href={`${back}&explain=${encodeURIComponent(key)}`}>Explain</a>;
     return null;
   };
   const cell: Kit['cell'] = (key, e) => { register(key, e); return cellFor(key); };
   return {
-    cell, register, cellFor, catalog, qmap: o.qmap, canAsk, back,
+    cell, register, cellFor, catalog, qmap: o.qmap, canAsk, canExplain, codes, back,
     order: (app, oid, outlet, section, businessDate, fields) => {
       if (!oid) return null;
       return cell(orderKey(app, oid), { anchor_type: 'order', outlet, section, platform: app, businessDate, fields });
@@ -104,7 +111,8 @@ export function QuestionsLine({ kit, user, scopeCodes }: { kit: Kit; user?: Sess
     );
     return (
       <li className="qline">
-        <b>{answered.length} answer{answered.length === 1 ? '' : 's'} waiting for your close</b>, {open.length} still open here
+        <b>{answered.length} answer{answered.length === 1 ? '' : 's'} waiting for your close</b>
+        {answered.filter(r => r.started_by_field).length ? <> ({answered.filter(r => r.started_by_field).length} explained unasked)</> : null}, {open.length} still open here
         {overdue.length ? <> (<span className="due">{overdue.length} overdue</span>)</> : null}.
         {' '}{answered.map((r, i) => <span key={r.id}>{i ? ' · ' : ''}{door(r)}</span>)}
       </li>
@@ -122,7 +130,7 @@ export function QuestionsLine({ kit, user, scopeCodes }: { kit: Kit; user?: Sess
 
 // The drawer. Rendered last on the page so the catalog is complete.
 export async function QuestionDrawer({ kit, user, sp }: {
-  kit: Kit; user?: SessionUser | null; sp: { q?: string; ask?: string; ok?: string; err?: string };
+  kit: Kit; user?: SessionUser | null; sp: { q?: string; ask?: string; explain?: string; ok?: string; err?: string };
 }) {
   if (!user || !questionPerms(user).view) return null;
   const p = questionPerms(user);
@@ -144,8 +152,26 @@ export async function QuestionDrawer({ kit, user, sp }: {
     );
   }
 
+  // the field explaining a row unasked (server-rendered fallback of the instant drawer)
+  if (sp.explain) {
+    if (!p.explain) return null;
+    const e = kit.catalog[sp.explain];
+    if (!e || !user.outletCodes.includes(e.outlet)) return null;
+    const live = kit.qmap.get(sp.explain);
+    const [cs, people] = await Promise.all([causes(), peopleAt(e.outlet)]);
+    return (
+      <Drawer closeHref={closeHref} title={e.outlet} sub="Explain this row to central">
+        <Flash ok={sp.ok} err={sp.err} />
+        <RowBox section={e.section} fields={e.fields} />
+        {live && live.status !== 'closed'
+          ? <div className="readonly">There is already a question on this row. <Link href={`${kit.back}&q=${live.id}`}>Open it</Link>.</div>
+          : <ExplainForm entry={e} back={kit.back} causes={cs} people={people} />}
+      </Drawer>
+    );
+  }
+
   const id = Number(sp.q);
-  if (!id) return p.ask ? <AskTemplate kit={kit} /> : null;
+  if (!id) return (p.ask || kit.canExplain) ? <AskTemplate kit={kit} /> : null;
   const r = await getQuestion(id);
   if (!r) return null;
   // scope: a field role sees only its own outlets' questions
@@ -173,10 +199,15 @@ export async function QuestionDrawer({ kit, user, sp }: {
 // once, as JSON, and one hidden drawer with a real AskForm sits ready;
 // dash.js fills it from the clicked row and shows it. The submit is the same
 // server action as before. Without the script the links still work.
-function AskTemplate({ kit }: { kit: Kit }) {
+// For a field role the same hidden drawer carries the Explain form instead
+// (migration 241): the answer boxes, with the people of every outlet on this
+// page in the picker, because an area page spans the area.
+async function AskTemplate({ kit }: { kit: Kit }) {
   const json = JSON.stringify(kit.catalog).replace(/</g, '\\u003c');
   const empty = { key: '', anchor_type: 'order', outlet: '', page: 'area', pageDate: kit.back.split('date=')[1] ?? '', section: '',
     platform: null, businessDate: null, fields: [] as Field[] };
+  const explaining = !kit.canAsk && kit.canExplain;
+  const [cs, people] = explaining ? await Promise.all([causes(), peopleAtAny(kit.codes)]) : [[], []];
   return (
     <>
       <script type="application/json" id="qcatalog" dangerouslySetInnerHTML={{ __html: json }} />
@@ -184,11 +215,13 @@ function AskTemplate({ kit }: { kit: Kit }) {
         <a className="qoverlay" href={kit.back} data-qclose="1" aria-label="Close" />
         <aside className="qdrawer">
           <a className="qd-close" href={kit.back} data-qclose="1" aria-label="Close">&times;</a>
-          <div className="qd-head"><div className="sub">New question to the area manager</div><h3 data-qtitle="1"></h3></div>
+          <div className="qd-head"><div className="sub">{explaining ? 'Explain this row to central' : 'New question to the area manager'}</div><h3 data-qtitle="1"></h3></div>
           <div className="qd-body">
             <div className="qd-row"><div className="qd-sec">The row this question is about</div><div className="qd-sectitle" data-qsection="1"></div>
               <table className="vrow"><tbody data-qfields="1"></tbody></table></div>
-            <AskForm entry={empty} back={kit.back} to="the area manager" />
+            {explaining
+              ? <ExplainForm entry={empty} back={kit.back} causes={cs} people={people} />
+              : <AskForm entry={empty} back={kit.back} to="the area manager" />}
           </div>
         </aside>
       </div>

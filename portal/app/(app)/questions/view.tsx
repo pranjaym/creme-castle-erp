@@ -56,6 +56,7 @@ export default async function QuestionsView({ user, sp }: { user: SessionUser; s
         <div className="k"><div className="l">Answered, waiting close</div><div className="v">{c.answered}</div></div>
         <div className="k"><div className="l">Closed this week</div><div className="v">{c.closed_wk}</div></div>
         <div className="k"><div className="l">Median hours to answer</div><div className="v">{c.median_hours ?? '-'}</div></div>
+        <div className="k"><div className="l">Explained unasked, this week</div><div className="v">{c.explained_wk}</div></div>
       </div>
 
       <form method="get" action={base} className="qtools">
@@ -75,9 +76,11 @@ export default async function QuestionsView({ user, sp }: { user: SessionUser; s
           {cs.map(x => <option key={x.code} value={x.code}>{x.label}</option>)}
         </select>
         {sel('person', f.person, opts.people, 'Anyone')}
+        <Link className={f.explained ? 'rfilter on' : 'rfilter'} href={base + listQs({ ...f, explained: !f.explained })}>Explained unasked</Link>
         {f.newonly ? <input type="hidden" name="new" value="1" /> : null}
+        {f.explained ? <input type="hidden" name="explained" value="1" /> : null}
         <button className="rfilter" type="submit">Apply</button>
-        {(f.status || f.store || f.am || f.section || f.cause || f.person || f.newonly)
+        {(f.status || f.store || f.am || f.section || f.cause || f.person || f.newonly || f.explained)
           ? <Link className="rfilter" href={base}>Clear</Link> : null}
         <a className="rfilter csv" href={'/questions/download' + listQs(f)}>Download CSV</a>
       </form>

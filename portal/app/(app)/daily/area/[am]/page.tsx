@@ -7,7 +7,7 @@ import AreaView from './view';
 // rendered in a local harness without a session, the same split as the store
 // and central pages.
 export default async function AreaDaily({ params, searchParams }:
-  { params: Promise<{ am: string }>; searchParams: Promise<{ date?: string; q?: string; ask?: string; ok?: string; err?: string }> }) {
+  { params: Promise<{ am: string }>; searchParams: Promise<{ date?: string; q?: string; ask?: string; explain?: string; ok?: string; err?: string }> }) {
   // An area page lists every store in the area, so a store account (whose part
   // is its own store) is sent back to its own page. AMs see only their own area.
   const user = await requireAccess(a => a.storeList, '/daily');

@@ -68,6 +68,7 @@ export function questionPerms(u: { role: Role; modules?: string[] }) {
     view: mgmt || field,
     ask: mgmt,
     answer: field,   // the answer is the area manager's (or the store's), never central's
+    explain: field,  // 29 Sep 2026: the field may also start the record, unasked (migration 241)
     close: mgmt,
   };
 }
