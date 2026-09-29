@@ -20,13 +20,13 @@ export async function GET(req: Request) {
   const rows = await listQuestions(u, f, null);
   const head = ['id', 'status', 'asked_by', 'asked_at', 'store', 'area_manager', 'page', 'page_date', 'section', 'platform',
     'business_date', 'row', 'question', 'due_at', 'answered_by', 'answered_at', 'what_happened', 'cause', 'person', 'person_role',
-    'prevention', 'push_backs', 'closed_by', 'closed_at'];
+    'prevention', 'push_backs', 'closed_by', 'closed_at', 'explained_unasked'];
   const lines = [head.join(',')];
   for (const r of rows) {
     lines.push([r.id, statusWord(r), r.raised_by_name ?? r.raised_by, r.raised_at_iso, r.outlet_code, r.am, r.page, r.page_date,
       r.section, r.platform, r.business_date, r.row_snapshot.map(x => `${x.label}: ${x.value}`).join(' | '), r.prompt, r.due_at_iso,
       r.answered_by_name, r.answered_at_iso, r.what_happened, r.cause_label ?? r.cause, r.person_name, r.person_role, r.prevention,
-      r.push_backs, r.closed_by_name, r.closed_at_iso].map(csv).join(','));
+      r.push_backs, r.closed_by_name, r.closed_at_iso, r.started_by_field ? 'yes' : 'no'].map(csv).join(','));
   }
   const name = `questions_${new Date().toISOString().slice(0, 10)}.csv`;
   return new NextResponse('﻿' + lines.join('\n'), { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="${name}"` } });

@@ -8,7 +8,7 @@ import {
   fmtIst, chipClass, chipLabel, statusWord, firstName,
   type QuestionRow, type EventRow, type Field, type Cause, type Person,
 } from '@/lib/questions';
-import { askQuestion, answerQuestion, closeQuestion, pushBackQuestion } from './actions';
+import { askQuestion, answerQuestion, closeQuestion, pushBackQuestion, explainQuestion } from './actions';
 
 export const PERSON_ROLES = ['Staff', 'Store manager', 'Packer', 'Rider', 'Kitchen', 'Other'];
 
@@ -38,8 +38,8 @@ export function Thread({ events }: { events: EventRow[] }) {
       {events.map(e => {
         if (e.action === 'asked') return (
           <div className="ev ask" key={e.id}>
-            <div className="who"><b>{e.actor_name ?? e.actor}</b> asked, {fmtIst(e.at_iso)}</div>
-            <p>{e.note ?? <i>No note, the row is the question.</i>}</p>
+            <div className="who"><b>{e.actor_name ?? e.actor}</b> {e.note === 'Explained without being asked.' ? 'explained this row without being asked' : 'asked'}, {fmtIst(e.at_iso)}</div>
+            {e.note === 'Explained without being asked.' ? null : <p>{e.note ?? <i>No note, the row is the question.</i>}</p>}
           </div>);
         if (e.action === 'answered') return (
           <div className="ev answer" key={e.id}>
@@ -98,11 +98,11 @@ export function AskForm({ entry, back, to }: {
   );
 }
 
-export function AnswerForm({ q, back, causes, people }: { q: QuestionRow; back: string; causes: Cause[]; people: Person[] }) {
+// The answer boxes, shared by AnswerForm (a question central asked) and
+// ExplainForm (the field starting the record itself). Same words both ways.
+function AnswerFields({ outlet, causes, people, listId }: { outlet: string; causes: Cause[]; people: Person[]; listId: string }) {
   return (
-    <form action={answerQuestion} className="qform">
-      <input type="hidden" name="back" value={back} />
-      <input type="hidden" name="id" value={q.id} />
+    <>
       <label>What happened</label>
       <textarea name="what" required />
       <label>What was the cause</label>
@@ -111,9 +111,9 @@ export function AnswerForm({ q, back, causes, people }: { q: QuestionRow; back: 
         {causes.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
       </select>
       <label>Who was involved (optional)</label>
-      <input name="person" list="qpeople" autoComplete="off" placeholder={`Start typing a name at ${q.outlet_code}`} />
-      <datalist id="qpeople">
-        {people.map(p => <option key={p.id} value={p.name}>{p.role}</option>)}
+      <input name="person" list={listId} autoComplete="off" placeholder={outlet ? `Start typing a name at ${outlet}` : 'Start typing a name'} />
+      <datalist id={listId}>
+        {people.map(p => <option key={p.id} value={p.name}>{p.role}{p.outlet_code && p.outlet_code !== outlet ? ` · ${p.outlet_code}` : ''}</option>)}
       </datalist>
       <div className="hint">Pick a name already listed at this store, or type a new one and it is added. Leave it empty if nobody was involved and it was a process problem.</div>
       <label>If this is a new name, their role</label>
@@ -122,6 +122,42 @@ export function AnswerForm({ q, back, causes, people }: { q: QuestionRow; back: 
       </select>
       <label>What you did so it does not repeat</label>
       <textarea name="prevention" required />
+    </>
+  );
+}
+
+// The field role starting the record unasked (migration 241, 29 Sep 2026):
+// the row, the same four answers, and it lands in central's close queue.
+export function ExplainForm({ entry, back, causes, people }: {
+  entry: { key: string; anchor_type: string; outlet: string; page: string; pageDate: string; section: string;
+           platform: string | null; businessDate: string | null; fields: Field[] };
+  back: string; causes: Cause[]; people: Person[];
+}) {
+  return (
+    <form action={explainQuestion} className="qform">
+      <input type="hidden" name="back" value={back} />
+      <input type="hidden" name="anchor_key" value={entry.key} />
+      <input type="hidden" name="anchor_type" value={entry.anchor_type} />
+      <input type="hidden" name="outlet" value={entry.outlet} />
+      <input type="hidden" name="page" value={entry.page} />
+      <input type="hidden" name="page_date" value={entry.pageDate} />
+      <input type="hidden" name="section" value={entry.section} />
+      <input type="hidden" name="platform" value={entry.platform ?? ''} />
+      <input type="hidden" name="business_date" value={entry.businessDate ?? ''} />
+      <input type="hidden" name="snapshot" value={JSON.stringify(entry.fields)} />
+      <AnswerFields outlet={entry.outlet} causes={causes} people={people} listId="qpeople-x" />
+      <div className="hint">Central sees this as waiting for their close, the same as an answer.</div>
+      <button className="qbtn" type="submit">Send explanation to central</button>
+    </form>
+  );
+}
+
+export function AnswerForm({ q, back, causes, people }: { q: QuestionRow; back: string; causes: Cause[]; people: Person[] }) {
+  return (
+    <form action={answerQuestion} className="qform">
+      <input type="hidden" name="back" value={back} />
+      <input type="hidden" name="id" value={q.id} />
+      <AnswerFields outlet={q.outlet_code} causes={causes} people={people} listId="qpeople" />
       <button className="qbtn" type="submit">Send answer to {firstName(q.raised_by_name)}</button>
     </form>
   );
@@ -185,8 +221,17 @@ export function QuestionCard({ r, href, isNew }: { r: QuestionRow; href: string;
         </div>
         <div className="qc-col">
           <h4>Question</h4>
-          <div className="meta"><b>{r.raised_by_name ?? r.raised_by}</b> asked, {fmtIst(r.raised_at_iso)}</div>
-          <p>{r.prompt ?? <i className="dim">No note, the row is the question.</i>}</p>
+          {r.started_by_field ? (
+            <>
+              <div className="meta"><b>{r.raised_by_name ?? r.raised_by}</b> explained this row, {fmtIst(r.raised_at_iso)}</div>
+              <p><span className="ptag">Explained without being asked</span></p>
+            </>
+          ) : (
+            <>
+              <div className="meta"><b>{r.raised_by_name ?? r.raised_by}</b> asked, {fmtIst(r.raised_at_iso)}</div>
+              <p>{r.prompt ?? <i className="dim">No note, the row is the question.</i>}</p>
+            </>
+          )}
           {r.push_backs > 0 ? <div className="meta red">Pushed back {r.push_backs} time{r.push_backs === 1 ? '' : 's'}</div> : null}
         </div>
         <div className="qc-col">

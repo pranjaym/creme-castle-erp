@@ -23,6 +23,7 @@ export interface QuestionRow {
   answered_by_name: string | null; what_happened: string | null; cause: string | null; cause_label: string | null;
   person_name: string | null; person_role: string | null; prevention: string | null;
   closed_by_name: string | null;
+  started_by_field: boolean;   // explained without being asked (migration 241)
   raised_at_iso: string; due_at_iso: string; latest_event_at_iso: string;
   answered_at_iso: string | null; closed_at_iso: string | null;
 }
@@ -44,7 +45,7 @@ export const weekKey = (code: string, weekStart: string, metric: string) => `W:$
 // ---------- reads ----------
 const COLS = `id, raised_by, raised_by_name, outlet_code, am, page, page_date::text as page_date, section, anchor_type, anchor_key,
   platform, business_date::text as business_date, row_snapshot, prompt, status, overdue, push_backs,
-  answered_by_name, what_happened, cause, cause_label, person_name, person_role, prevention, closed_by_name,
+  answered_by_name, what_happened, cause, cause_label, person_name, person_role, prevention, closed_by_name, started_by_field,
   raised_at_iso, due_at_iso, latest_event_at_iso, answered_at_iso, closed_at_iso`;
 
 // The questions a daily page needs: every live one on its outlets, plus the
@@ -78,6 +79,14 @@ export async function causes(): Promise<Cause[]> {
   return q<Cause>('select code, label from ops.cause order by sort');
 }
 
+// Every person at a set of outlets, for the instant Explain drawer on an area
+// page (which spans the area's stores).
+export async function peopleAtAny(codes: string[]): Promise<Person[]> {
+  if (!codes.length) return [];
+  return q<Person>(`select id, name, role, outlet_code from ops.person
+      where outlet_code = any($1::text[]) and active and superseded_by is null order by outlet_code, name`, [codes]);
+}
+
 export async function peopleAt(code: string): Promise<Person[]> {
   return q<Person>(`select id, name, role, outlet_code from ops.person
       where outlet_code = $1 and active and superseded_by is null order by name`, [code]);
@@ -86,14 +95,14 @@ export async function peopleAt(code: string): Promise<Person[]> {
 // ---------- the list page ----------
 export interface ListFilters {
   status: '' | QStatus | 'overdue'; store: string; am: string; section: string; cause: string; person: string;
-  newonly: boolean; q: string;
+  newonly: boolean; explained: boolean; q: string;
 }
 export function parseListFilters(sp: Record<string, string | undefined>): ListFilters {
   const st = sp.status ?? '';
   return {
     status: (['open', 'answered', 'closed', 'overdue'].includes(st) ? st : '') as ListFilters['status'],
     store: sp.store ?? '', am: sp.am ?? '', section: sp.section ?? '', cause: sp.cause ?? '', person: sp.person ?? '',
-    newonly: sp.new === '1', q: sp.q ?? '',
+    newonly: sp.new === '1', explained: sp.explained === '1', q: sp.q ?? '',
   };
 }
 export function listQs(f: ListFilters, extra: Record<string, string | undefined> = {}): string {
@@ -105,6 +114,7 @@ export function listQs(f: ListFilters, extra: Record<string, string | undefined>
   if (f.cause) p.set('cause', f.cause);
   if (f.person) p.set('person', f.person);
   if (f.newonly) p.set('new', '1');
+  if (f.explained) p.set('explained', '1');
   for (const [k, v] of Object.entries(extra)) { if (v) p.set(k, v); else p.delete(k); }
   const s = p.toString();
   return s ? '?' + s : '';
@@ -130,17 +140,19 @@ export async function listQuestions(u: SessionUser, f: ListFilters, lastSeenIso:
   if (f.newonly) {
     if (lastSeenIso) { params.push(lastSeenIso); where.push(`latest_event_at > $${params.length}::timestamptz`); }
   }
+  if (f.explained) where.push('started_by_field');
   const sql = `select ${COLS} from ops.v_question ${where.length ? 'where ' + where.join(' and ') : ''}
     order by case when overdue then 0 when status = 'open' then 1 when status = 'answered' then 2 else 3 end,
              latest_event_at desc limit 500`;
   return q<QuestionRow>(sql, params);
 }
 
-export interface Counts { open: number; overdue: number; answered: number; closed_wk: number; median_hours: number | null }
+export interface Counts { open: number; overdue: number; answered: number; closed_wk: number; median_hours: number | null; explained_wk: number }
 export async function counts(u: SessionUser): Promise<Counts> {
   const codes = scopeCodes(u);
-  const r = await one<{ open: string; overdue: string; answered: string; closed_wk: string; median_hours: string | null }>(
+  const r = await one<{ open: string; overdue: string; answered: string; closed_wk: string; median_hours: string | null; explained_wk: string }>(
     `select count(*) filter (where status = 'open') as open,
+            count(*) filter (where started_by_field and raised_at > now() - interval '7 days') as explained_wk,
             count(*) filter (where overdue) as overdue,
             count(*) filter (where status = 'answered') as answered,
             count(*) filter (where status = 'closed' and closed_at > now() - interval '7 days') as closed_wk,
@@ -150,6 +162,7 @@ export async function counts(u: SessionUser): Promise<Counts> {
   return {
     open: Number(r?.open ?? 0), overdue: Number(r?.overdue ?? 0), answered: Number(r?.answered ?? 0),
     closed_wk: Number(r?.closed_wk ?? 0), median_hours: r?.median_hours == null ? null : Number(r.median_hours),
+    explained_wk: Number(r?.explained_wk ?? 0),
   };
 }
 
@@ -213,7 +226,7 @@ export function ago(iso: string): string {
 }
 export function chipLabel(r: QuestionRow): string {
   if (r.status === 'closed') return 'Closed';
-  if (r.status === 'answered') return `Answered by ${firstName(r.answered_by_name)}`;
+  if (r.status === 'answered') return `${r.started_by_field ? 'Explained' : 'Answered'} by ${firstName(r.answered_by_name)}`;
   if (r.overdue) return `Overdue, asked ${ago(r.raised_at_iso)} ago`;
   return `Asked by ${firstName(r.raised_by_name)}, ${ago(r.raised_at_iso)}`;
 }
