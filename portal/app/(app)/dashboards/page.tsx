@@ -15,12 +15,16 @@ export default async function DashboardsPage() {
       {all.length === 0 ? (
         <div className="empty">
           No dashboards yet. The first one appears here after the next 8 AM run.
+          {' '}<Link href="/dashboards/live">Live status</Link>
         </div>
       ) : (
         <>
           <p style={{ margin: '0 2px 14px' }}>
             <Link className="ghostbtn" href={`/dashboards/${all[0].date}`}>
               Open the latest ({prettyDate(all[0].date)})
+            </Link>
+            <Link className="ghostbtn" href="/dashboards/live" style={{ marginLeft: 8 }}>
+              Live status
             </Link>
           </p>
           <table className="sheet">

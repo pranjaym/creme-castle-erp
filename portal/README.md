@@ -23,6 +23,9 @@ picture.
 - `/login` : the only public page.
 - `/` : home, links to the two features.
 - `/dashboards`, `/dashboards/latest`, `/dashboards/<date>` : archive + viewer.
+- `/dashboards/live` : the Live status wall, the newest spot check the Petpooja robot
+  painted into the `spotcheck-live` bucket (same access as the sales dashboard). See
+  `lib/livewall.ts`. A local run with `LIVE_WALL_AREA=test` reads the robot's test paints.
 - `/reports` + `/reports/download` : pick a report and range, get a CSV.
 
 ## Local run

@@ -92,3 +92,31 @@ reproduces them and the tool is the single source of truth.
 Apply the migration, create the Vercel project + env vars, create the
 `dashboard-html` Storage bucket, and create the user accounts. See the repo
 `HANDOFF.md` and the deploy checklist. Claude builds up to that line.
+
+## Live status wall (1 Oct 2026, Rishabh)
+
+Why: the hourly spot check went out as an email attachment eight times a day. It
+now also lands on one page in the portal, always current, behind the same login
+and role gate as the sales dashboard, so the emails can be stopped.
+
+- **Where:** Daily Sales Dashboard, a "Live status" button next to "Open the
+  latest" (which still opens yesterday's 8 am dashboard, unchanged). Route
+  `/dashboards/live`. Who: Owner and Central Team only (`portalAccess().sales`).
+- **Data:** private spine bucket `spotcheck-live`, created 1 Oct 2026 (HTML and
+  JSON only, 5 MB per file). The Petpooja robot (Rishabh's CC-Server_side, not
+  this repo) uploads each built spot check as
+  `live/<date>/spotcheck_<date>_<HHMMSS>__<machine>.html` and overwrites only the
+  pointer `live/_status.json` (newest file + its schedule hours). Paints are never
+  overwritten or deleted. Test paints go under `test/` and the deployed wall never
+  reads them.
+- **What is shown:** the finished spot check HTML, exactly what Telegram gets. No
+  second calculation of the figures, so the wall cannot disagree with the spot check.
+- **Freshness:** the robot runs only while its computer is on, so the page always
+  says when it was painted and by which computer, and turns red once the next
+  scheduled hour plus 60 minutes has passed with no paint.
+- **Portal stays read only:** the robot writes to Storage directly, the same route
+  `dashboard/auto/run_daily.py` uses for `dashboard-html`.
+- **Rollout:** the robot's ERP wall switch ships Off. Only the main robot computer
+  is set to Live. Telegram and email keep running for 3 to 4 days alongside the
+  wall, then the spot check email is switched off in the robot's control panel.
+
