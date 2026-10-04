@@ -135,6 +135,9 @@ def main():
     # Always filter on the window. Without it a concurrent or earlier pull's report
     # gets picked up and recorded against the wrong window in landing.ingest_runs,
     # which then makes the backfill's resume check skip a month it never loaded.
+    # The match is the start date exactly plus an end inside the range (F66:
+    # Zomato cuts a morning request to the day before yesterday), and the load
+    # below is recorded against the window the mail says it covers.
     links = wait_for_reports(since, len(shapes), timeout_s=args.wait, window=window)
     if len(links) < len(shapes):
         log(f"DEFER: only {len(links)}/{len(shapes)} reports arrived; a later slot retries")
@@ -146,9 +149,9 @@ def main():
         text = H.download_csv(H.presigned_for(key, rtype, SESSION))
         shape = P.detect_shape(text)
         log(f"  fetched {shape:9s} {len(text):>9,} bytes  key={key[:18]}...")
-        csvs.append((shape, text))
+        csvs.append((shape, text, H.served_window(item) or window))
 
-    got = {s for s, _ in csvs}
+    got = {s for s, _, _ in csvs}
     if got != set(shapes):
         log(f"FATAL: expected {sorted(shapes)}, mail delivered {sorted(got)}")
         return 1
@@ -157,8 +160,8 @@ def main():
     total = 0
     try:
         with conn.cursor() as cur:
-            for shape, text in csvs:
-                n, counts = load_csv(cur, shape, text, window)
+            for shape, text, served in csvs:
+                n, counts = load_csv(cur, shape, text, served)
                 total += n
                 log(f"  loaded  {shape:9s} {n:>7,} rows  {counts}")
         conn.commit()

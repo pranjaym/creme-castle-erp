@@ -20,7 +20,7 @@ import imaplib
 import os
 import re
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from email.header import decode_header
 from urllib.parse import parse_qs, urlparse
 
@@ -63,6 +63,37 @@ def _body_text(msg) -> str:
     return "\n".join(out)
 
 
+def window_matches(mail_window, want) -> bool:
+    """Is this report mail the answer to a request for `want`?
+
+    Zomato serves what it has, not what was asked (F66, 4 Oct 2026): a request
+    made before about 10:00 IST for a range ending yesterday comes back with the
+    SAME start and the end cut to the day before, because yesterday's cube is
+    not published yet. The mails arrive within two minutes either way. Matching
+    the window to the exact day therefore threw the delivered reports away, and
+    the morning slot waited 40 minutes for files already in the inbox.
+
+    So: the start must match exactly (that is what still keeps two pulls for
+    different windows, a backfill month or the 31-day ads window, from stealing
+    each other's reports), and the end may fall anywhere inside the requested
+    range. A mail with no readable window never matches."""
+    if not mail_window:
+        return False
+    w1, w2 = str(want[0]), str(want[1])
+    m1, m2 = mail_window
+    return m1 == w1 and w1 <= m2 <= w2
+
+
+def served_window(item):
+    """The (date_from, date_to) a report mail says it covers, or None. This is
+    the window to record against the load: it is what Zomato served, which on a
+    clipped morning request is one day short of what was asked."""
+    w = item.get("window") if item else None
+    if not w:
+        return None
+    return (date.fromisoformat(w[0]), date.fromisoformat(w[1]))
+
+
 def fetch_report_links(since_utc: datetime, host="imap.gmail.com", mailbox="INBOX",
                        window=None):
     """Return [{'received', 'subject', 'tracker', 'window'}] for report mails that
@@ -73,7 +104,8 @@ def fetch_report_links(since_utc: datetime, host="imap.gmail.com", mailbox="INBO
     its own range in the body, so matching on it lets two pulls for different
     windows run at the same time without stealing each other's reports. Without
     it a concurrent run grabs whatever landed first, which matters once a backfill
-    is firing dozens of requests."""
+    is firing dozens of requests. The match itself is window_matches(): same
+    start, end inside the range, because Zomato cuts a morning request short."""
     user = os.environ["CC_MAIL_USER"]
     M = imaplib.IMAP4_SSL(host, 993, timeout=60)
     try:
@@ -99,10 +131,8 @@ def fetch_report_links(since_utc: datetime, host="imap.gmail.com", mailbox="INBO
             body = _body_text(msg)
             wm = WINDOW.search(strip_tags(body))
             mail_window = (wm.group(1), wm.group(2)) if wm else None
-            if window is not None:
-                want = (str(window[0]), str(window[1]))
-                if mail_window != want:
-                    continue
+            if window is not None and not window_matches(mail_window, window):
+                continue
             for m in TRACKER.finditer(body):
                 found.append({"received": received, "subject": subj,
                               "tracker": m.group(0), "window": mail_window})

@@ -22,6 +22,13 @@ and costs about six minutes a night, so being generous is safer than being cleve
 A wide window also removes any dependence on yesterday being materialised: if it is
 not ready, days 2 to 10 still load correctly and yesterday is picked up tomorrow.
 
+F66 (4 Oct 2026): before about 10:00 IST Zomato answers a request ending yesterday
+with the same start and the end cut to the day before, and mails it within two
+minutes. The harvester accepts that (same start, end inside the asked range), the
+load is recorded against the window the mail says it covers, and the run DEFERS so
+a later slot asks again once yesterday is published. Before this the morning slot
+discarded the delivered files and waited 40 minutes for nothing.
+
 EXIT CODES, the house contract (same as workers/zomato-ingest/run_evening.py):
    0  loaded
   75  defer: transport failure, or reports have not arrived yet. No stamp, no
@@ -182,17 +189,25 @@ def main():
         RB.log(f"partial: {len(links)}/{len(shapes)} arrived; loading those and deferring")
 
     conn = L.connect(); conn.autocommit = False
-    total, loaded = 0, []
+    total, loaded, clipped = 0, [], []
     try:
         with conn.cursor() as cur:
             for item in links:
                 key, rtype = H.resolve_tracker(item["tracker"])
                 text = H.download_csv(H.presigned_for(key, rtype, SESSION))
                 shape = P.detect_shape(text)
-                w = next(((a, b) for a, b, sh in plan if shape in sh), (d1, d2))
+                asked = next(((a, b) for a, b, sh in plan if shape in sh), (d1, d2))
+                # F66: record the window Zomato served, not the one asked for. A
+                # morning request is cut to the day before yesterday, and the row
+                # in landing.ingest_runs must say so.
+                w = H.served_window(item) or asked
+                short = w[1] < asked[1]
+                if short:
+                    clipped.append((shape, w[1]))
                 rows, counts = RB.load_csv(cur, shape, text, w)
                 total += rows; loaded.append(shape)
-                RB.log(f"  loaded {shape:9s} {rows:>8,} rows  {counts}")
+                RB.log(f"  loaded {shape:9s} {rows:>8,} rows  {counts}"
+                       + (f"  (served to {w[1]}, asked to {asked[1]})" if short else ""))
         conn.commit()
     except TRANSPORT as e:
         rollback_quietly(conn)
@@ -211,6 +226,11 @@ def main():
             pass
 
     RB.log(f"committed {total:,} rows across {len(loaded)} shapes")
+    if clipped:
+        RB.log(f"DEFER, Zomato cut the range short (F66): yesterday {d2} is not published "
+               f"yet, {', '.join(sorted({s for s, _ in clipped}))} served to "
+               f"{max(e for _, e in clipped)}. Loaded what came; a later slot asks again")
+        return DEFER
     return 0 if len(links) >= len(shapes) else DEFER
 
 
