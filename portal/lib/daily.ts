@@ -377,7 +377,9 @@ export function dShort(iso: string | null | undefined): string {
 //
 // TURNED AWAY. Every reason in the rejection and cancellation lists is already
 // a store-caused one before it reaches the page (Zomato: order_state is not
-// Delivered AND rejected_by = 'Mx rejected', migration 225; Swiggy: the
+// Delivered AND rejected_by = 'Mx rejected', migration 225, AND a rejection
+// reason or rejection time is present, migration 243, because Zomato files a
+// delivered advance order as not delivered with neither (F68); Swiggy: the
 // restaurant-driven cancellations only, migration 213), so the whole of that
 // list is the store's. The three that matter most, in Pranjay's words: shop
 // closed, unable to connect, items out of stock.
