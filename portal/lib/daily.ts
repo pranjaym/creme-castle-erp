@@ -4,6 +4,7 @@
 // in the database. Ranks and area rollups are simple arithmetic done here.
 import 'server-only';
 import { cache } from 'react';
+import { unstable_cache } from 'next/cache';
 import { spine } from '@/lib/supabase/service';
 import { portalAccess, type SessionUser } from '@/lib/session';
 
@@ -74,17 +75,35 @@ export interface StoreReasons {
   comps?: number; wrong?: number; missing?: number; packaging?: number; quality?: number; late?: number;
 }
 
-async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
+async function rpcLive<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await spine().rpc(fn, args);
   if (error) throw new Error(`${fn} failed: ${error.message}`);
   return data as T;
+}
+
+// The page functions are cached for ten minutes ACROSS requests (6 Oct 2026,
+// Pranjay: "the whole data change of page is also slow"). Each costs a
+// quarter to three quarters of a second in the database and the pages read
+// settled days, which change once a morning when the pulls land, so a
+// ten-minute-old answer is the same answer. Flipping between days or stores
+// then costs one read the first time and nothing after. The latest date is
+// cached for five minutes. Questions are never cached: they change on every
+// write and are read separately.
+const rpcCached = unstable_cache(
+  async (fn: string, args: Record<string, unknown>) => rpcLive<unknown>(fn, args),
+  ['dash-rpc'], { revalidate: 600 });
+const latestCached = unstable_cache(
+  async () => rpcLive<string>('dash_latest_date', {}),
+  ['dash-latest'], { revalidate: 300 });
+async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
+  return (await rpcCached(fn, args)) as T;
 }
 
 // Deduped per request (React cache, 26 Sep 2026): the page gate and the view
 // both need the latest date and the network read, and each network read is
 // half a second. One call per request, not two.
 export const getLatestDate = cache(async function getLatestDate(): Promise<string> {
-  return rpc<string>('dash_latest_date', {});
+  return latestCached();
 });
 
 // Clean-day score: complaints % + rejections % + offline penalty; lower is

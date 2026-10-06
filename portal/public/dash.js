@@ -224,12 +224,40 @@
       var ta = tpl.querySelector('textarea[name="prompt"], textarea[name="what"]'); if (ta) ta.focus();
       return;
     }
-    var qc = t.closest('[data-qclose]');
-    if (qc) {
-      var tpl2 = document.getElementById('qask-tpl');
-      if (tpl2 && !tpl2.hidden) { ev.preventDefault(); tpl2.hidden = true; }
+    // A question chip or a "waiting" door: the thread is already on the page,
+    // hidden; show it. No navigation, so no scroll to the top and no filter
+    // reset (6 Oct 2026). Falls through to the link when it is not there.
+    var qd = t.closest('[data-qid]');
+    if (qd) {
+      var th2 = document.getElementById('qthread-' + qd.dataset.qid);
+      if (!th2) return;
+      ev.preventDefault();
+      hideDrawers();
+      th2.hidden = false;
+      var body = th2.querySelector('.qd-body'); if (body) body.scrollTop = 0;
       return;
     }
+    var qc = t.closest('[data-qclose]');
+    if (qc) {
+      if (!$$('.qwrap').some(function (w) { return !w.hidden; })) return;   // nothing open: let the link go
+      ev.preventDefault();
+      hideDrawers();
+      tidyUrl();
+      return;
+    }
+  });
+
+  function hideDrawers() { $$('.qwrap').forEach(function (w) { w.hidden = true; }); }
+  // After a form submit the page comes back with ?q=<id> and the drawer open;
+  // closing it must drop that from the address, or a reload reopens it.
+  function tidyUrl() {
+    var u = new URL(location.href);
+    var had = false;
+    ['q', 'ask', 'explain', 'ok', 'err'].forEach(function (k) { if (u.searchParams.has(k)) { u.searchParams.delete(k); had = true; } });
+    if (had && window.__ccReplaceState) window.__ccReplaceState(history.state, '', u.pathname + (u.search || '') + u.hash);
+  }
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && $$('.qwrap').some(function (w) { return !w.hidden; })) { hideDrawers(); tidyUrl(); }
   });
 
   function cellKey(td) {
@@ -353,6 +381,9 @@
     [0, 120, 400, 1000].forEach(function (ms) { setTimeout(render, ms); });
   }
 
+  // kept before wrapping: the question drawers tidy the URL with it, and
+  // that must NOT count as a navigation (it would reset the filters)
+  window.__ccReplaceState = history.replaceState.bind(history);
   ['pushState', 'replaceState'].forEach(function (k) {
     var orig = history[k];
     if (typeof orig !== 'function') return;

@@ -75,6 +75,23 @@ export async function getEvents(id: number): Promise<EventRow[]> {
       person_name, person_role, prevention, note from ops.v_event where question_id = $1 order by at, id`, [id]);
 }
 
+// The trails of every question on a page, in one read, so each can sit
+// hidden on the page and open on the spot (6 Oct 2026).
+// Keyed by the id AS TEXT: bigint ids arrive from pg as strings, and a Map
+// keyed by Number would miss every lookup made with the row's own id.
+export async function getEventsFor(ids: (number | string)[]): Promise<Map<string, EventRow[]>> {
+  const m = new Map<string, EventRow[]>();
+  if (!ids.length) return m;
+  const rows = await q<EventRow & { question_id: string }>(`select question_id, id, at_iso, actor, actor_name, action, what_happened, cause, cause_label,
+      person_name, person_role, prevention, note from ops.v_event where question_id = any($1::bigint[]) order by question_id, at, id`, [ids]);
+  for (const r of rows) {
+    const k = String(r.question_id);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k)!.push(r);
+  }
+  return m;
+}
+
 export async function causes(): Promise<Cause[]> {
   return q<Cause>('select code, label from ops.cause order by sort');
 }
