@@ -12,10 +12,13 @@ import { askQuestion, answerQuestion, closeQuestion, pushBackQuestion, explainQu
 
 export const PERSON_ROLES = ['Staff', 'Store manager', 'Packer', 'Rider', 'Kitchen', 'Other'];
 
+// With an href the chip is a plain anchor carrying the question id: dash.js
+// opens the thread that is already on the page, and only without the script
+// does the browser follow the link to the server-rendered drawer.
 export function Chip({ r, href }: { r: QuestionRow; href?: string }) {
   const inner = <><span className="dot" />{chipLabel(r)}</>;
   return href
-    ? <Link className={`qchip ${chipClass(r)}`} href={href}>{inner}</Link>
+    ? <a className={`qchip ${chipClass(r)}`} data-qid={r.id} href={href}>{inner}</a>
     : <span className={`qchip ${chipClass(r)}`}>{inner}</span>;
 }
 
@@ -157,7 +160,7 @@ export function AnswerForm({ q, back, causes, people }: { q: QuestionRow; back: 
     <form action={answerQuestion} className="qform">
       <input type="hidden" name="back" value={back} />
       <input type="hidden" name="id" value={q.id} />
-      <AnswerFields outlet={q.outlet_code} causes={causes} people={people} listId="qpeople" />
+      <AnswerFields outlet={q.outlet_code} causes={causes} people={people} listId={`qpeople-${q.id}`} />
       <button className="qbtn" type="submit">Send answer to {firstName(q.raised_by_name)}</button>
     </form>
   );

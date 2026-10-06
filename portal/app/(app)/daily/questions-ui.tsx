@@ -6,8 +6,8 @@
 import Link from 'next/link';
 import { questionPerms, type SessionUser } from '@/lib/session';
 import {
-  getQuestion, getEvents, causes, peopleAt, peopleAtAny, chipClass, chipLabel, orderKey, dayKey, weekKey,
-  type QuestionRow, type Field, type AnchorType,
+  getQuestion, getEvents, getEventsFor, causes, peopleAt, peopleAtAny, chipClass, chipLabel, orderKey, dayKey, weekKey,
+  type QuestionRow, type EventRow, type Field, type AnchorType, type Cause, type Person,
 } from '@/lib/questions';
 import { RowBox, Thread, Flash, AskForm, ExplainForm, AnswerForm, CloseForm, Chip } from '../questions/ui';
 
@@ -98,7 +98,7 @@ export function QuestionsLine({ kit, user, scopeCodes }: { kit: Kit; user?: Sess
   const answered = mine.filter(r => r.status === 'answered');
   const p = questionPerms(user);
   const door = (r: QuestionRow) => (
-    <Link key={r.id} href={`${kit.back}&q=${r.id}`}>{r.outlet_code.replace(/^CC-/, '')}: {r.section.toLowerCase()}</Link>
+    <a key={r.id} data-qid={r.id} href={`${kit.back}&q=${r.id}`}>{r.outlet_code.replace(/^CC-/, '')}: {r.section.toLowerCase()}</a>
   );
   if (p.ask) {
     if (!answered.length && !open.length) return null;
@@ -171,17 +171,56 @@ export async function QuestionDrawer({ kit, user, sp }: {
   }
 
   const id = Number(sp.q);
-  if (!id) return (p.ask || kit.canExplain) ? <AskTemplate kit={kit} /> : null;
+  if (!id) {
+    // No drawer asked for by the URL: the Ask/Explain template, plus every
+    // question on this page as a hidden drawer with its full trail, so a chip
+    // opens it on the spot with no page load (6 Oct 2026, Pranjay: clicking a
+    // chip scrolled the page to the top and reset the store-mistake filter,
+    // and closing took as long as a page load).
+    const all = [...kit.qmap.values()];
+    const [evmap, cs, people] = await Promise.all([getEventsFor(all.map(r => r.id)), causes(), peopleAtAny(kit.codes)]);
+    return (
+      <>
+        {(p.ask || kit.canExplain) ? <AskTemplate kit={kit} /> : null}
+        {all.map(r => (
+          <div key={r.id} id={`qthread-${r.id}`} className="qwrap" hidden>
+            <Drawer closeHref={closeHref} title={r.outlet_code} sub={subFor(r)} chip={<span className={`qchip ${chipClass(r)}`}><span className="dot" />{chipLabel(r)}</span>}>
+              <ThreadBody r={r} events={evmap.get(String(r.id)) ?? []} cs={cs} people={people.filter(x => x.outlet_code === r.outlet_code)} user={user} kit={kit} />
+            </Drawer>
+          </div>
+        ))}
+      </>
+    );
+  }
   const r = await getQuestion(id);
   if (!r) return null;
   // scope: a field role sees only its own outlets' questions
   if ((user.role === 'area_manager' || user.role === 'store') && !user.outletCodes.includes(r.outlet_code)) return null;
   const [events, cs, people] = await Promise.all([getEvents(id), causes(), peopleAt(r.outlet_code)]);
+  return (
+    <div className="qwrap">
+      <Drawer closeHref={closeHref} title={r.outlet_code} sub={subFor(r)}
+        chip={<span className={`qchip ${chipClass(r)}`}><span className="dot" />{chipLabel(r)}</span>}>
+        <Flash ok={sp.ok} err={sp.err} />
+        <ThreadBody r={r} events={events} cs={cs} people={people} user={user} kit={kit} />
+      </Drawer>
+    </div>
+  );
+}
+
+function subFor(r: QuestionRow): string {
+  return `Question #${r.id} · due ${new Date(r.due_at_iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })}`;
+}
+
+// The inside of a question's drawer: the row, the trail, and whichever form
+// this person may use. Shared by the server-rendered drawer and the hidden
+// ones on the page.
+function ThreadBody({ r, events, cs, people, user, kit }:
+  { r: QuestionRow; events: EventRow[]; cs: Cause[]; people: Person[]; user: SessionUser; kit: Kit }) {
+  const p = questionPerms(user);
   const answerable = p.answer && (user.role === 'admin' || user.outletCodes.includes(r.outlet_code)) && r.status === 'open';
   return (
-    <Drawer closeHref={closeHref} title={r.outlet_code} sub={`Question #${r.id} · due ${new Date(r.due_at_iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })}`}
-      chip={<span className={`qchip ${chipClass(r)}`}><span className="dot" />{chipLabel(r)}</span>}>
-      <Flash ok={sp.ok} err={sp.err} />
+    <>
       <RowBox section={r.section} fields={r.row_snapshot} />
       <Thread events={events} />
       {answerable ? <AnswerForm q={r} back={kit.back} causes={cs} people={people} /> : null}
@@ -189,7 +228,7 @@ export async function QuestionDrawer({ kit, user, sp }: {
       {!answerable && !p.close && r.status === 'answered'
         ? <div className="readonly">Sent. Waiting for {r.raised_by_name ?? 'central'} to accept or push back.</div> : null}
       {r.status === 'closed' ? <div className="readonly">Closed. The trail stays here for good; nothing is ever deleted.</div> : null}
-    </Drawer>
+    </>
   );
 }
 
@@ -211,7 +250,7 @@ async function AskTemplate({ kit }: { kit: Kit }) {
   return (
     <>
       <script type="application/json" id="qcatalog" dangerouslySetInnerHTML={{ __html: json }} />
-      <div id="qask-tpl" hidden>
+      <div id="qask-tpl" className="qwrap" hidden>
         <a className="qoverlay" href={kit.back} data-qclose="1" aria-label="Close" />
         <aside className="qdrawer">
           <a className="qd-close" href={kit.back} data-qclose="1" aria-label="Close">&times;</a>
@@ -229,13 +268,16 @@ async function AskTemplate({ kit }: { kit: Kit }) {
   );
 }
 
+// Overlay and close are plain anchors: dash.js hides the drawer on the spot
+// and tidies the URL; without the script the link reloads the page without
+// the drawer, which is the same thing one page load later.
 export function Drawer({ closeHref, title, sub, chip, children }:
   { closeHref: string; title: string; sub: string; chip?: React.ReactNode; children: React.ReactNode }) {
   return (
     <>
-      <Link className="qoverlay" href={closeHref} aria-label="Close" />
+      <a className="qoverlay" href={closeHref} data-qclose="1" aria-label="Close" />
       <aside className="qdrawer">
-        <Link className="qd-close" href={closeHref} aria-label="Close">&times;</Link>
+        <a className="qd-close" href={closeHref} data-qclose="1" aria-label="Close">&times;</a>
         <div className="qd-head">
           {chip ?? <div className="sub">{sub}</div>}
           <h3>{title}</h3>
