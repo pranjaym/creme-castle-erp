@@ -391,18 +391,20 @@ const MISTAKE_WORDS = [
   'wrong item', 'missing',
   // Zomato rejection reasons marked Mx rejected
   'out of stock', 'kitchen is full', 'is closed', 'timeout', 'device issue',
-  'wrong restaurant address',
   // Swiggy restaurant-driven cancellation sub-dispositions
   'unavailable', 'not available', 'item oos', 'closed for', 'not accepting',
   'unable to connect',
 ];
 
-// Two reasons carry a store word but are not the store's doing, so they are
+// Three reasons carry a store word but are not the store's doing, so they are
 // named here rather than left to a substring to get wrong.
 //   "Unavailable to accept the order" is Zomato's post-pickup CUSTOMER
 //     cancellation, never a store rejection (F49, 9 Sep 2026).
 //   "Ordered the wrong item" is the customer saying they ordered wrong.
-const NOT_MISTAKE = ['unavailable to accept', 'ordered the wrong item'];
+//   "Wrong restaurant address" is Zomato cancelling because the rider could
+//     not find the store, after the store had accepted (Pranjay, 5 Oct 2026:
+//     "Thats not a store mistake"; the page functions drop it, migration 244).
+const NOT_MISTAKE = ['unavailable to accept', 'ordered the wrong item', 'wrong restaurant address'];
 
 // What KIND of thing went wrong, which is what the chip's colour says. Kept
 // separate from isStoreMistake() on purpose (Pranjay, 18 Sep 2026: "why the
@@ -424,8 +426,7 @@ export function reasonFamily(text?: string | null): string {
       || t.includes('not available') || t.includes('item oos')) return 'stock';
   if (t.includes('closed') || t.includes('not accepting')
       || t.includes('kitchen is full')) return 'shut';
-  if (t.includes('wrong item') || t.includes('missing')
-      || t.includes('wrong restaurant address')) return 'hand';
+  if (t.includes('wrong item') || t.includes('missing')) return 'hand';
   if (t.includes('unable to connect') || t.includes('device')
       || t.includes('timeout')) return 'tech';
   if (t.includes('packag') || t.includes('spill')) return 'packing';
