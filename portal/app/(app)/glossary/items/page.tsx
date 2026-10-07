@@ -12,7 +12,7 @@ import ItemRow from '../ItemRow';
 export const dynamic = 'force-dynamic';
 
 const OCCASIONS = ['Rakhi', 'Christmas', 'Valentine', 'Friendship Day', "Mother's Day",
-                   "Father's Day", 'Diwali', 'New Year', 'Holi'];
+                   "Father's Day", 'Diwali', 'New Year', 'Holi', "Teacher's Day", 'Janmashtami'];
 
 function rs(n: number | null | undefined): string {
   if (!n) return '0';
