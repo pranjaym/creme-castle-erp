@@ -1,7 +1,9 @@
 """Phase 2: fetch the Swiggy Daily-MTD mail from Gmail and load it.
 
-Chain: aashuraj.hassani@swiggy.in mails the xlsx daily (to pranjay@, which is
-CC_MAIL_USER, since 24 Aug 2026) at an UNRELIABLE hour (10:30 to 20:45 IST
+Chain: Swiggy mails the xlsx daily (to pranjay@, which is CC_MAIL_USER, since
+24 Aug 2026; from aashuraj.hassani@ until the Sep-30 file, from
+siddharth.singh_ch@external.swiggy.in from the Oct-07 file, 8 Oct 2026, both
+accepted, see SENDERS) at an UNRELIABLE hour (10:30 to 20:45 IST
 observed), so launchd runs this on an evening ladder plus a next-morning
 catch-up (14:00, 18:00, 21:30, 07:15; in.cremecastle.swiggy.plist). The MTD
 file restates the whole month, so a missed day heals itself on the next load.
@@ -38,7 +40,10 @@ from run_file import load_path
 HERE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVE = os.path.join(HERE, "archive")
 IST = timezone(timedelta(hours=5, minutes=30))
-SENDER = "aashuraj.hassani@swiggy.in"
+# Swiggy changed the sending address on 8 Oct 2026 (Aashuraj moved to CC) and
+# the loader missed the file until it was loaded by hand. Both are accepted;
+# Pranjay's go, 8 Oct 2026. Exactly two: the IMAP search below is one OR.
+SENDERS = ("aashuraj.hassani@swiggy.in", "siddharth.singh_ch@external.swiggy.in")
 SUBJECT_DATE = re.compile(r"Daily-MTD - ([A-Z][a-z]{2}-\d{2}-\d{4})")
 LOOKBACK_DAYS = 5
 LAST_SLOT_HOUR = 21     # after this hour IST, a stale feed alerts instead of deferring
@@ -99,7 +104,7 @@ def fetch_mails():
     try:
         M.login(user, pw)
         M.select("INBOX", readonly=True)
-        typ, data = M.search(None, f'(FROM "{SENDER}" SINCE {since})')
+        typ, data = M.search(None, f'(OR FROM "{SENDERS[0]}" FROM "{SENDERS[1]}" SINCE {since})')
         for num in data[0].split():
             typ, d = M.fetch(num, "(RFC822)")
             msg = email.message_from_bytes(d[0][1])
@@ -221,7 +226,8 @@ def main():
             alert("Swiggy daily feed is stale",
                   f"Last evening slot and the newest loaded Swiggy report day is {newest} "
                   f"(target {yesterday}). The MTD self-heal has already missed a cycle. "
-                  f"Check the mail from {SENDER} in {os.environ.get('CC_MAIL_USER','the inbox')} "
+                  f"Check the mail from {' or '.join(SENDERS)} in {os.environ.get('CC_MAIL_USER','the inbox')} "
+                  f"(a third sender means Swiggy changed it again: add it to SENDERS) "
                   f"and run kitchen/workers/swiggy-ingest/run_daily.py by hand. "
                   f"Before acting, check whether a later slot already succeeded (F23).")
             return 1
