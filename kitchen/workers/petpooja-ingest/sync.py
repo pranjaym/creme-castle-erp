@@ -60,8 +60,20 @@ SYNC_REPORTS = {
                      "delivery_charge", "container_charge", "item_total",
                      "item_quantity", "item_price", "item_name"},
         "window_days": 7,
+        # F72 (10 Oct 2026): one bill can carry the same item, price and quantity on
+        # two separate lines. The table numbers them (line_no 1, 2, ...) so the second
+        # line is kept; before migration 245 the unique rules silently dropped it.
+        "line_no": True,
     },
 }
+
+
+class InsertShortfall(Exception):
+    """Raised by summarise() when rows a sync tried to insert did not all land.
+
+    F72: for 2.5 months the item sync logged duplicate lines as inserted while the
+    database's unique rules quietly skipped them. A row that fails to save must now
+    reach the owner alert, never just a log line."""
 
 
 # ---------------------------------------------------------------- normalising
@@ -138,13 +150,17 @@ def keyed_map(records, key_cols, get):
     and quantity twice on one invoice: seen on 24 Jul). Those rows are real and must
     not collapse into one, so the second occurrence becomes '<key>#2', the third
     '#3', and so on. Because both sides are built in a stable order, the Nth
-    duplicate in the source lines up with the Nth in the spine."""
+    duplicate in the source lines up with the Nth in the spine.
+
+    Each record also carries its plain key ('_base') and its ordinal ('_line'), so
+    callers never have to parse the '#n' suffix back out of a key string."""
     out, seen = {}, {}
     for r in records:
         rec = get(r)
         k = key_of(rec, key_cols)
         n = seen.get(k, 0) + 1
         seen[k] = n
+        rec["_base"], rec["_line"] = k, n
         out[k if n == 1 else f"{k}#{n}"] = rec
     return out
 
@@ -169,19 +185,66 @@ def fully_covered_days(days_present):
 
 def _fetch_spine_day(cur, spec, business_date):
     """Current (non voided) spine rows for one day, keyed the same way as the source.
-    Ordered by id so duplicate-line numbering is stable across runs."""
+    Ordered by id (line_no first where the table has one) so duplicate-line numbering
+    is stable across runs and the Nth stored line meets the Nth source line."""
     cols = spec["cols"]
+    lines = spec.get("line_no", False)
     cur.execute(
-        f"select id, {', '.join(cols)} from {spec['table']} "
-        f"where business_date = %s and voided_at is null order by id", (business_date,))
+        f"select id, {'line_no, ' if lines else ''}{', '.join(cols)} from {spec['table']} "
+        f"where business_date = %s and voided_at is null "
+        f"order by {'line_no, ' if lines else ''}id", (business_date,))
     rows = cur.fetchall()
 
     def build(row):
-        rec = dict(zip(cols, row[1:]))
+        rec = dict(zip(cols, row[2:] if lines else row[1:]))
         rec["_id"] = row[0]
+        rec["_line_no"] = row[1] if lines else 1
         return rec
 
     return keyed_map(rows, spec["key_cols"], build)
+
+
+def _insert_new(cur, spec, business_date, run_id, src, spine, new_keys):
+    """Insert the source rows under new_keys and report what actually landed.
+
+    Returns (landed_keys, shortfall). Every insert goes through here so the count of
+    rows saved is always checked against the count attempted (F72): `on conflict do
+    nothing` is kept for idempotency, but a skipped row is now counted, not lost.
+
+    On a table with line numbers, a new line takes its ordinal among identical lines
+    as its line_no, unless a live row already holds that number (possible after a
+    void), in which case it takes the lowest free one."""
+    if not new_keys:
+        return [], 0
+    cols = spec["cols"]
+    lines = spec.get("line_no", False)
+    used = {}
+    for d in spine.values():
+        used.setdefault(d["_base"], set()).add(d["_line_no"])
+    chosen = {}
+    for k in new_keys:
+        taken = used.setdefault(src[k]["_base"], set())
+        n = src[k]["_line"]
+        if n in taken:
+            n = next(i for i in range(1, len(taken) + 2) if i not in taken)
+        taken.add(n)
+        chosen[k] = n
+
+    extra = ["line_no"] if lines else []
+    payload = [[run_id, business_date, *[src[k].get(c) for c in cols], *([chosen[k]] if lines else []),
+                ingest.row_hash([business_date] + [src[k].get(c) for c in cols])]
+               for k in new_keys]
+    back = spec["key_cols"] + extra
+    saved = execute_values(cur,
+        f"insert into {spec['table']} (ingest_run_id, business_date, "
+        f"{', '.join(cols + extra)}, row_hash) values %s on conflict do nothing "
+        f"returning {', '.join(back)}", payload, page_size=1000, fetch=True)
+    nk = len(spec["key_cols"])
+    landed_ids = {(key_of(dict(zip(spec["key_cols"], row[:nk])), spec["key_cols"]),
+                   row[nk] if lines else 1) for row in saved}
+    landed = [k for k in new_keys
+              if (src[k]["_base"], chosen[k] if lines else 1) in landed_ids]
+    return landed, len(new_keys) - len(saved)
 
 
 def sync_day(cur, report, spec, business_date, source_recs, run_id, partial=False):
@@ -202,24 +265,17 @@ def sync_day(cur, report, spec, business_date, source_recs, run_id, partial=Fals
     if len(src) != len(source_recs):
         return {"verdict": "aborted_key_collision", "src": len(source_recs),
                 "spine": None, "inserted": 0, "corrected": 0, "voided": 0,
-                "material": 0, "verify_count": 0,
+                "material": 0, "verify_count": 0, "shortfall": 0,
                 "note": f"{len(source_recs) - len(src)} source rows share a natural key"}
 
     # A partial day: insert anything genuinely new, then stop. Never judge it.
     if partial:
         spine = _fetch_spine_day(cur, spec, business_date)
         new_keys = [k for k in src if k not in spine]
-        if new_keys:
-            payload = [[run_id, business_date, *[src[k].get(c) for c in cols],
-                        ingest.row_hash([business_date] + [src[k].get(c) for c in cols])]
-                       for k in new_keys]
-            execute_values(cur,
-                f"insert into {spec['table']} (ingest_run_id, business_date, "
-                f"{', '.join(cols)}, row_hash) values %s on conflict do nothing",
-                payload, page_size=1000)
+        landed, shortfall = _insert_new(cur, spec, business_date, run_id, src, spine, new_keys)
         return {"verdict": "partial", "src": len(src), "spine": len(spine),
-                "inserted": len(new_keys), "corrected": 0, "voided": 0,
-                "material": 0, "verify_count": 0}
+                "inserted": len(landed), "corrected": 0, "voided": 0,
+                "material": 0, "verify_count": 0, "shortfall": shortfall}
 
     checksum = day_checksum(list(src.values()), cols)
 
@@ -237,7 +293,7 @@ def sync_day(cur, report, spec, business_date, source_recs, run_id, partial=Fals
                     (business_date,))
         return {"verdict": "confirmed", "src": len(src), "spine": fp[0],
                 "inserted": 0, "corrected": 0, "voided": 0, "material": 0,
-                "verify_count": fp[2] + 1}
+                "verify_count": fp[2] + 1, "shortfall": 0}
 
     # 2. Fingerprint differs (or first sight): diff row by row on the natural key.
     spine = _fetch_spine_day(cur, spec, business_date)
@@ -252,7 +308,7 @@ def sync_day(cur, report, spec, business_date, source_recs, run_id, partial=Fals
         if len(missing) > max(25, int(0.05 * len(spine))):
             return {"verdict": "aborted_mass_void", "src": len(src),
                     "spine": len(spine), "inserted": 0, "corrected": 0, "voided": 0,
-                    "material": 0, "verify_count": 0,
+                    "material": 0, "verify_count": 0, "shortfall": 0,
                     "note": f"{len(missing)} of {len(spine)} spine rows absent from the "
                             f"pull; treating the pull as incomplete"}
 
@@ -260,18 +316,13 @@ def sync_day(cur, report, spec, business_date, source_recs, run_id, partial=Fals
     changes = []
 
     new_keys = [k for k in src if k not in spine]
-    if new_keys:
-        payload = [[run_id, business_date, *[src[k].get(c) for c in cols],
-                    ingest.row_hash([business_date] + [src[k].get(c) for c in cols])]
-                   for k in new_keys]
-        execute_values(cur,
-            f"insert into {spec['table']} (ingest_run_id, business_date, "
-            f"{', '.join(cols)}, row_hash) values %s "
-            f"on conflict do nothing", payload, page_size=1000)
-        inserted = len(new_keys)
-        if not first_load:
-            changes += [(run_id, report, business_date, k, "inserted", None, None, None, True)
-                        for k in new_keys]
+    landed, shortfall = _insert_new(cur, spec, business_date, run_id, src, spine, new_keys)
+    inserted = len(landed)
+    if not first_load:
+        # Only rows that actually landed are recorded as inserted (F72: 71 records
+        # written before 245 describe inserts the unique rules had skipped).
+        changes += [(run_id, report, business_date, k, "inserted", None, None, None, True)
+                    for k in landed]
 
     for k, s in src.items():
         d = spine.get(k)
@@ -322,7 +373,12 @@ def sync_day(cur, report, spec, business_date, source_recs, run_id, partial=Fals
         "last_verified_at=now(), verify_count=landing.spine_day_fingerprints.verify_count+1, "
         "last_changed_at=case when %s then now() "
         "else landing.spine_day_fingerprints.last_changed_at end",
-        (report, business_date, len(src), checksum, changed and not first_load, changed))
+        # row_count is what the spine HOLDS. Before F72 it stored the source count, so
+        # a day short by a skipped line passed the fast path on every later morning.
+        # A shortfall now leaves the count short, the fast path fails, and the day is
+        # re-diffed (and re-alerted) until it is whole.
+        (report, business_date, len(src) - shortfall, checksum,
+         changed and not first_load, changed))
 
     if first_load:
         verdict = "first_load"
@@ -335,7 +391,46 @@ def sync_day(cur, report, spec, business_date, source_recs, run_id, partial=Fals
     return {"verdict": verdict,
             "src": len(src), "spine": len(spine), "inserted": inserted,
             "corrected": corrected, "voided": voided, "material": material,
-            "verify_count": 1}
+            "verify_count": 1, "shortfall": shortfall}
+
+
+def add_missing_duplicates(cur, report, business_date, source_recs, run_id=None):
+    """F72 repair: add ONLY the identical repeat lines the spine lost, nothing else.
+
+    A line is added when the source holds more copies of a natural key than the spine
+    has live rows for it AND the spine already holds that key at least once. Keys the
+    spine lacks entirely are counted as 'other' and left alone: they are not the F72
+    case, and an old file may simply be an earlier version of the day. Nothing is
+    corrected or voided, so an old day's other differences (the F71 'persons' change,
+    say) are never touched.
+
+    run_id=None is a dry run: nothing is written, the would-be rows are only counted.
+    Returns a dict with lines, units and value (item_total) added, plus 'other'."""
+    spec = SYNC_REPORTS[report]
+    cols = spec["cols"]
+    src = keyed_map(source_recs, spec["key_cols"], lambda r: dict(zip(cols, r["values"])))
+    spine = _fetch_spine_day(cur, spec, business_date)
+    have = {d["_base"] for d in spine.values()}
+    missing = [k for k in src if k not in spine]
+    dupes = [k for k in missing if src[k]["_line"] >= 2 and src[k]["_base"] in have]
+    out = {"business_date": business_date, "src": len(src), "spine": len(spine),
+           "lines": len(dupes), "other": len(missing) - len(dupes), "shortfall": 0,
+           "units": sum(Decimal(_canonical_number(str(src[k].get("item_quantity"))) or "0")
+                        for k in dupes),
+           "value": sum(Decimal(_canonical_number(str(src[k].get("item_total"))) or "0")
+                        for k in dupes),
+           "landed": []}
+    if run_id is not None and dupes:
+        landed, out["shortfall"] = _insert_new(cur, spec, business_date, run_id, src, spine, dupes)
+        out["landed"] = landed
+        if landed:
+            execute_values(cur,
+                "insert into landing.spine_row_changes (ingest_run_id, report_key, "
+                "business_date, natural_key, change_type, column_name, old_value, "
+                "new_value, is_material) values %s",
+                [(run_id, report, business_date, k, "inserted", None, None,
+                  "F72 repair: repeat line restored", True) for k in landed])
+    return out
 
 
 def sync_file(conn, report, path, run_id=None):
@@ -387,6 +482,9 @@ def sync_file(conn, report, path, run_id=None):
                          f"{r['voided']} voided, {r['material']} material)")
             print(f"  {day}: {mark}  source={r['src']} spine={r['spine']}"
                   f" verified x{r['verify_count']}{extra}")
+        if r.get("shortfall"):
+            print(f"  {day}: SHORTFALL  {r['shortfall']} row(s) did not save "
+                  f"(the owner alert fires after the run)")
 
     cur.execute("update landing.ingest_runs set status='loaded', finished_at=now() "
                 "where id=%s", (run_id,))
@@ -408,7 +506,19 @@ def sync_report(conn, report, days):
 
 
 def summarise(results):
-    """One-line human summary, and the material changes worth surfacing."""
+    """One-line human summary, and the material changes worth surfacing.
+
+    Raises InsertShortfall if any row failed to save. Every caller passes through here
+    after its files are synced (all of them are committed by then), so this is the one
+    place that turns a skipped row into an error: in run_daily.py that error becomes
+    the owner alert, here in main() a traceback."""
+    short = [r for r in results if r.get("shortfall")]
+    if short:
+        raise InsertShortfall(
+            f"{sum(r['shortfall'] for r in short)} row(s) did not save: "
+            + ", ".join(f"{r['report']} {r['business_date']} ({r['shortfall']})"
+                        for r in short)
+            + ". Check the unique rules on the landing table (F72).")
     if not results:
         return "no days verified", []
     conf = [r for r in results if r["verdict"] == "confirmed"]

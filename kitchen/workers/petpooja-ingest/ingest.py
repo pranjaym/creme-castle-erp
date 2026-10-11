@@ -482,6 +482,33 @@ def dry_run_report(report, records, skipped):
     print("  no database connection opened, nothing written.")
 
 
+def line_numbers(report, records):
+    """F72: the line number of each record, or None for a report without them.
+
+    Within one business day, the Nth record with the same natural key is line N, the
+    same numbering sync.keyed_map gives, so a row loaded here and the same row met by
+    the morning sync agree on which line it is. Note this loads every row a file holds;
+    the F72 repair of old days uses sync.add_missing_duplicates instead, which adds
+    only the lost repeat lines."""
+    import sync   # imported here: sync imports this module when it loads
+    spec = sync.SYNC_REPORTS.get(report)
+    if not spec or not spec.get("line_no"):
+        return None
+    cols = REPORTS[report]["cols"]
+    by_day = {}
+    for i, r in enumerate(records):
+        by_day.setdefault(r["business_date"], []).append(i)
+    out = [None] * len(records)
+    for idxs in by_day.values():
+        keyed = sync.keyed_map(idxs, spec["key_cols"],
+                               lambda i: dict(zip(cols, records[i]["values"]), _i=i))
+        if len(keyed) != len(idxs):
+            raise ValueError("natural keys collide after numbering; refusing to load")
+        for rec in keyed.values():
+            out[rec["_i"]] = rec["_line"]
+    return out
+
+
 def load_records(report, records, skipped, conn, receipt):
     """Insert parsed records into landing, idempotently. Links the raw receipt
     (sha256, storage path) and the derived business-day window onto the run row."""
@@ -503,12 +530,25 @@ def load_records(report, records, skipped, conn, receipt):
     # seconds, not one network round-trip per row. `returning 1` with fetch=True gives
     # an accurate count of rows actually inserted (conflicts are skipped).
     from psycopg2.extras import execute_values
-    insert = (
-        f"insert into {spec['table']} "
-        f"(ingest_run_id, business_date, {', '.join(cols)}, row_hash) values %s "
-        f"on conflict (business_date, row_hash) do nothing returning 1"
-    )
-    payload = [[run_id, r["business_date"], *r["values"], r["row_hash"]] for r in records]
+    lines = line_numbers(report, records)
+    if lines is None:
+        insert = (
+            f"insert into {spec['table']} "
+            f"(ingest_run_id, business_date, {', '.join(cols)}, row_hash) values %s "
+            f"on conflict (business_date, row_hash) do nothing returning 1"
+        )
+        payload = [[run_id, r["business_date"], *r["values"], r["row_hash"]] for r in records]
+    else:
+        # F72: identical repeat lines share a row_hash, so the line number is part of
+        # the idempotency key; the unique rules ignore voided rows (migration 245).
+        insert = (
+            f"insert into {spec['table']} "
+            f"(ingest_run_id, business_date, {', '.join(cols)}, line_no, row_hash) values %s "
+            f"on conflict (business_date, row_hash, line_no) where voided_at is null "
+            f"do nothing returning 1"
+        )
+        payload = [[run_id, r["business_date"], *r["values"], n, r["row_hash"]]
+                   for r, n in zip(records, lines)]
     inserted = execute_values(cur, insert, payload, page_size=1000, fetch=True) if payload else []
     loaded = len(inserted)
 
