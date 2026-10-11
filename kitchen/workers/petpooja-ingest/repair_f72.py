@@ -82,7 +82,13 @@ def fetch_receipt(storage_path, cache):
 
 def stored_plan(cur):
     """{storage_path: [days]}: for each day before CUTOFF, the receipt of the run that
-    loaded most of its live rows. Days whose loading run kept no file are reported."""
+    loaded most of its live rows. Days whose loading run kept no file are reported.
+
+    Only the standard Petpooja item report (.csv) is re-read here. Jan 2025 to Feb 2026
+    and 31 Mar to 23 Jun 2026 were loaded from Pranjay's Excel exports by one-off
+    scripts with their own value handling (historical-data-backfill); re-parsing those
+    differently could mis-number lines, so their days are listed for a fresh Petpooja
+    pull instead (--pull --from --to), which reads the same .csv format as every day."""
     cur.execute("""
         with c as (
           select business_date, ingest_run_id,
@@ -94,13 +100,15 @@ def stored_plan(cur):
         select c.business_date, r.raw_file_path
         from c join landing.ingest_runs r on r.id = c.ingest_run_id
         where c.rk = 1 order by 1""", (CUTOFF,))
-    plan, orphans = {}, []
+    plan, orphans, exports = {}, [], {}
     for day, path in cur.fetchall():
-        if path:
+        if not path:
+            orphans.append(day)
+        elif path.lower().endswith(".csv"):
             plan.setdefault(path, []).append(day)
         else:
-            orphans.append(day)
-    return plan, orphans
+            exports.setdefault(path, []).append(day)
+    return plan, orphans, exports
 
 
 def short_days(cur):
@@ -232,6 +240,10 @@ def main():
     ap.add_argument("--stored", action="store_true", help="days before 21 Jul 2026, stored files")
     ap.add_argument("--pull", action="store_true", help="short days from 21 Jul 2026, Petpooja")
     ap.add_argument("--apply", action="store_true", help="write (default: dry run)")
+    ap.add_argument("--from", dest="date_from",
+                    help="with --pull: every day from this date (YYYY-MM-DD), for the "
+                         "periods loaded from Excel exports; default is the short days")
+    ap.add_argument("--to", dest="date_to", help="with --pull --from: last day (inclusive)")
     ap.add_argument("--cache", default=os.path.join(tempfile.gettempdir(), "f72_repair_cache"),
                     help="folder for downloaded files, reused between dry run and --apply")
     args = ap.parse_args()
@@ -245,10 +257,13 @@ def main():
     shortfall = 0
     try:
         if args.stored:
-            plan, orphans = stored_plan(conn.cursor())
+            plan, orphans, exports = stored_plan(conn.cursor())
             conn.rollback()
             print(f"\n[stored] {sum(len(d) for d in plan.values())} day(s) in {len(plan)} "
-                  f"stored file(s); {len(orphans)} day(s) with no stored file")
+                  f"stored report file(s); {len(orphans)} day(s) with no stored file")
+            for path, days in sorted(exports.items(), key=lambda kv: min(kv[1])):
+                print(f"  NOT re-read here, needs --pull --from {min(days)} --to {max(days)}: "
+                      f"{len(days)} day(s) loaded from {os.path.basename(path)[65:]}")
             results = []
             for path, days in sorted(plan.items(), key=lambda kv: min(kv[1])):
                 print(f"\n{path}  ({min(days)} to {max(days)}, {len(days)} day(s))")
@@ -258,9 +273,15 @@ def main():
         if args.pull:
             from scrape import scrape_and_download
             import ingest
-            days = short_days(conn.cursor())
-            conn.rollback()
-            print(f"\n[pull] {len(days)} short day(s) from {CUTOFF}")
+            if args.date_from:
+                lo = dt.date.fromisoformat(args.date_from)
+                hi = dt.date.fromisoformat(args.date_to or args.date_from)
+                days = [lo + dt.timedelta(days=i) for i in range((hi - lo).days + 1)]
+                print(f"\n[pull] every day from {lo} to {hi} ({len(days)} day(s))")
+            else:
+                days = short_days(conn.cursor())
+                conn.rollback()
+                print(f"\n[pull] {len(days)} short day(s) from {CUTOFF}")
             results = []
             for frm, to, targets in windows(days):
                 name = f"f72_items_{frm}_{to}.csv"
