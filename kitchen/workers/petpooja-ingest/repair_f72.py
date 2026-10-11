@@ -282,20 +282,30 @@ def main():
                 days = short_days(conn.cursor())
                 conn.rollback()
                 print(f"\n[pull] {len(days)} short day(s) from {CUTOFF}")
-            results = []
+            results, failed = [], []
             for frm, to, targets in windows(days):
                 name = f"f72_items_{frm}_{to}.csv"
                 local = os.path.join(args.cache, name)
                 print(f"\nPetpooja item report {frm} to {to} for {len(targets)} day(s)")
                 if not os.path.exists(local):
-                    got = scrape_and_download(REPORT, from_date=frm.isoformat(),
-                                              to_date=to.isoformat(), max_retries=1)
+                    try:
+                        got = scrape_and_download(REPORT, from_date=frm.isoformat(),
+                                                  to_date=to.isoformat(), max_retries=1)
+                    except Exception as e:
+                        # Petpooja is sometimes too slow to build a report. Skip the
+                        # window, keep going; a re-run reuses every file already pulled.
+                        print(f"  SKIPPED, download failed: {type(e).__name__}: {str(e)[:120]}")
+                        failed.append(f"{frm} to {to}")
+                        continue
                     shutil.move(got, local)
                 else:
                     print(f"  using the file pulled earlier: {local}")
                 receipt = ingest.store_receipt(local) if args.apply else None
                 results += repair_days(conn, local, targets, args.apply, receipt)
             shortfall += report(results, "[pull] total")
+            if failed:
+                print(f"[pull] {len(failed)} window(s) not downloaded, re-run to finish: "
+                      + "; ".join(failed))
         if args.apply:
             append_core_items(conn)
     finally:
