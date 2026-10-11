@@ -28,6 +28,12 @@ ITEM_COLS = ["restaurant_name", "invoice_no", "date", "area", "status", "item_na
 # (restaurant, invoice, item) is the natural key; Actial Date (a normalised YYYY-MM-DD
 # string in both paths) disambiguates and stays format-stable.
 ITEM_KEY = ["restaurant_name", "invoice_no", "item_name", "Actial Date"]
+# F72 (11 Oct 2026): ITEM_KEY alone merged two lines of one bill whenever they named the
+# same item (two Chocolate Truffle Cakes on separate lines, or one item at two prices):
+# 12 lines and Rs 3,641 over 6 to 10 Oct 2026. Lines are now told apart by price and
+# quantity too, and identical repeats by their order within the pull (_line).
+ITEM_LINE_KEY = ["restaurant_name", "invoice_no", "item_name", "item_price",
+                 "item_quantity", "Actial Date"]
 ORDER_KEY = "Aggregator Order No."
 
 
@@ -118,15 +124,53 @@ def append_orders(new_df):
     return df
 
 
+def _with_line(df):
+    """Number identical lines within one frame: 1, 2, ... in row order."""
+    keyframe = pd.DataFrame({c: _key_str(df[c]) for c in ITEM_LINE_KEY})
+    line = keyframe.groupby(ITEM_LINE_KEY, sort=False, dropna=False).cumcount() + 1
+    return df.assign(_line=line.values)
+
+
+def merge_items(base, new_df):
+    """Fold one pull into the item history (F72, 11 Oct 2026).
+
+    A business day strictly inside the pull is complete in it (the first and last day
+    of any pull are cut by the 04:00 rule), so the pull REPLACES that day wholesale:
+    the history then holds exactly the latest truth for it, repeat lines included.
+    On the two edge days the history keeps what it holds and takes the pull's version
+    of each line, telling lines apart by ITEM_LINE_KEY plus their order (_line), so
+    two identical lines of one bill both survive. Days the pull does not touch are
+    left alone. Each morning's yesterday is an inside day, so every day is replaced
+    whole at least once.
+
+    Guard (the spine's GUARD 2): an inside day whose pull holds fewer than 95% of the
+    lines the history already has for it is treated as an edge day, so a cut-off pull
+    can add lines but never wipe good history."""
+    new_day = _key_str(new_df["Actial Date"])
+    base_day = _key_str(base["Actial Date"])
+    days = sorted(new_day.unique())
+    held, pulled = base_day.value_counts(), new_day.value_counts()
+    inner = {d for d in days[1:-1] if pulled[d] >= 0.95 * held.get(d, 0)}
+    edge = set(days) - inner
+    untouched = base[~base_day.isin(set(days))]
+    edge_rows = pd.concat([_with_line(base[base_day.isin(edge)]),
+                           _with_line(new_df[new_day.isin(edge)])], ignore_index=True)
+    edge_rows = _dedup(edge_rows, ITEM_LINE_KEY + ["_line"]).drop(columns="_line")
+    merged = pd.concat([untouched, edge_rows, new_df[new_day.isin(inner)]], ignore_index=True)
+    return merged, len(inner)
+
+
 def append_items(new_enriched_df):
     keep = [c for c in ITEM_COLS if c in new_enriched_df.columns]
     new_df = new_enriched_df[keep].copy()
     base = pd.read_parquet(ITEMS_PARQUET) if os.path.exists(ITEMS_PARQUET) else None
-    df = pd.concat([base, new_df], ignore_index=True) if base is not None else new_df
-    df = _dedup(df, ITEM_KEY)
+    if base is None or new_df.empty:
+        df, replaced = (new_df if base is None else base), 0
+    else:
+        df, replaced = merge_items(base, new_df)
     _parquet_safe(df).to_parquet(ITEMS_PARQUET, index=False)
     added = len(df) - (len(base) if base is not None else 0)
-    print(f"items history: {len(df):,} rows (+{max(added,0)} new)")
+    print(f"items history: {len(df):,} rows ({added:+,} net, {replaced} day(s) replaced whole)")
     return df
 
 
