@@ -300,7 +300,14 @@ def main():
                     shutil.move(got, local)
                 else:
                     print(f"  using the file pulled earlier: {local}")
-                receipt = ingest.store_receipt(local) if args.apply else None
+                receipt = None
+                if args.apply:
+                    try:
+                        receipt = ingest.store_receipt(local)
+                    except Exception as e:
+                        # The receipt is provenance, not data: a Wi-Fi drop on the upload
+                        # must not stop the repair. The run row then carries no file path.
+                        print(f"  receipt not stored ({type(e).__name__}); repairing anyway")
                 results += repair_days(conn, local, targets, args.apply, receipt)
             shortfall += report(results, "[pull] total")
             if failed:
