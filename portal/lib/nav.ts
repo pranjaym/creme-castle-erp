@@ -33,6 +33,9 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
       title: 'Store Performance',
       items: [
         { href: '/daily/central', label: 'All Stores Overview' },
+        // The central work queue (14 Oct 2026): every issue row across the
+        // network with the question loop on it. Only for those who may ask.
+        ...(acc.questions.ask ? [{ href: '/daily/issues', label: 'Issues to Ask' }] : []),
         { href: '/areas', label: 'Area Managers' },
         { href: '/stores', label: 'Store Pages' },
       ],

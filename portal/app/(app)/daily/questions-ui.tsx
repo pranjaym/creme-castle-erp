@@ -12,7 +12,7 @@ import {
 import { RowBox, Thread, Flash, AskForm, ExplainForm, AnswerForm, CloseForm, Chip } from '../questions/ui';
 
 export interface CatalogEntry {
-  key: string; anchor_type: AnchorType; outlet: string; page: 'area' | 'store'; pageDate: string;
+  key: string; anchor_type: AnchorType; outlet: string; page: 'area' | 'store' | 'issues'; pageDate: string;
   section: string; platform: 'Z' | 'S' | null; businessDate: string | null; fields: Field[];
 }
 
@@ -29,12 +29,13 @@ export interface Kit {
   canExplain: boolean;   // a field role, on this page's outlets (migration 241)
   codes: string[];       // the page's outlets, for the people list of the instant drawer
   back: string;
+  pageDate: string;      // the page's selected day, which every ask records as page_date
 }
 
 // One kit per page render. `back` is the page's own URL (path + date), which
 // every link and every form returns to.
 export function questionKit(o: {
-  page: 'area' | 'store'; pageDate: string; basePath: string; user?: SessionUser | null;
+  page: 'area' | 'store' | 'issues'; pageDate: string; basePath: string; user?: SessionUser | null;
   qmap: Map<string, QuestionRow>; codes?: string[];
 }): Kit {
   const canAsk = !!o.user && questionPerms(o.user).ask;
@@ -61,7 +62,7 @@ export function questionKit(o: {
   };
   const cell: Kit['cell'] = (key, e) => { register(key, e); return cellFor(key); };
   return {
-    cell, register, cellFor, catalog, qmap: o.qmap, canAsk, canExplain, codes, back,
+    cell, register, cellFor, catalog, qmap: o.qmap, canAsk, canExplain, codes, back, pageDate: o.pageDate,
     order: (app, oid, outlet, section, businessDate, fields) => {
       if (!oid) return null;
       return cell(orderKey(app, oid), { anchor_type: 'order', outlet, section, platform: app, businessDate, fields });
@@ -243,7 +244,7 @@ function ThreadBody({ r, events, cs, people, user, kit }:
 // page in the picker, because an area page spans the area.
 async function AskTemplate({ kit }: { kit: Kit }) {
   const json = JSON.stringify(kit.catalog).replace(/</g, '\\u003c');
-  const empty = { key: '', anchor_type: 'order', outlet: '', page: 'area', pageDate: kit.back.split('date=')[1] ?? '', section: '',
+  const empty = { key: '', anchor_type: 'order', outlet: '', page: 'area', pageDate: kit.pageDate, section: '',
     platform: null, businessDate: null, fields: [] as Field[] };
   const explaining = !kit.canAsk && kit.canExplain;
   const [cs, people] = explaining ? await Promise.all([causes(), peopleAtAny(kit.codes)]) : [[], []];
