@@ -182,6 +182,27 @@ def sha_already_loaded(path):
         conn.close()
 
 
+
+def refresh_issues(conn, log):
+    """Rebuild the last ten days of public.dash_issue (migration 247), the table
+    behind the Issues to Ask page, now that fresh rows have landed. Ten days
+    because Zomato restates to T-3 and the evening feed lags a day. A failure
+    here is logged and never fails the pull: the page would only be a day stale."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("set local statement_timeout = 0")
+            cur.execute("select public.dash_issue_refresh(current_date - 10, current_date)")
+            n = cur.fetchone()[0]
+        conn.commit()
+        log(f"issues table refreshed: {n} rows for the last ten days")
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        log(f"issues table refresh skipped: {type(e).__name__}: {str(e)[:200]}")
+
+
 def main():
     L.load_env_file(os.path.join(HERE, "..", "..", ".env.local"))
     now = datetime.now(IST)
@@ -209,6 +230,8 @@ def main():
                         cur.execute("set local statement_timeout = 0")
                         cur.execute("refresh materialized view concurrently core.mv_swiggy_outlet_codes")
                 log("outlet map refreshed")
+                conn.commit()   # the map refresh is safe before the issues rebuild starts
+                refresh_issues(conn, log)
             finally:
                 conn.close()
 

@@ -70,6 +70,27 @@ def wait_for_reports(since_utc, expect, timeout_s=1800, poll_s=60, window=None):
     return seen
 
 
+
+def refresh_issues(conn, log):
+    """Rebuild the last ten days of public.dash_issue (migration 247), the table
+    behind the Issues to Ask page, now that fresh rows have landed. Ten days
+    because Zomato restates to T-3 and the evening feed lags a day. A failure
+    here is logged and never fails the pull: the page would only be a day stale."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("set local statement_timeout = 0")
+            cur.execute("select public.dash_issue_refresh(current_date - 10, current_date)")
+            n = cur.fetchone()[0]
+        conn.commit()
+        log(f"issues table refreshed: {n} rows for the last ten days")
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        log(f"issues table refresh skipped: {type(e).__name__}: {str(e)[:200]}")
+
+
 def load_csv(cur, shape, csv_text, run_window):
     """Parse one CSV by shape and load it. Returns (rows_loaded, counts)."""
     d1, d2 = run_window
@@ -163,6 +184,7 @@ def main():
                 log(f"  loaded  {shape:9s} {n:>7,} rows  {counts}")
         conn.commit()
         log(f"committed, {total:,} rows")
+        refresh_issues(conn, log)
         return 0
     except TRANSPORT as e:
         conn.rollback(); log(f"DEFER, transport: {type(e).__name__}: {e}"); return DEFER
