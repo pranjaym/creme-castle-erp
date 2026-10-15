@@ -9,7 +9,7 @@ import {
 } from '@/lib/issues';
 import { questionKit, QuestionDrawer } from '../questions-ui';
 import { DashScript } from '../ui';
-import { Flash } from '../../questions/ui';
+import { Flash, Chip } from '../../questions/ui';
 import { askMany, closeMany } from './actions';
 
 // "Issues to Ask", the central work queue (team prototype 14 Oct 2026, built on
@@ -53,9 +53,23 @@ export default async function IssuesView({ user, sp }: { user: SessionUser; sp: 
   const base = '/daily/issues';
   const here = base + issueQs(f);
   const p = questionPerms(user);
-  const kit = questionKit({ page: 'issues', pageDate: f.to, basePath: base, user, qmap, codes });
+  // The kit gets only the questions whose rows are on the page. The drawer
+  // renders every question in the kit as a hidden thread, and the outlet-wide
+  // map holds every live question on these outlets plus 30 days of closed
+  // ones (about 250 for the network), which made a one-day page 1.6 MB of
+  // HTML (measured 15 Oct 2026). Statuses above still use the full map.
+  // Within that, only the threads waiting on central are pre-rendered hidden
+  // (those are the ones central opens); an open or closed thread opens through
+  // its link, one page load, which is what every chip did before 6 Oct. And
+  // only rows nobody has asked about go into the instant-ask catalogue, since
+  // only they carry an Ask link. Measured 15 Oct: 30 days fell from 4.7 MB to
+  // well under half; one day to a third.
+  const onPage = new Map<string, QuestionRow>();
+  for (const r of rows) { const qr = qmap.get(r.anchor_key); if (qr && qr.status === 'answered') onPage.set(r.anchor_key, qr); }
+  const kit = questionKit({ page: 'issues', pageDate: f.to, basePath: base, user, qmap: onPage, codes });
   kit.back = here;
   for (const r of rows) {
+    if (qmap.has(r.anchor_key)) continue;
     kit.register(r.anchor_key, { anchor_type: r.order_id ? 'order' : 'outlet_day', outlet: r.outlet_code, section: sectionOf(r),
       platform: r.platform, businessDate: r.business_date, fields: issueFields(r) });
   }
@@ -219,7 +233,7 @@ export default async function IssuesView({ user, sp }: { user: SessionUser; sp: 
                                 {r.customer_asked ? <span className="askedfor">Asked for: {r.customer_asked}</span> : null}
                                 {r.customer_words ? <span className="words">&ldquo;{r.customer_words}&rdquo;</span> : null}
                               </td>
-                              <td className="status">{s === 'none' ? <span className="qchip none"><span className="dot" />Not asked</span> : kit.cellFor(r.anchor_key)}</td>
+                              <td className="status">{s === 'none' ? <span className="qchip none"><span className="dot" />Not asked</span> : qr ? <Chip r={qr} href={`${here}${amp}q=${qr.id}`} /> : null}</td>
                               <td className="acts">
                                 {s === 'none' ? kit.cellFor(r.anchor_key) : null}
                                 {qr && qr.status !== 'closed' && p.close ? <a className="qask" data-qid={qr.id} href={`${here}${amp}q=${qr.id}`}>Close</a> : null}
