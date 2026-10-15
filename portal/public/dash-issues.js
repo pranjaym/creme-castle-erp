@@ -37,7 +37,9 @@
     var a = document.getElementById('ibulk-askbtn'); if (a) a.disabled = !askable;
     var c = document.getElementById('ibulk-closebtn'); if (c) c.disabled = !closable;
     var h = document.getElementById('ibulk-hint');
-    if (h) h.textContent = sel.length ? askable + ' can be asked (not asked yet), ' + closable + ' can be closed.' : '';
+    var answered = sel.filter(function (b) { return b.dataset.status === 'answered' || b.dataset.status === 'unasked'; }).length;
+    var waiting = sel.filter(function (b) { return b.dataset.status === 'open' || b.dataset.status === 'overdue'; }).length;
+    if (h) h.textContent = sel.length ? askable + ' not asked yet (Ask raises a question on each). Close: ' + answered + ' explanation' + (answered === 1 ? '' : 's') + ' accepted, ' + waiting + ' open question' + (waiting === 1 ? '' : 's') + ' closed unanswered, ' + askable + ' marked seen.' : '';
   }
 
   document.addEventListener('change', function (ev) {
@@ -77,7 +79,13 @@
     var f = ev.target;
     if (!(f instanceof HTMLFormElement) || (f.id !== 'ibulk-ask' && f.id !== 'ibulk-close')) return;
     var keys = f.querySelector('input[name="keys"]');
-    if (!keys || !keys.value) { ev.preventDefault(); sync(); }
+    if (!keys || !keys.value) { ev.preventDefault(); sync(); return; }
+    // one post per click: a second click while the first is in flight sent the
+    // same 71 rows twice on 15 Oct 2026 (F75). The server now ignores a repeat
+    // as well; this stops it leaving the browser.
+    if (f.dataset.posting === '1') { ev.preventDefault(); return; }
+    f.dataset.posting = '1';
+    [].forEach.call(f.querySelectorAll('button[type="submit"]'), function (b) { b.disabled = true; b.textContent = 'Working...'; });
   });
 
   sync();
