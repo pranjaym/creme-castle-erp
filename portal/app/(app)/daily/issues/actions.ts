@@ -58,6 +58,12 @@ async function rowsFor(keys: string[]): Promise<Map<string, IssueRow>> {
 async function liveQuestion(key: string): Promise<{ id: string; status: string } | null> {
   return one<{ id: string; status: string }>("select id::text as id, status from ops.question where anchor_key = $1 and status <> 'closed'", [key]);
 }
+// A row whose last question is already closed needs nothing from a Close: the
+// same selection posted twice on 15 Oct 2026 made 71 duplicate "seen" records
+// (F75) because this check was missing.
+async function closedQuestion(key: string): Promise<{ id: string } | null> {
+  return one<{ id: string }>("select id::text as id from ops.question where anchor_key = $1 and status = 'closed' order by id desc limit 1", [key]);
+}
 const askArgs = (u: SessionUser, r: IssueRow, pageDate: string, prompt: string | null) => [
   u.email, who(u), r.outlet_code, 'issues', pageDate, sectionOf(r),
   r.order_id ? 'order' : 'outlet_day', r.anchor_key, r.platform, r.business_date,
@@ -108,6 +114,7 @@ export async function closeMany(form: FormData) {
         await q('select ops.close($1,$2,$3,$4)', [live.id, u.email, who(u), note]);
         closed++; continue;
       }
+      if (await closedQuestion(key)) { skipped++; continue; }   // already closed: a repeat post, nothing to do
       const r = rows.get(key);
       if (!r) { skipped++; continue; }
       await tx(async (c) => {
@@ -119,5 +126,5 @@ export async function closeMany(form: FormData) {
     }
   } catch (e) { redirect(withQs(back, { err: plain(e) })); }
   refresh(back);
-  redirect(withQs(back, { ok: `Closed ${closed + seen} row${closed + seen === 1 ? '' : 's'}${seen ? ` (${seen} marked seen, no explanation needed)` : ''}${skipped ? `, ${skipped} not on the page` : ''}.` }));
+  redirect(withQs(back, { ok: `Closed ${closed + seen} row${closed + seen === 1 ? '' : 's'}${closed ? ` (${closed} explanation${closed === 1 ? '' : 's'} accepted)` : ''}${seen ? ` (${seen} marked seen, no explanation needed)` : ''}${skipped ? `, ${skipped} already closed or not on the page` : ''}.` }));
 }
