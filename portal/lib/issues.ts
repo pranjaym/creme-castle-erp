@@ -14,6 +14,7 @@ export interface IssueRow {
   issue_type: 'Online visibility' | 'Complaint' | 'Rejection'; issue_kind: string; detail: string | null;
   order_id: string | null; order_time: string | null; basket: string | null;
   value: number | null; refund: number | null; customer_words: string | null; customer_asked: string | null;
+  must_answer: boolean;   // migration 248: central expects an explanation (the 30-minute floors and the tablet rule)
   city: string; am: string; locality: string | null; region: string;
 }
 
@@ -23,6 +24,7 @@ export interface IssueFilters {
   region: string; city: string; am: string; store: string;
   plat: '' | 'Z' | 'S'; type: '' | IssueRow['issue_type'];
   status: '' | 'none' | 'open' | 'overdue' | 'answered' | 'unasked' | 'closed';
+  must: boolean;   // only the must-answer rows
 }
 export const STATUS_WORDS: Record<Exclude<IssueFilters['status'], ''>, string> = {
   none: 'Not asked yet', open: 'Asked, waiting', overdue: 'Overdue', answered: 'Explained, waiting for close',
@@ -50,6 +52,7 @@ export function parseIssueFilters(sp: Record<string, string | undefined>, latest
     plat: plat === 'Z' || plat === 'S' ? plat : '',
     type: ['Online visibility', 'Complaint', 'Rejection'].includes(type) ? (type as IssueRow['issue_type']) : '',
     status: (status in STATUS_WORDS) ? (status as IssueFilters['status']) : '',
+    must: s('must') === '1',
   };
 }
 
@@ -60,6 +63,7 @@ export function issueQs(f: IssueFilters, extra: Record<string, string> = {}): st
   if (f.days !== '1') p.set('days', f.days);
   if (f.days === 'custom') { p.set('from', f.from); p.set('to', f.to); }
   for (const k of ['region', 'city', 'am', 'store', 'plat', 'type', 'status'] as const) if (f[k]) p.set(k, f[k]);
+  if (f.must) p.set('must', '1');
   for (const [k, v] of Object.entries(extra)) { if (v) p.set(k, v); else p.delete(k); }
   const s = p.toString();
   return s ? `?${s}` : '';
@@ -69,7 +73,7 @@ export async function listIssues(from: string, to: string): Promise<IssueRow[]> 
   return q<IssueRow>(
     `select i.anchor_key, i.outlet_code, i.business_date::text as business_date, i.platform, i.issue_type, i.issue_kind,
             i.detail, i.order_id, i.order_time, i.basket, i.value::float as value, i.refund::float as refund,
-            i.customer_words, i.customer_asked,
+            i.customer_words, i.customer_asked, i.must_answer,
             o.city, coalesce(o.area_manager, 'Unassigned') as am, o.locality, coalesce(l.region, 'Other') as region
        from public.dash_issue i
        join public.outlets o on o.internal_code = i.outlet_code and o.active
@@ -82,7 +86,8 @@ export async function listIssues(from: string, to: string): Promise<IssueRow[]> 
 // outlet master is tiny, and it keeps one query shape for every view.
 export function inScope(r: IssueRow, f: IssueFilters): boolean {
   return (!f.region || r.region === f.region) && (!f.city || r.city === f.city) && (!f.am || r.am === f.am)
-    && (!f.store || r.outlet_code === f.store) && (!f.plat || r.platform === f.plat) && (!f.type || r.issue_type === f.type);
+    && (!f.store || r.outlet_code === f.store) && (!f.plat || r.platform === f.plat) && (!f.type || r.issue_type === f.type)
+    && (!f.must || r.must_answer);
 }
 
 // The section a row belongs to, in the words the area and store pages use, so

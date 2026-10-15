@@ -928,3 +928,7 @@ a.qd-close { position: absolute; right: 14px; top: 10px; font-size: 22px; color:
 .issues .dim { color: var(--muted); }
 @media (max-width: 760px) { .issues .ibulk .prompt { min-width: 160px; } }
 .issues .ibulk[hidden], .issues form[hidden] { display: none; }
+.issues .mustq, .issues .optq { display: block; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; margin-top: 2px; }
+.issues .mustq { color: var(--coral); font-weight: 700; } .issues .optq { color: var(--muted); }
+.issues tr.opt td { color: var(--muted); } .issues tr.opt td .ik { opacity: .75; }
+.issues .isum b.red { color: #B3122B; }
