@@ -58,6 +58,10 @@
     var t = ev.target;
     if (!(t instanceof Element)) return;
     if (t.id === 'ibulk-clear') { boxes().forEach(function (b) { b.checked = false; }); sync(); return; }
+    if (t.closest('[data-tickmust]')) {
+      boxes().forEach(function (b) { if (b.dataset.must === '1' && b.dataset.status === 'none' && visible(b)) b.checked = true; });
+      sync(); return;
+    }
     var fold = t.closest('[data-fold]');
     if (fold) {
       var close = fold.dataset.fold === 'close';

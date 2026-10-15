@@ -62,6 +62,8 @@ export default async function IssuesView({ user, sp }: { user: SessionUser; sp: 
 
   const counts: Record<RowStatus, number> = { none: 0, open: 0, overdue: 0, answered: 0, unasked: 0, closed: 0 };
   for (const r of rows) counts[st(r)]++;
+  const mustRows = rows.filter(r => r.must_answer);
+  const mustNotAsked = mustRows.filter(r => st(r) === 'none').length;
   const groups = new Map<string, Map<string, IssueRow[]>>();
   for (const r of rows) {
     if (!groups.has(r.am)) groups.set(r.am, new Map());
@@ -112,6 +114,8 @@ export default async function IssuesView({ user, sp }: { user: SessionUser; sp: 
             {(Object.keys(STATUS_WORDS) as (keyof typeof STATUS_WORDS)[]).map(k => <option key={k} value={k}>{STATUS_WORDS[k]}</option>)}</select></div>
         <div className="f"><label>&nbsp;</label>
           <div className="range">
+            <Link className={f.must ? 'rfilter on' : 'rfilter'} href={base + issueQs({ ...f, must: !f.must })} title="The rows central expects an explanation for: 30 minutes or more offline, every turned-away order except the overnight tablet ones, every complaint row">Must answer only</Link>
+            {f.must ? <input type="hidden" name="must" value="1" /> : null}
             <button className="rfilter" type="submit">Apply</button>
             <Link className="rfilter" href={base}>Clear</Link>
             <a className="rfilter csv" href={`${base}/download${issueQs(f)}`}>Download CSV</a>
@@ -122,13 +126,15 @@ export default async function IssuesView({ user, sp }: { user: SessionUser; sp: 
 
       <p className="isum">
         <b>{rows.length}</b> issue rows, {window}, <b>{codes.length}</b> outlets in scope
-        <span className="sep">&middot;</span><b>{counts.none}</b> not asked
+        <span className="sep">&middot;</span><b>{mustRows.length}</b> must answer, <b className={mustNotAsked ? 'red' : ''}>{mustNotAsked}</b> of them not asked
+        <span className="sep">&middot;</span><b>{counts.none}</b> not asked in all
         <span className="sep">&middot;</span><b>{counts.open + counts.overdue}</b> waiting for the area manager{counts.overdue ? <> (<span className="red">{counts.overdue} overdue</span>)</> : null}
         <span className="sep">&middot;</span><b>{counts.answered + counts.unasked}</b> waiting for central{counts.unasked ? <> ({counts.unasked} explained unasked)</> : null}
         <span className="sep">&middot;</span><b>{counts.closed}</b> closed
         {listed.length ? <><span className="sep">&middot;</span><span className="dim">{listed.length} Lucknow Zomato listed-not-trading days kept out</span></> : null}
       </p>
-      <p className="note">Settled data only: the newest day offered is two days back. Row keys are the Questions module&apos;s own, so a status here is the same status on the area page and on the Questions screen.</p>
+      <p className="note">Settled data only: the newest day offered is two days back. Row keys are the Questions module&apos;s own, so a status here is the same status on the area page and on the Questions screen.
+        <b>Must answer</b> marks the rows central expects an explanation for (15 Oct 2026): 30 minutes or more offline in a day, every turned-away order except Swiggy&apos;s overnight &ldquo;unable to connect&rdquo; (that is the tablet rule, not a question), and every complaint row. The rest stay listed for the record.</p>
 
       {p.ask ? (
         <div className="ibulk" id="ibulk" hidden>
@@ -162,6 +168,7 @@ export default async function IssuesView({ user, sp }: { user: SessionUser; sp: 
       <div className="itools">
         <button className="rfilter" type="button" data-fold="close">Collapse all outlets</button>
         <button className="rfilter" type="button" data-fold="open">Expand all outlets</button>
+        {p.ask ? <button className="rfilter" type="button" data-tickmust="1" title="Tick every must-answer row on the page that nobody has asked about">Tick must-answer, not asked</button> : null}
         <span className="legend">
           <span className="qchip none"><span className="dot" />Not asked</span>
           <span className="qchip open"><span className="dot" />Asked, waiting for the area manager</span>
@@ -199,12 +206,12 @@ export default async function IssuesView({ user, sp }: { user: SessionUser; sp: 
                         {list.map(r => {
                           const qr = qmap.get(r.anchor_key); const s = st(r);
                           return (
-                            <tr key={r.anchor_key}>
-                              {p.ask ? <td className="chk"><input type="checkbox" className="isel" data-key={r.anchor_key} data-am={am} data-store={code} data-status={s} aria-label="Select row" /></td> : null}
+                            <tr key={r.anchor_key} className={r.must_answer ? undefined : 'opt'}>
+                              {p.ask ? <td className="chk"><input type="checkbox" className="isel" data-key={r.anchor_key} data-am={am} data-store={code} data-status={s} data-must={r.must_answer ? '1' : '0'} aria-label="Select row" /></td> : null}
                               <td className="date">{dayLabel(r.business_date)}</td>
                               <td className="date">{r.order_time ?? ''}</td>
                               <td><span className={`app ${r.platform}`}>{r.platform === 'Z' ? 'ZOMATO' : 'SWIGGY'}</span></td>
-                              <td><span className={`ik ${r.issue_kind.startsWith('Shop shut') ? 'ik-shut' : KIND_CLASS[r.issue_type]}`}>{r.issue_kind}</span></td>
+                              <td><span className={`ik ${r.issue_kind.startsWith('Shop shut') ? 'ik-shut' : KIND_CLASS[r.issue_type]}`}>{r.issue_kind}</span>{r.must_answer ? <span className="mustq" title="Central expects an explanation">must answer</span> : <span className="optq" title="Listed for the record; no explanation expected">for the record</span>}</td>
                               <td className="detail">{r.detail}{r.value ? <> &middot; Rs. {Math.round(r.value).toLocaleString('en-IN')}</> : null}{r.refund ? <> &middot; refund Rs. {Math.round(r.refund).toLocaleString('en-IN')}</> : null}</td>
                               <td className="oid">{r.order_id ?? ''}</td>
                               <td className="what">
@@ -234,7 +241,7 @@ export default async function IssuesView({ user, sp }: { user: SessionUser; sp: 
       <div className="dfoot">
         <p>Issue rows: Zomato online below 100% (a day at 0% with no orders is &ldquo;listed, not trading&rdquo;, kept out of the counts); Swiggy hours short of ideal;
           complaints tagged wrong item or item missing, plus complaints whose written review says a message, name, candle, knife or note was wrong or absent;
-          store-caused Zomato rejections with shop-shut ones marked, and Swiggy cancellations charged to the store. The table behind this page is rebuilt
+          store-caused Zomato rejections with shop-shut ones marked, and Swiggy cancellations charged to the store. A 1 or 2 star order whose written review names a wrong, missing or undelivered item or an unwritten message is listed as a low rating with a store fault in the words, when it is not already a complaint row. The table behind this page is rebuilt
           by the morning and evening pulls for the last ten days.</p>
       </div>
       <DashScript />
