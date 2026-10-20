@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getSessionUser, questionPerms, type SessionUser } from '@/lib/session';
 import { q, one } from '@/lib/db';
+import { pickedPhotos, savePhotos } from '@/lib/question-photos';
 
 const who = (u: SessionUser) => u.fullName ?? u.email;
 const str = (v: FormDataEntryValue | null): string | null => { const s = typeof v === 'string' ? v.trim() : ''; return s === '' ? null : s; };
@@ -52,6 +53,14 @@ async function needClose(): Promise<SessionUser> {
   return u;
 }
 
+// The one-line result after an explanation or answer that may carry photos
+// (migration 249; the photo checks and upload are in lib/question-photos.ts).
+function doneMsg(what: string, next: string, n: number, failed: number): Record<string, string> {
+  const ph = (k: number) => `${k} photo${k === 1 ? '' : 's'}`;
+  if (failed) return { err: `${what}, but ${failed} of ${ph(n)} did not upload. Send ${failed === 1 ? 'it' : 'them'} to central on WhatsApp.` };
+  return { ok: n ? `${what} with ${ph(n)}. ${next}` : `${what}. ${next}` };
+}
+
 export async function askQuestion(form: FormData) {
   const u = await needAsk();
   const back = safeBack(str(form.get('back')));
@@ -78,6 +87,8 @@ export async function explainQuestion(form: FormData) {
   const key = str(form.get('anchor_key')); const outlet = str(form.get('outlet'));
   if (!key || !outlet) redirect(withQs(back, { err: 'No row was posted.' }));
   if (!inScope(u, outlet)) redirect('/questions');
+  const photos = pickedPhotos(form);
+  if (photos.err) redirect(withQs(back, { err: photos.err }));
   let snapshot: unknown = [];
   try { snapshot = JSON.parse(str(form.get('snapshot')) ?? '[]'); } catch { snapshot = []; }
   let id: number;
@@ -89,8 +100,9 @@ export async function explainQuestion(form: FormData) {
       str(form.get('person_role')), str(form.get('prevention'))]);
     id = Number(r?.id);
   } catch (e) { redirect(withQs(back, { err: plain(e) })); }
+  const failed = await savePhotos(id, u.email, who(u), photos.files);
   refresh(back);
-  redirect(withQs(back, { q: String(id), ok: 'Recorded. It now waits for central to accept.' }));
+  redirect(withQs(back, { q: String(id), ...doneMsg('Recorded', 'It now waits for central to accept.', photos.files.length, failed) }));
 }
 
 export async function answerQuestion(form: FormData) {
@@ -100,13 +112,16 @@ export async function answerQuestion(form: FormData) {
   const row = await one<{ outlet_code: string }>('select outlet_code from ops.question where id = $1', [id]);
   if (!row) redirect(withQs(back, { err: 'No such question.' }));
   if (!inScope(u, row.outlet_code)) redirect('/questions');
+  const photos = pickedPhotos(form);
+  if (photos.err) redirect(withQs(back, { q: String(id), err: photos.err }));
   try {
     await q('select ops.answer($1,$2,$3,$4,$5,$6,$7,$8)', [
       id, u.email, who(u), str(form.get('what')), str(form.get('cause')), str(form.get('person')),
       str(form.get('person_role')), str(form.get('prevention'))]);
   } catch (e) { redirect(withQs(back, { q: String(id), err: plain(e) })); }
+  const failed = await savePhotos(id, u.email, who(u), photos.files);
   refresh(back);
-  redirect(withQs(back, { q: String(id), ok: 'Sent. It now waits to be accepted.' }));
+  redirect(withQs(back, { q: String(id), ...doneMsg('Sent', 'It now waits to be accepted.', photos.files.length, failed) }));
 }
 
 export async function closeQuestion(form: FormData) {

@@ -32,7 +32,13 @@ export interface EventRow {
   id: number; at_iso: string; actor: string; actor_name: string | null; action: 'asked' | 'answered' | 'pushed_back' | 'closed';
   what_happened: string | null; cause: string | null; cause_label: string | null; person_name: string | null;
   person_role: string | null; prevention: string | null; note: string | null;
+  photo_ids: string[];   // photos sent with this answer, oldest first (migration 249); bigint arrives as text
 }
+
+// Photos live in this private spine bucket and are served only through
+// /questions/photo/<id>, which checks the viewer may see the question.
+export const PHOTO_BUCKET = 'question-photos';
+export const MAX_PHOTOS = 4;
 
 export interface Cause { code: string; label: string }
 export interface Person { id: number; name: string; role: string; outlet_code: string }
@@ -72,7 +78,13 @@ export async function getQuestion(id: number): Promise<QuestionRow | null> {
 
 export async function getEvents(id: number): Promise<EventRow[]> {
   return q<EventRow>(`select id, at_iso, actor, actor_name, action, what_happened, cause, cause_label,
-      person_name, person_role, prevention, note from ops.v_event where question_id = $1 order by at, id`, [id]);
+      person_name, person_role, prevention, note, photo_ids from ops.v_event where question_id = $1 order by at, id`, [id]);
+}
+
+// One photo and the outlet of its question, for the serving route's scope check.
+export async function getPhoto(id: number): Promise<{ storage_path: string; content_type: string; outlet_code: string } | null> {
+  return one(`select ph.storage_path, ph.content_type, q.outlet_code
+      from ops.photo ph join ops.question q on q.id = ph.question_id where ph.id = $1`, [id]);
 }
 
 // The trails of every question on a page, in one read, so each can sit
@@ -83,7 +95,7 @@ export async function getEventsFor(ids: (number | string)[]): Promise<Map<string
   const m = new Map<string, EventRow[]>();
   if (!ids.length) return m;
   const rows = await q<EventRow & { question_id: string }>(`select question_id, id, at_iso, actor, actor_name, action, what_happened, cause, cause_label,
-      person_name, person_role, prevention, note from ops.v_event where question_id = any($1::bigint[]) order by question_id, at, id`, [ids]);
+      person_name, person_role, prevention, note, photo_ids from ops.v_event where question_id = any($1::bigint[]) order by question_id, at, id`, [ids]);
   for (const r of rows) {
     const k = String(r.question_id);
     if (!m.has(k)) m.set(k, []);
