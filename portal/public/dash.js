@@ -208,6 +208,9 @@
       set('snapshot', JSON.stringify(e.fields)); set('prompt', '');
       set('what', ''); set('prevention', ''); set('person', '');
       var cs = tpl.querySelector('select[name="cause"]'); if (cs) cs.value = '';
+      // photos picked for the previous row must not travel with this one (qphoto.js)
+      var ph = tpl.querySelector('input[type="file"]'); if (ph) ph.value = '';
+      var pk = tpl.querySelector('[data-qphoto-picked]'); if (pk) pk.textContent = '';
       var title = tpl.querySelector('[data-qtitle]'); if (title) title.textContent = e.outlet;
       var sec = tpl.querySelector('[data-qsection]'); if (sec) sec.textContent = e.section;
       var body = tpl.querySelector('[data-qfields]');

@@ -4,8 +4,9 @@
 // reads identically wherever it is opened. Layout follows the approved mock
 // (erp-plan/questions-mock-area-v1.html).
 import Link from 'next/link';
+import Script from 'next/script';
 import {
-  fmtIst, chipClass, chipLabel, statusWord, firstName,
+  fmtIst, chipClass, chipLabel, statusWord, firstName, MAX_PHOTOS,
   type QuestionRow, type EventRow, type Field, type Cause, type Person,
 } from '@/lib/questions';
 import { askQuestion, answerQuestion, closeQuestion, pushBackQuestion, explainQuestion } from './actions';
@@ -52,6 +53,18 @@ export function Thread({ events }: { events: EventRow[] }) {
             <div className="lab">Who was involved</div>
             <p>{e.person_name ? <>{e.person_name} <small className="muted">({e.person_role ?? 'role not recorded'})</small></> : <i>Nobody, a process problem</i>}</p>
             <div className="lab">So it does not repeat</div><p>{e.prevention}</p>
+            {e.photo_ids?.length ? (
+              <>
+                <div className="lab">Photos</div>
+                <div className="qphotos">
+                  {e.photo_ids.map(id => (
+                    <a key={id} href={`/questions/photo/${id}`} target="_blank" rel="noopener">
+                      <img src={`/questions/photo/${id}`} alt="Photo sent with this answer" loading="lazy" />
+                    </a>
+                  ))}
+                </div>
+              </>
+            ) : null}
           </div>);
         if (e.action === 'pushed_back') return (
           <div className="ev back" key={e.id}>
@@ -125,6 +138,11 @@ function AnswerFields({ outlet, causes, people, listId }: { outlet: string; caus
       </select>
       <label>What you did so it does not repeat</label>
       <textarea name="prevention" required />
+      <label>Photos (optional, up to {MAX_PHOTOS})</label>
+      <input type="file" name="photos" accept="image/*" multiple data-qphoto="1" />
+      <div className="qphoto-picked" data-qphoto-picked="1" />
+      <div className="hint">For example the dispatch photo. Take one or pick from the gallery. They are made smaller before sending.</div>
+      <Script src="/qphoto.js" strategy="afterInteractive" />
     </>
   );
 }

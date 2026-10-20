@@ -824,6 +824,13 @@ a.qd-close { position: absolute; right: 14px; top: 10px; font-size: 22px; color:
   padding: 8px 10px; font: inherit; font-size: 13.5px; background: var(--card); color: var(--ink); }
 .qform textarea { min-height: 58px; resize: vertical; }
 .qform .hint { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+/* photos on an explanation or answer (migration 249, 20 Oct 2026) */
+.qform .qphoto-picked { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.qform .qphoto-picked img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+.qform .qphoto-picked .note { flex-basis: 100%; }
+.ev .qphotos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.ev .qphotos a { display: block; line-height: 0; }
+.ev .qphotos img { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: var(--line); }
 .qbtn { background: var(--maroon); color: #fff; border: 0; border-radius: 8px; padding: 9px 16px; font: inherit; font-size: 13.5px;
   cursor: pointer; margin-top: 12px; }
 .qbtn.ghost { background: var(--card); color: var(--maroon); border: 1px solid var(--maroon); }
