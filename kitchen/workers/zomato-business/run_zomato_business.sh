@@ -1,6 +1,7 @@
 #!/bin/bash
-# Wrapper launchd calls for the daily Zomato enterprise pull (08:30 morning
-# ladder since 24 Aug 2026; nightly 21:00 before that)
+# Wrapper launchd calls for the daily Zomato enterprise pull (11:00, 11:30 and
+# 16:00 since 21 Oct 2026; 08:30/09:00/09:45/10:45 from 24 Aug; nightly 21:00
+# before that)
 # (in.cremecastle.zomato-business.plist). Same five defences as the sibling
 # zomato-ingest wrapper, same reasons:
 #   1. success stamp: later slots exit in milliseconds once the night delivered

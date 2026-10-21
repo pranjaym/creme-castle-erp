@@ -1,5 +1,8 @@
 """Daily pull for the Zomato enterprise business reports.
-Scheduled on the 08:30 morning ladder since 24 Aug 2026 (nightly 21:00 before).
+Scheduled at 11:00, 11:30 and 16:00 IST since 21 Oct 2026 (Pranjay's decision:
+the 08:30 and 09:00 slots never got yesterday, 1 Sep to 21 Oct; 11:30 retries a
+network drop, 16:00 catches the days Zomato publishes in the afternoon). Morning
+ladder 08:30/09:00/09:45/10:45 from 24 Aug 2026, nightly 21:00 before that.
 
     python3 run_nightly.py              # 10-day rolling window ending yesterday
     python3 run_nightly.py --days 21    # wider catch-up

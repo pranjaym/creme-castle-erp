@@ -19,27 +19,21 @@
 	<array>
 		<dict>
 			<key>Hour</key>
-			<integer>8</integer>
-			<key>Minute</key>
-			<integer>30</integer>
-		</dict>
-		<dict>
-			<key>Hour</key>
-			<integer>9</integer>
+			<integer>11</integer>
 			<key>Minute</key>
 			<integer>0</integer>
 		</dict>
 		<dict>
 			<key>Hour</key>
-			<integer>9</integer>
+			<integer>11</integer>
 			<key>Minute</key>
-			<integer>45</integer>
+			<integer>30</integer>
 		</dict>
 		<dict>
 			<key>Hour</key>
-			<integer>10</integer>
+			<integer>16</integer>
 			<key>Minute</key>
-			<integer>45</integer>
+			<integer>0</integer>
 		</dict>
 	</array>
 	<key>ThrottleInterval</key>

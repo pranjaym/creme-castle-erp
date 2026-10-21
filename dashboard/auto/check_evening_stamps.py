@@ -37,7 +37,7 @@ EVENING_JOBS = [
     ("Ratings mail",
      os.path.join(WORKERS, "cc-ratings", ".last_success"),
      "bash ~/creme-castle-erp/kitchen/workers/cc-ratings/run_ratings.sh --force"),
-    ("Zomato business pull (enterprise reports, 08:30 morning ladder)",
+    ("Zomato business pull (enterprise reports, 11:00/11:30/16:00)",
      os.path.join(WORKERS, "zomato-business", ".last_success"),
      "bash ~/creme-castle-erp/kitchen/workers/zomato-business/run_zomato_business.sh --force"),
     ("OMS to spine feed (D2C orders and customers, 09:05 morning ladder)",
@@ -75,7 +75,8 @@ def main():
             pass
 
     # A stamp saying yesterday OR today counts as delivered. Today matters since
-    # 24 Aug 2026: zomato-business runs on a MORNING ladder (08:30 to 10:45), so
+    # 24 Aug 2026: zomato-business runs during the day (08:30 to 10:45 then;
+    # 11:00, 11:30 and 16:00 since 21 Oct 2026), so
     # when this check fires from a late dashboard retry slot the job may already
     # have delivered today, and yesterday's stamp has been overwritten.
     ok_dates = (yesterday, today.isoformat())
