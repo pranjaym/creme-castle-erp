@@ -233,6 +233,7 @@
     var qd = t.closest('[data-qid]');
     if (qd) {
       var th2 = document.getElementById('qthread-' + qd.dataset.qid);
+      if (!th2 && qd.dataset.qthread) th2 = fetchThread(qd);
       if (!th2) return;
       ev.preventDefault();
       hideDrawers();
@@ -251,6 +252,37 @@
   });
 
   function hideDrawers() { $$('.qwrap').forEach(function (w) { w.hidden = true; }); }
+
+  // A closed question's card on /questions (27 Oct 2026): its thread is not on
+  // the page, so open an empty drawer at once and fill it from the card's
+  // data-qthread address. Once filled it stays on the page, so the next tap
+  // costs nothing; a closed thread never changes. If the fetch fails the
+  // empty drawer goes and, unless it was closed meanwhile, the card's own
+  // link loads the server-rendered drawer, the old way.
+  function fetchThread(card) {
+    var id = card.dataset.qid;
+    var w = document.createElement('div');
+    w.id = 'qthread-' + id;
+    w.className = 'qwrap';
+    w.hidden = true;
+    w.innerHTML = '<a class="qoverlay" href="' + card.getAttribute('href') + '" data-qclose="1" aria-label="Close"></a>' +
+      '<aside class="qdrawer"><a class="qd-close" href="' + card.getAttribute('href') + '" data-qclose="1" aria-label="Close">&times;</a>' +
+      '<div class="qd-head"><div class="sub">Question #' + id + '</div><h3>Opening&hellip;</h3></div><div class="qd-body"></div></aside>';
+    (card.closest('.qx') || document.body).appendChild(w);
+    fetch(card.dataset.qthread, { credentials: 'same-origin' })
+      .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.text(); })
+      .then(function (html) {
+        var got = new DOMParser().parseFromString(html, 'text/html').getElementById('qthread-' + id);
+        if (!got) throw new Error('no thread');   // signed out: the page that came back is the login
+        w.innerHTML = got.innerHTML;
+      })
+      .catch(function () {
+        var showing = !w.hidden;
+        w.remove();
+        if (showing) location.href = card.href;
+      });
+    return w;
+  }
   // After a form submit the page comes back with ?q=<id> and the drawer open;
   // closing it must drop that from the address, or a reload reopens it.
   function tidyUrl() {

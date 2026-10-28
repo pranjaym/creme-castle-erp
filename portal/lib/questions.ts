@@ -104,6 +104,19 @@ export async function getEventsFor(ids: (number | string)[]): Promise<Map<string
   return m;
 }
 
+// The latest push-back note on each of these questions, for the card of a
+// question that is open again: the rejected answer is still on it, and the
+// card must say it was not accepted and why (27 Oct 2026).
+export async function pushBackNotes(ids: (number | string)[]): Promise<Map<string, { note: string | null; by: string | null; at_iso: string }>> {
+  const m = new Map<string, { note: string | null; by: string | null; at_iso: string }>();
+  if (!ids.length) return m;
+  const rows = await q<{ question_id: string; note: string | null; actor_name: string | null; at_iso: string }>(
+    `select distinct on (question_id) question_id, note, actor_name, at_iso from ops.v_event
+      where action = 'pushed_back' and question_id = any($1::bigint[]) order by question_id, at desc, id desc`, [ids]);
+  for (const r of rows) m.set(String(r.question_id), { note: r.note, by: r.actor_name, at_iso: r.at_iso });
+  return m;
+}
+
 export async function causes(): Promise<Cause[]> {
   return q<Cause>('select code, label from ops.cause order by sort');
 }
@@ -125,13 +138,19 @@ export async function peopleAt(code: string): Promise<Person[]> {
 export interface ListFilters {
   status: '' | QStatus | 'overdue'; store: string; am: string; section: string; cause: string; person: string;
   newonly: boolean; explained: boolean; q: string;
+  // When this visit to the list began, carried in every link the list makes,
+  // so a filter, a submit or a reload does not move the "new since you last
+  // looked" cursor again and wipe the marks (27 Oct 2026). Empty on arrival.
+  since: string;
 }
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 export function parseListFilters(sp: Record<string, string | undefined>): ListFilters {
   const st = sp.status ?? '';
   return {
     status: (['open', 'answered', 'closed', 'overdue'].includes(st) ? st : '') as ListFilters['status'],
     store: sp.store ?? '', am: sp.am ?? '', section: sp.section ?? '', cause: sp.cause ?? '', person: sp.person ?? '',
     newonly: sp.new === '1', explained: sp.explained === '1', q: sp.q ?? '',
+    since: sp.since && ISO.test(sp.since) ? sp.since : '',
   };
 }
 export function listQs(f: ListFilters, extra: Record<string, string | undefined> = {}): string {
@@ -144,6 +163,7 @@ export function listQs(f: ListFilters, extra: Record<string, string | undefined>
   if (f.person) p.set('person', f.person);
   if (f.newonly) p.set('new', '1');
   if (f.explained) p.set('explained', '1');
+  if (f.since) p.set('since', f.since);
   for (const [k, v] of Object.entries(extra)) { if (v) p.set(k, v); else p.delete(k); }
   const s = p.toString();
   return s ? '?' + s : '';

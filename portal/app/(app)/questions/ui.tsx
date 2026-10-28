@@ -3,7 +3,6 @@
 // use the same row box, the same trail and the same forms, so a question
 // reads identically wherever it is opened. Layout follows the approved mock
 // (erp-plan/questions-mock-area-v1.html).
-import Link from 'next/link';
 import Script from 'next/script';
 import {
   fmtIst, chipClass, chipLabel, statusWord, firstName, MAX_PHOTOS,
@@ -116,29 +115,34 @@ export function AskForm({ entry, back, to }: {
 
 // The answer boxes, shared by AnswerForm (a question central asked) and
 // ExplainForm (the field starting the record itself). Same words both ways.
-function AnswerFields({ outlet, causes, people, listId }: { outlet: string; causes: Cause[]; people: Person[]; listId: string }) {
+// `prev` is the answer central pushed back: its words are filled in so the
+// area manager corrects it rather than typing it all again (27 Oct 2026).
+// A new answer is still a new record; the pushed-back one stays on the trail.
+function AnswerFields({ outlet, causes, people, listId, prev }:
+  { outlet: string; causes: Cause[]; people: Person[]; listId: string; prev?: QuestionRow }) {
   return (
     <>
       <label>What happened</label>
-      <textarea name="what" required />
+      <textarea name="what" required defaultValue={prev?.what_happened ?? undefined} />
       <label>What was the cause</label>
-      <select name="cause" required defaultValue="">
+      <select name="cause" required defaultValue={prev?.cause ?? ''}>
         <option value="" disabled>Pick one</option>
         {causes.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
       </select>
       <label>Who was involved (optional)</label>
-      <input name="person" list={listId} autoComplete="off" placeholder={outlet ? `Start typing a name at ${outlet}` : 'Start typing a name'} />
+      <input name="person" list={listId} autoComplete="off" defaultValue={prev?.person_name ?? undefined} placeholder={outlet ? `Start typing a name at ${outlet}` : 'Start typing a name'} />
       <datalist id={listId}>
         {people.map(p => <option key={p.id} value={p.name}>{p.role}{p.outlet_code && p.outlet_code !== outlet ? ` · ${p.outlet_code}` : ''}</option>)}
       </datalist>
       <div className="hint">Pick a name already listed at this store, or type a new one and it is added. Leave it empty if nobody was involved and it was a process problem.</div>
       <label>If this is a new name, their role</label>
-      <select name="person_role" defaultValue="Staff">
+      <select name="person_role" defaultValue={prev?.person_role && PERSON_ROLES.includes(prev.person_role) ? prev.person_role : 'Staff'}>
         {PERSON_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
       </select>
       <label>What you did so it does not repeat</label>
-      <textarea name="prevention" required />
+      <textarea name="prevention" required defaultValue={prev?.prevention ?? undefined} />
       <label>Photos (optional, up to {MAX_PHOTOS})</label>
+      {prev ? <div className="hint">Photos sent with the earlier answer stay on the trail above; add new ones only if they help.</div> : null}
       <input type="file" name="photos" accept="image/*" multiple data-qphoto="1" />
       <div className="qphoto-picked" data-qphoto-picked="1" />
       <div className="hint">For example the dispatch photo. Take one or pick from the gallery. They are made smaller before sending.</div>
@@ -174,11 +178,14 @@ export function ExplainForm({ entry, back, causes, people }: {
 }
 
 export function AnswerForm({ q, back, causes, people }: { q: QuestionRow; back: string; causes: Cause[]; people: Person[] }) {
+  // open with an answer on it means central pushed that answer back
+  const prev = q.push_backs > 0 && q.what_happened ? q : undefined;
   return (
     <form action={answerQuestion} className="qform">
       <input type="hidden" name="back" value={back} />
       <input type="hidden" name="id" value={q.id} />
-      <AnswerFields outlet={q.outlet_code} causes={causes} people={people} listId={`qpeople-${q.id}`} />
+      {prev ? <div className="hint">Central pushed your answer back; their note is on the trail above. Your answer is filled in below: change what is wrong and send it again.</div> : null}
+      <AnswerFields outlet={q.outlet_code} causes={causes} people={people} listId={`qpeople-${q.id}`} prev={prev} />
       <button className="qbtn" type="submit">Send answer to {firstName(q.raised_by_name)}</button>
     </form>
   );
@@ -196,13 +203,17 @@ export function CloseForm({ q, back, answered }: { q: QuestionRow; back: string;
             <textarea name="note" />
             <button className="qbtn" type="submit">Accept and close</button>
           </form>
-          <form action={pushBackQuestion} style={{ marginTop: 8 }}>
+          {/* 27 Oct 2026: push back used to post an empty note, so the area
+              manager only ever read the default line and could not tell what
+              to fix. The note is now required. */}
+          <form action={pushBackQuestion} style={{ marginTop: 14 }}>
             <input type="hidden" name="back" value={back} />
             <input type="hidden" name="id" value={q.id} />
-            <input type="hidden" name="note" value="" />
-            <button className="qbtn danger" type="submit">Push back, not an answer</button>
+            <label>Not an answer? Say what is wrong</label>
+            <textarea name="note" required placeholder="e.g. The name is wrong: Ravi was on leave that day. Check the KOT and the dispatch photo." />
+            <button className="qbtn danger" type="submit">Push back to {q.am ?? 'the area manager'}</button>
           </form>
-          <div className="hint">Push back reopens it with a fresh 24 hours and your note goes on the trail.</div>
+          <div className="hint">Push back reopens it with a fresh 24 hours. Your note goes on the trail, and their earlier answer comes back filled in for them to correct.</div>
         </>
       ) : (
         <>
@@ -220,13 +231,20 @@ export function CloseForm({ q, back, answered }: { q: QuestionRow; back: string;
 }
 
 // ---------- the card on /questions ----------
-export function QuestionCard({ r, href, isNew }: { r: QuestionRow; href: string; isNew: boolean }) {
+// A plain anchor carrying the question id, like the chip: dash.js opens the
+// thread that is already on the page, and only without the script does the
+// browser follow the link to the server-rendered drawer (27 Oct 2026). A
+// closed card's thread is not on the page; `thread` is where dash.js fetches it.
+export function QuestionCard({ r, href, isNew, thread, pushedBack }: {
+  r: QuestionRow; href: string; isNew: boolean; thread?: string;
+  pushedBack?: { note: string | null; by: string | null; at_iso: string };   // open again after a push-back
+}) {
   const st = statusWord(r);
   const right = st === 'closed' ? `Closed ${fmtIst(r.closed_at_iso)}`
     : st === 'answered' ? `Answered ${fmtIst(r.answered_at_iso)}`
     : `Due ${fmtIst(r.due_at_iso)}`;
   return (
-    <Link className={`qcard${isNew ? ' new' : ''}`} href={href}>
+    <a className={`qcard${isNew ? ' new' : ''}`} data-qid={r.id} data-qthread={thread} href={href}>
       <div className="qc-head">
         <b>{r.outlet_code}</b><span className="sep">&middot;</span><span>{r.section}</span>
         <span className="sep">&middot;</span><span className="dim">#{r.id}</span>
@@ -256,7 +274,13 @@ export function QuestionCard({ r, href, isNew }: { r: QuestionRow; href: string;
           {r.push_backs > 0 ? <div className="meta red">Pushed back {r.push_backs} time{r.push_backs === 1 ? '' : 's'}</div> : null}
         </div>
         <div className="qc-col">
-          <h4>Answer</h4>
+          <h4>{pushedBack && r.what_happened ? 'Answer, not accepted' : 'Answer'}</h4>
+          {pushedBack && r.what_happened ? (
+            <div className="meta red">
+              <b>{pushedBack.by ?? 'Central'}</b> pushed back, {fmtIst(pushedBack.at_iso)}: {pushedBack.note}
+              {' '}Waiting for a new answer from {r.am ?? 'the area manager'}.
+            </div>
+          ) : null}
           {r.what_happened ? (
             <>
               <div className="meta"><b>{r.answered_by_name}</b> answered, {fmtIst(r.answered_at_iso)}</div>
@@ -272,6 +296,6 @@ export function QuestionCard({ r, href, isNew }: { r: QuestionRow; href: string;
           {st === 'closed' ? <div className="meta green"><b>{r.closed_by_name}</b> accepted and closed, {fmtIst(r.closed_at_iso)}</div> : null}
         </div>
       </div>
-    </Link>
+    </a>
   );
 }
