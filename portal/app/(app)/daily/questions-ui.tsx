@@ -171,36 +171,63 @@ export async function QuestionDrawer({ kit, user, sp }: {
     );
   }
 
-  const id = Number(sp.q);
-  if (!id) {
-    // No drawer asked for by the URL: the Ask/Explain template, plus every
-    // question on this page as a hidden drawer with its full trail, so a chip
-    // opens it on the spot with no page load (6 Oct 2026, Pranjay: clicking a
-    // chip scrolled the page to the top and reset the store-mistake filter,
-    // and closing took as long as a page load).
-    const all = [...kit.qmap.values()];
-    const [evmap, cs, people] = await Promise.all([getEventsFor(all.map(r => r.id)), causes(), peopleAtAny(kit.codes)]);
-    return (
-      <>
-        {(p.ask || kit.canExplain) ? <AskTemplate kit={kit} /> : null}
-        {all.map(r => (
-          <div key={r.id} id={`qthread-${r.id}`} className="qwrap" hidden>
+  // Every question on this page sits hidden as a drawer with its full trail,
+  // so a chip opens it on the spot with no page load (6 Oct 2026, Pranjay:
+  // clicking a chip scrolled the page to the top and reset the store-mistake
+  // filter, and closing took as long as a page load). The one the URL asks
+  // for (?q=, as on the page that comes back after a submit) is the same
+  // drawer, shown, with the result line. The others stay on the page: until
+  // 27 Oct 2026 that page carried only the asked-for drawer, so once it was
+  // closed the next chip had nothing to open and loaded the page at the top.
+  const id = Number(sp.q) || 0;
+  const all = [...kit.qmap.values()];
+  const inPage = id ? all.find(r => Number(r.id) === id) : undefined;
+  const [evmap, cs, people] = await Promise.all([getEventsFor(all.map(r => r.id)), causes(), peopleAtAny(kit.codes)]);
+  return (
+    <>
+      {(p.ask || kit.canExplain) ? <AskTemplate kit={kit} /> : null}
+      {all.map(r => {
+        const shown = r === inPage;
+        return (
+          <div key={r.id} id={`qthread-${r.id}`} className="qwrap" hidden={!shown}>
             <Drawer closeHref={closeHref} title={r.outlet_code} sub={subFor(r)} chip={<span className={`qchip ${chipClass(r)}`}><span className="dot" />{chipLabel(r)}</span>}>
+              {shown ? <Flash ok={sp.ok} err={sp.err} /> : null}
               <ThreadBody r={r} events={evmap.get(String(r.id)) ?? []} cs={cs} people={people.filter(x => x.outlet_code === r.outlet_code)} user={user} kit={kit} />
             </Drawer>
           </div>
-        ))}
-      </>
-    );
-  }
+        );
+      })}
+      {id && !inPage ? <AskedThread id={id} user={user} kit={kit} sp={sp} /> : null}
+    </>
+  );
+}
+
+// A question the URL asks for that is not among this page's own: a closed
+// one on /questions, a link someone was sent, or /questions/thread/<id>.
+// It carries the same id as a hidden drawer, so dash.js can open it again.
+// When it cannot be shown the drawer says why; until 27 Oct 2026 it rendered
+// nothing, and an area manager following a link to another area's question
+// saw a page with no drawer and no word.
+async function AskedThread({ id, user, kit, sp }: {
+  id: number; user: SessionUser; kit: Kit; sp: { ok?: string; err?: string };
+}) {
   const r = await getQuestion(id);
-  if (!r) return null;
-  // scope: a field role sees only its own outlets' questions
-  if ((user.role === 'area_manager' || user.role === 'store') && !user.outletCodes.includes(r.outlet_code)) return null;
+  const field = user.role === 'area_manager' || user.role === 'store';
+  const why = !r ? `There is no question #${id}. Check the link.`
+    : field && !user.outletCodes.includes(r.outlet_code)
+      ? `Question #${id} is about ${r.outlet_code}, which is not one of your stores, so it is not shown to you. If you were sent this link by mistake, tell central.`
+      : null;
+  if (why || !r) return (
+    <div id={`qthread-${id}`} className="qwrap">
+      <Drawer closeHref={kit.back} title={`Question #${id}`} sub="Cannot be shown">
+        <div className="readonly">{why}</div>
+      </Drawer>
+    </div>
+  );
   const [events, cs, people] = await Promise.all([getEvents(id), causes(), peopleAt(r.outlet_code)]);
   return (
-    <div className="qwrap">
-      <Drawer closeHref={closeHref} title={r.outlet_code} sub={subFor(r)}
+    <div id={`qthread-${id}`} className="qwrap">
+      <Drawer closeHref={kit.back} title={r.outlet_code} sub={subFor(r)}
         chip={<span className={`qchip ${chipClass(r)}`}><span className="dot" />{chipLabel(r)}</span>}>
         <Flash ok={sp.ok} err={sp.err} />
         <ThreadBody r={r} events={events} cs={cs} people={people} user={user} kit={kit} />

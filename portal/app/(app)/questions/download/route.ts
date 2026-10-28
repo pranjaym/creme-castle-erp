@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   if (!u || !portalAccess(u).questions.view) return new NextResponse('Not allowed', { status: 403 });
   const url = new URL(req.url);
   const f = parseListFilters(Object.fromEntries(url.searchParams.entries()));
-  const rows = await listQuestions(u, f, null);
+  const rows = await listQuestions(u, f, f.since || null);
   const head = ['id', 'status', 'asked_by', 'asked_at', 'store', 'area_manager', 'page', 'page_date', 'section', 'platform',
     'business_date', 'row', 'question', 'due_at', 'answered_by', 'answered_at', 'what_happened', 'cause', 'person', 'person_role',
     'prevention', 'push_backs', 'closed_by', 'closed_at', 'explained_unasked'];

@@ -138,7 +138,10 @@ export async function pushBackQuestion(form: FormData) {
   const u = await needClose();
   const id = Number(str(form.get('id')));
   const back = safeBack(str(form.get('back')));
-  try { await q('select ops.push_back($1,$2,$3,$4)', [id, u.email, who(u), str(form.get('note'))]); }
+  // the note is what tells the area manager what to fix (27 Oct 2026)
+  const note = str(form.get('note'));
+  if (!note) redirect(withQs(back, { q: String(id), err: 'Say what is wrong with the answer, so the area manager knows what to fix.' }));
+  try { await q('select ops.push_back($1,$2,$3,$4)', [id, u.email, who(u), note]); }
   catch (e) { redirect(withQs(back, { q: String(id), err: plain(e) })); }
   refresh(back);
   redirect(withQs(back, { q: String(id), ok: 'Pushed back. It is open again with a fresh 24 hours.' }));
