@@ -1,0 +1,27 @@
+{
+  "menuSharingCode": "xxxxx",
+  "app_key": "test-app-key",
+  "access_token": "test-access-token",
+  "app_secret": "test-app-secret",
+  "data": {
+    "id": "46839231",
+    "menuSharingCode": "****",
+    "receiverType": "Supplier",
+    "deliveryDate": "2026-03-18",
+    "poNumber": "PO0046839231",
+    "totalTax": "20",
+    "total": "520",
+    "roundOff": "0",
+    "itemDetails": [
+      { "itemname": "0 Number Candle Cl Per Pcs", "qty": 5, "price": 100, "amount": 500, "lbl_unit": "pcs", "hsn_code": "", "description": "", "sap_code": "", "standard_qty": 0, "item_lock": 0, "category": "", "sub_category": "", "tax1": 0, "tax2": 0, "tax3": 0, "tax1_amount": "0.000", "tax2_amount": "0.000", "tax3_amount": "0.000", "tax4": 4, "tax4_amount": "20.000", "yield_qty": "0" }
+    ],
+    "chargeDetails": { "delivery_charge_details": { "delivery_charge": 0, "delivery_charge_per": 0, "delivery_charge_cgst": 0, "delivery_charge_cgst_amt": 0, "delivery_charge_sgst": 0, "delivery_charge_sgst_amt": 0, "delivery_charge_igst": 0, "delivery_charge_igst_amt": 0, "delivery_charge_cess": 0, "delivery_charge_cess_amt": 0 } },
+    "restDetails": {
+      "sender": { "sender_gst": "24AABCU9603R1ZT", "sender_city": "Ahmedabad", "sender_name": "Demo restaurant (Ahmedabad)", "sender_state": "Gujarat", "sender_cin_no": "", "sender_address": "39, gopalnagar", "sender_contact": "+911234567890" },
+      "receiver": { "receiver_gst": "", "receiver_name": "black767657", "receiver_type": "Supplier", "receiver_email": null, "receiver_cin_no": "", "receiver_pan_no": "", "receiver_tan_no": "", "receiver_address": "", "receiver_contact": null, "receiver_msme_no": "", "receiver_pin_code": "" }
+    },
+    "status": "Active",
+    "from_department_id": 0, "from_department_code": "", "from_department_name": "",
+    "to_department_id": 0, "to_department_code": "", "to_department_name": ""
+  }
+}

@@ -38,6 +38,15 @@ The kitchen spine module. Planning is authoritative in `../erp-plan/` (read
   080 department module (Liquids dept split, department_settings, made_by tag,
   transfer_receipts, closing_counts, v_dept_day_ledger). `schema_migrations` is
   bootstrapped on the spine; `scripts/migrate.mjs` is now the apply path.
+  `migrations/verify/` holds read-only PASS/FAIL checks (from 250 on); the runner
+  reads top-level `*.sql` only, so it never executes them.
+- Petpooja push receivers (2 Nov 2026, migration 250, `../erp-plan/` integration-notes
+  section 16, flag F78): `app/api/petpooja/orders` and `app/api/petpooja/purchase-orders`
+  are the ONLY addresses with no sign-in (middleware leaves `/api/petpooja/` out;
+  `check-gates.mjs` WEBHOOKS list). Both go through `lib/petpooja/receive.ts`: key check,
+  secret values blanked, every delivery kept in `landing.petpooja_push_events`, keyed
+  upsert by `public.petpooja_push_receive`. Env: `PETPOOJA_WEBHOOK_TOKEN`,
+  `PETPOOJA_APP_KEY`, `PETPOOJA_ACCESS_TOKEN` (Vercel only).
 - Department module (19 Aug 2026, plan in `../erp-plan/department-module-plan.md`):
   `app/dept/[dept]` (Sponges and Liquids screens: made, sent, waste, closing count
   with optional age split, receive inbox with receiver confirmation, request flow).

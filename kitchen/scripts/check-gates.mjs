@@ -24,6 +24,14 @@ const OPEN = {
   'login/page.tsx': 'The sign-in page',
   'login/actions.ts': 'Signing in',
 };
+// Machine-to-machine addresses with no sign-in (2 Nov 2026, migration 250):
+// Petpooja cannot log in, so each must instead hand the request to
+// receivePush(...), which checks Petpooja's key. middleware.ts leaves exactly
+// the api/petpooja/ prefix out of the sign-in check.
+const WEBHOOKS = {
+  'api/petpooja/orders/route.ts': 'Petpooja Global API bill push (body token)',
+  'api/petpooja/purchase-orders/route.ts': 'Petpooja Inventory API 8 PO push (echoed keys)',
+};
 
 function walk(dir) {
   return readdirSync(dir).flatMap((f) => {
@@ -39,6 +47,15 @@ for (const file of walk(ROOT)) {
   if (!['page.tsx', 'route.ts', 'actions.ts'].includes(name)) continue;
   if (OPEN[rel]) continue;
   const src = readFileSync(file, 'utf8');
+
+  if (WEBHOOKS[rel]) {
+    if (!/\breceivePush\(/.test(src)) failures.push(`${rel}: webhook does not go through receivePush(...)`);
+    continue;
+  }
+  if (rel.startsWith('api/petpooja/')) {
+    failures.push(`${rel}: under the public Petpooja prefix but not listed in WEBHOOKS`);
+    continue;
+  }
 
   if (name === 'page.tsx') {
     if (!/\brequireRoles\(/.test(src)) failures.push(`${rel}: page has no requireRoles(...)`);

@@ -1,0 +1,24 @@
+{
+"Token":"test-webhook-token",
+  "properties": {
+    "Restaurant": { "res_name": "RESTAURANT", "address": "Kottayam\n", "contact_information": "1234567890", "restID": "ry9zhytgrvi" },
+    "Customer": { "name": "Jithu", "address": " Kottayam India", "phone": "+91 98765 43210", "gstin": "" },
+    "Order": {
+      "orderID": 44498, "customer_invoice_id": "44498", "delivery_charges": 0, "order_type": "Delivery",
+      "payment_type": "Online", "table_no": "", "no_of_persons": 0, "discount_total": 0, "tax_total": 17.76,
+      "round_off": "0.24", "core_total": 350, "total": 373, "created_on": "2026-01-19 16:42:24",
+      "order_from": "Zomato", "order_from_id": "7705303460", "sub_order_type": "Zomato", "packaging_charge": 5,
+      "status": "Success", "token_no": "81", "comment": "please make sure that all chicken pieces are soft and please add extra gravy",
+      "service_charge": 0, "biller": "Syju", "assignee": ""
+    },
+    "Tax": [
+      { "title": "CGST", "type": "P", "rate": 2.5, "amount": 8.88 },
+      { "title": "SGST", "type": "P", "rate": 2.5, "amount": 8.88 }
+    ],
+    "Discount": [],
+    "OrderItem": [
+      { "name": "Kozhi Curry", "itemid": 1284989, "itemcode": "kozhi c", "vendoritemcode": "", "specialnotes": "", "price": 350, "quantity": 1, "total": 350, "addon": [], "category_name": "KARGEEN MAIN COURSE -NON VEG", "sap_code": "", "discount": 0, "tax": 17.5 }
+    ]
+  },
+  "event": "orderdetails"
+}

@@ -1,0 +1,25 @@
+{
+  "token": "test-webhook-token",
+  "properties": {
+    "Restaurant": { "res_name": "Integration-SakhraniRohan-Demo", "address": "Ahmedabad", "contact_information": "7228956676", "restID": "cp81ghin" },
+    "Customer": { "name": "", "address": "", "phone": "", "gstin": "" },
+    "Order": {
+      "orderID": 116, "customer_invoice_id": "116", "delivery_charges": 0, "order_type": "Dine In",
+      "payment_type": "Part Payment", "table_no": "A11", "no_of_persons": 0, "discount_total": 0, "tax_total": 0,
+      "round_off": "0", "core_total": 987, "total": 987, "created_on": "2025-04-04 11:50:37",
+      "order_from": "POS", "order_from_id": "", "sub_order_type": "AC", "packaging_charge": 0,
+      "status": "Success", "comment": "", "service_charge": 0, "assignee": "Roni Ghosh", "biller": "39481 (dhandapani)",
+      "part_payments": [
+        { "payment_type": "Cash", "amount": 587, "custome_payment_type": "" },
+        { "payment_type": "Card", "amount": 400, "custome_payment_type": "" }
+      ]
+    },
+    "Tax": [],
+    "Discount": [],
+    "OrderItem": [
+      { "name": "Chicken Drumstick Spicy (3 Pieces)", "itemid": 136978202, "itemcode": "cds", "vendoritemcode": "", "specialnotes": "", "price": 359, "quantity": 1, "total": 359, "addon": [], "category_name": "Chicken Meal", "sap_code": "", "discount": 0, "tax": 0 },
+      { "name": "Spicy Chicken Wings (3 Pieces)", "itemid": 136978206, "itemcode": "spicy chicken wings", "vendoritemcode": "", "specialnotes": "", "price": 269, "quantity": 1, "total": 269, "addon": [], "category_name": "Chicken Meal", "sap_code": "", "discount": 0, "tax": 0 }
+    ]
+  },
+  "event": "orderdetails"
+}

@@ -43,6 +43,9 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
+// api/petpooja/ is left out: Petpooja posts there and cannot sign in. Those
+// routes check Petpooja's key themselves (lib/petpooja/receive.ts) and
+// scripts/check-gates.mjs fails the build if one does not.
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|fonts/|brand/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|otf|woff2?)$).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|fonts/|brand/|api/petpooja/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|otf|woff2?)$).*)'],
 };
