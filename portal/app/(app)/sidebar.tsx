@@ -21,32 +21,37 @@ import type { NavSection } from '@/lib/nav';
 
 // A heading becomes open-and-close at this many links.
 const COLLAPSE_FROM = 3;
-// The headings this person opened by hand, remembered on this browser only.
+// The headings this person opened by hand, remembered for as long as this tab
+// stays open, a refresh included. A new tab or a reopened browser starts with
+// every heading closed again (Rishabh, 5 Nov 2026: the first version kept them
+// open for good on that browser, and the rail slowly filled back up).
 const STORE_KEY = 'cc.nav.open';
 
 function readPinned(): string[] {
   try {
-    const v = JSON.parse(window.localStorage.getItem(STORE_KEY) ?? '[]');
+    // The first version's permanent copy, cleared so nothing lingers.
+    window.localStorage.removeItem(STORE_KEY);
+    const v = JSON.parse(window.sessionStorage.getItem(STORE_KEY) ?? '[]');
     return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
   } catch { return []; }
 }
 function writePinned(titles: string[]) {
   // A private window or blocked storage must never break the rail.
-  try { window.localStorage.setItem(STORE_KEY, JSON.stringify(titles)); } catch { /* not remembered, still works */ }
+  try { window.sessionStorage.setItem(STORE_KEY, JSON.stringify(titles)); } catch { /* not remembered, still works */ }
 }
 
 export default function Sidebar({ sections, foot, badges }:
   { sections: NavSection[]; foot: string; badges?: Record<string, { n: number; red: boolean }> }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  // Headings opened by hand stay open from page to page and day to day.
+  // Headings opened by hand stay open from page to page, until the tab closes.
   const [pinned, setPinned] = useState<string[]>([]);
   // The heading that holds the current page opens by itself. Closing it by
   // hand holds only until the next page, so nobody loses where they are.
   const [dismissed, setDismissed] = useState(false);
 
   // Read after mount, not during render: the server cannot know what this
-  // browser remembers, and the two must draw the same first frame.
+  // tab remembers, and the two must draw the same first frame.
   useEffect(() => { setPinned(readPinned()); }, []);
 
   // Following a link on a phone must close the menu, or the next page opens
