@@ -161,6 +161,54 @@ td.num, th.num { text-align: right; }
 }
 .nav-burger { display: none; }
 
+/* Open-and-close headings (Nov 2026). Only a heading with three or more links
+   gets one of these; shorter headings keep the plain .nav-section label above.
+   The button is sized so its label sits where a plain label would. */
+.nav button.nav-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 20px);
+  margin: 10px 10px 0;
+  padding: 4px 8px;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--pink-deep);
+}
+.nav button.nav-toggle:hover { background: rgba(255, 255, 255, 0.08); }
+.nav button.nav-toggle:focus-visible { outline: 2px solid var(--pink-deep); outline-offset: 1px; }
+.nav-toggle-label { flex: 1; min-width: 0; }
+.nav-count { font-size: 10px; letter-spacing: 0; opacity: 0.8; }
+.nav-chev {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+.nav-toggle[aria-expanded="true"] .nav-chev { transform: rotate(45deg); margin-top: -3px; }
+/* Closed while holding the page you are on: a coral dot keeps the place. */
+.nav-toggle.has-active[aria-expanded="false"] { color: #fff; }
+.nav-toggle.has-active[aria-expanded="false"]::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--coral);
+}
+.nav-group[hidden] { display: none; }
+
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .topbar {
