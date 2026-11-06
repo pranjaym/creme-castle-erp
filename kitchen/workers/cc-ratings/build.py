@@ -24,26 +24,30 @@ for _l in ENV.read_text().splitlines():
         os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
 
 # ---------------------------------------------------------------- categories
-# These rules are MATCHES on the item name, not guesses: "cheesecake" in the name
-# genuinely means a cheesecake. What used to be a guess was the final fallback, which
-# silently returned "Desserts" for anything unrecognised, so a Rs 99 Evil Eye Rakhi was
-# counted as a dessert and nobody was told. It now returns "Uncategorised" and the names
-# are listed at the foot of the mail (Pranjay's decision, 28 Aug 2026). This whole
-# function is temporary: it retires when the shared item glossary lands and every
-# consumer reads one category from one owned table.
-ACCESSORY = re.compile(r"candle|teddy|balloon|banner|cap-|party popper|hamper", re.I)
-SAVOURY   = re.compile(r"lavash|grissini", re.I)
+# Categories come from categories.json next to this file (decided with Pranjay,
+# 6 Nov 2026): an ordered category list, exact-name overrides, then keyword rules
+# applied top to bottom. They are FORMAT categories for reading ratings, finer than
+# the spine item_glossary's product categories. Anything no rule catches returns
+# "Uncategorised" and is listed at the foot of the mail, never guessed (Pranjay's
+# decision of 28 Aug 2026, when a Rs 99 Evil Eye Rakhi was being counted as a dessert).
+import unicodedata
 UNCATEGORISED = "Uncategorised"
+_CATS = json.loads((HERE/"categories.json").read_text(encoding="utf-8"))
+CATEGORY_ORDER = _CATS["categories"]
+def _norm(name):
+    s = unicodedata.normalize("NFKC", str(name or "")).replace("\u2019", "'").replace("\u2018", "'")
+    s = re.sub(r"[^\x20-\x7e]", " ", s)
+    return re.sub(r"\s+", " ", s).strip().lower()
+_OVERRIDES = {_norm(k): v for k, v in _CATS["overrides"].items()}
+_RULES = [(r["category"], re.compile(r["match"], re.I),
+           re.compile(r["and"], re.I) if r.get("and") else None) for r in _CATS["rules"]]
+for _c in [v for v in _OVERRIDES.values()] + [r[0] for r in _RULES]:
+    assert _c in CATEGORY_ORDER, f"categories.json names an unknown category: {_c}"
 def category_of(name):
-    n = name.lower()
-    if "cheesecake" in n: return "Cheesecakes"
-    if re.search(r"cookie|brownie|biscotti", n): return "Cookies & Brownies"
-    if ACCESSORY.search(n) and "cake" not in n and "kunafa" not in n: return "Accessories & Gifting"
-    if SAVOURY.search(n): return "Savoury Snacks"
-    if re.search(r"pastry|slice", n): return "Pastries & Slices"
-    if "bento" in n: return "Bento Cakes"
-    if re.search(r"cake\s*\(|cake$|cake &|tea cake", n): return "Cakes"
-    if re.search(r"\btub\b|\bjar\b", n): return "Tubs & Jars"
+    n = _norm(name)
+    if n in _OVERRIDES: return _OVERRIDES[n]
+    for cat, rx, rx2 in _RULES:
+        if rx.search(n) and (rx2 is None or rx2.search(n)): return cat
     return UNCATEGORISED
 
 # ---------------------------------------------------------------- themes
@@ -125,11 +129,25 @@ def fetch(days):
       coalesce(customer_complaint_tag,'') tag, items_in_order, order_status
       from landing.zomato_order_details
       where superseded_at is null and order_date between %s and %s""", (start, end))
-    rows = cur.fetchall(); conn.close()
-    return rows, start, end
+    rows = cur.fetchall()
+    # The shared item glossary (public.item_glossary, edited on the portal at
+    # /glossary/items). From 6 Nov 2026 the mail ties every Zomato item name to its
+    # menu_alias (two spellings, one product) and menu_category, the same table the
+    # sales dashboard reads. A name with no row keeps its raw spelling and is listed at
+    # the foot of the mail; its category then comes from categories.json, never guessed.
+    cur.execute("select item_name, menu_alias, menu_category from public.item_glossary")
+    items_gl = {_norm(r["item_name"]): (r["menu_alias"] or r["item_name"], r["menu_category"]) for r in cur.fetchall()}
+    conn.close()
+    return rows, start, end, items_gl
 
 def build(days=45):
-    rows, start, end = fetch(days)
+    rows, start, end, items_gl = fetch(days)
+    missing = {}
+    def alias_of(name):
+        hit = items_gl.get(_norm(name))
+        if hit: return hit[0]
+        missing[name] = missing.get(name, 0) + 1
+        return name
     gl, gaps = glossary.load({r["restaurant_id"] for r in rows})
     if gaps:
         print(f"  WARNING unmapped restaurant_id(s): {', '.join(gaps)}")
@@ -156,20 +174,30 @@ def build(days=45):
         RATED.append({"d": r["order_date"].isoformat(),
                       "t": r["order_placed_at"].strftime("%H:%M") if r["order_placed_at"] else "",
                       "o": gl[r["restaurant_id"]]["name"], "id": r["zomato_order_id"],
-                      "r": int(round(float(r["rating"]))), "i": parse_items(r["items_in_order"]),
+                      "r": int(round(float(r["rating"]))), "i": [alias_of(n) for n in parse_items(r["items_in_order"])],
                       "v": rev, "th": theme_of(rev, tag),
                       "e": 1 if tier1_of(rev) else 0, "q": 1 if tier2_of(rev) else 0})
     RATED.sort(key=lambda x: (x["d"], x["t"]))
-    CAT = {n: category_of(n) for n in sorted({n for row in RATED for n in row["i"]})}
+    # Category of an alias: the glossary's menu_category where the alias has one,
+    # else the rules in categories.json (a new name with no glossary row yet).
+    alias_cat = {}
+    for key, (al, mc) in items_gl.items():
+        if mc: alias_cat.setdefault(_norm(al), mc)
+    CAT = {n: (alias_cat.get(_norm(n)) or category_of(n)) for n in sorted({n for row in RATED for n in row["i"]})}
     uncat = sorted(n for n, c in CAT.items() if c == UNCATEGORISED)
     if uncat:
         print(f"  {len(uncat)} item name(s) could not be categorised (listed in the mail): "
               + ", ".join(uncat[:8]) + (" ..." if len(uncat) > 8 else ""))
+    unglossed = sorted(missing, key=lambda n: -missing[n])
+    if unglossed:
+        print(f"  {len(unglossed)} rated item name(s) have no glossary row (listed in the mail): "
+              + ", ".join(unglossed[:8]) + (" ..." if len(unglossed) > 8 else ""))
     OUTLETS = {o: city_of[o] for o in sorted(city_of)}
     meta = {"days": len({d[0] for d in DAILY}), "outlets": len(OUTLETS),
             "orders": sum(d[2] for d in DAILY), "delivered": sum(d[3] for d in DAILY),
             "rated": len(RATED), "from": min(d[0] for d in DAILY), "to": max(d[0] for d in DAILY),
-            "unmapped": gaps, "uncategorised": uncat, "source": "landing.zomato_order_details"}
+            "unmapped": gaps, "uncategorised": uncat, "unglossed": unglossed,
+            "glossary_rows": len(items_gl), "source": "landing.zomato_order_details"}
     return DAILY, RATED, CAT, OUTLETS, meta
 
 def render(tpl, out, DAILY, RATED, CAT, OUTLETS, meta):
