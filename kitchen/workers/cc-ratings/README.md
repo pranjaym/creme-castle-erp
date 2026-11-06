@@ -58,6 +58,31 @@ Refresh deliberately after the master changes:
 `glossary.OVERRIDES` and wins over the file. The master should be fixed at source, and
 someone should check whether other rows are stale.
 
+## Item names, aliases and categories
+
+From 6 Nov 2026 the mail reads the shared item glossary (`public.item_glossary` in the
+spine, edited on the portal at Data, Item glossary): every Zomato item name maps to its
+**menu alias** (two spellings, one product; sizes, sets, combos and occasion versions of
+one product merge; flavours never do) and its **ratings category**. That is the same table
+the 8am sales dashboard reads, so the two tie up. The glossary's plain `alias` is the
+PRODUCTION item and merges flavours (every cheesecake slice is one alias), which is why
+the mail reads `menu_alias`, not `alias`. A name with no glossary row keeps its raw
+spelling, is listed at the foot of the mail, and gets its category from the rules below.
+Migration 251 added the two columns and the Zomato-only names.
+
+## Item categories (the fallback rules)
+
+Categories live in **`categories.json`** (decided with Pranjay, 6 Nov 2026): an ordered
+list of twelve format categories, exact-name overrides, then keyword rules applied top to
+bottom. Cakes, Bento Cakes, Cheesecakes, Pastries & Slices, Tubs & Jars, Desserts,
+Croissants & Breads, Cookies & Brownies, Sweet Snacks (the packaged tin range), Savoury
+Snacks (lavash, grissini), Hampers (mixed hampers, bonbon and mithai boxes), Add-ons
+(candles, caps, teddies, rakhi threads). A single-product gift box or combo takes its
+product's category. Occasions are never a category. Anything no rule catches is
+`Uncategorised` and is listed at the foot of the mail, never guessed. To move one item,
+add it to `overrides`; to catch a new range, add a rule in the right place. The full
+assignment of every name ever sold is in `erp-plan/exports/ratings-item-categories-2026-11-06.csv`.
+
 ## Definitions
 
 - **Bad = 1 to 3 star. Good = 4 to 5 star.** (Pranjay's call, 20 Aug.)

@@ -1,0 +1,95 @@
+{
+  "_about": [
+    "Item categories for the daily ratings mail and dashboard. Decided with Pranjay on 6 Nov 2026.",
+    "These are FORMAT categories for reading ratings (a tub rates differently from a pastry),",
+    "so they are finer than the spine item_glossary's product categories. Occasions (Rakhi,",
+    "Diwali, Valentine, Christmas) are never a category here, per the 28 Aug 2026 decision.",
+    "Lookup order: 'overrides' by exact (normalised) name, then 'rules' top to bottom on the",
+    "lowercased name, then 'Uncategorised', which is listed at the foot of the mail, never guessed.",
+    "To move one item: add it to 'overrides'. To catch a new range: add a rule in the right place.",
+    "A single-product gift box or combo takes its product's category (Pranjay's alias convention);",
+    "only mixed hampers, bonbon and mithai boxes are Hampers."
+  ],
+  "categories": [
+    "Cakes",
+    "Bento Cakes",
+    "Cheesecakes",
+    "Pastries & Slices",
+    "Tubs & Jars",
+    "Desserts",
+    "Croissants & Breads",
+    "Cookies & Brownies",
+    "Sweet Snacks",
+    "Savoury Snacks",
+    "Hampers",
+    "Add-ons"
+  ],
+  "overrides": {
+    "The Brownie Point": "Hampers",
+    "Sweet Bond Rakhi Combo": "Hampers",
+    "Floral Affair Valentines Box": "Hampers",
+    "Cake Topper": "Add-ons"
+  },
+  "rules": [
+    {
+      "category": "Cheesecakes",
+      "match": "cheese ?cake",
+      "note": "a cheesecake in any format (slice, jar, tub, whole) stays a cheesecake"
+    },
+    {
+      "category": "Sweet Snacks",
+      "match": "(cookie|biscotti|biscuit|sable|shortbread|crackers|palmier)",
+      "and": "(\\(\\d+ ?gm\\)|\\[\\d+ ?pcs?\\]|\\(\\d+ ?pcs?\\))",
+      "note": "the packaged Snacks range: a biscuit-type name sold by pack weight or piece count"
+    },
+    {
+      "category": "Cookies & Brownies",
+      "match": "cookie|brownie|biscuit",
+      "note": "fresh cookies and brownies, incl. the cookie tins and the Boss Biscuit"
+    },
+    {
+      "category": "Bento Cakes",
+      "match": "bento"
+    },
+    {
+      "category": "Pastries & Slices",
+      "match": "pastry|slice"
+    },
+    {
+      "category": "Tubs & Jars",
+      "match": "\\btub\\b|\\bjar",
+      "note": "dessert tubs and jars; jar cakes are jars by format"
+    },
+    {
+      "category": "Cakes",
+      "match": "cake",
+      "note": "half kilo and 1 kg cakes, tea cakes, plum cakes, cupcakes and cake bouquets"
+    },
+    {
+      "category": "Croissants & Breads",
+      "match": "croissant|crossiant|brioche|stollen|bread"
+    },
+    {
+      "category": "Savoury Snacks",
+      "match": "lavash|grissini|sourdough"
+    },
+    {
+      "category": "Sweet Snacks",
+      "match": "french heart|palmier|florentine|granola|\\bbarks?\\b"
+    },
+    {
+      "category": "Hampers",
+      "match": "hamper|gift box|gift pack|goodie bag|bonbon|mithai"
+    },
+    {
+      "category": "Desserts",
+      "match": "kunafa|tiramisu|tres leches|banoffee|\\bpie\\b|bomboloni|berliner|eclair|cannoli|tart|mille-feuille|gateau|\\broll\\b|ladoo|dessert|strawberry glass|coated strawberries|treasure eggs|macaroon|macaron",
+      "note": "sits after Cakes and Cookies so a Tiramisu Cake is a cake and a Kunafa Cookie is a cookie; sits before Add-ons so Kunafa & Teddy is a dessert"
+    },
+    {
+      "category": "Add-ons",
+      "match": "candle|teddy|balloon|banner|cap-|party popper|single red rose|evil eye rakhi|ganesha rakhi|floral design rakhi|carnation|bouquet|\\bflowers?\\b",
+      "note": "non-food extras; the three rakhi threads are named so a Rakhi product never lands here"
+    }
+  ]
+}

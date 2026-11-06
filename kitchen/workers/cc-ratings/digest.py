@@ -161,9 +161,14 @@ def build_digest(DAILY, RATED, OUTLETS, meta, day=None, dash_name="", pdf_name="
     # Items whose category is not known. Shown, never guessed (Pranjay, 28 Aug 2026):
     # the old code silently filed anything unrecognised under "Desserts".
     uncat = meta.get("uncategorised") or []
+    unglossed = meta.get("unglossed") or []
     unmapped_outlets = meta.get("unmapped") or []
-    if uncat or unmapped_outlets:
+    if uncat or unglossed or unmapped_outlets:
         bits = []
+        if unglossed:
+            bits.append(f"<b>{len(unglossed)} item name{'s' if len(unglossed)!=1 else ''} not in the glossary yet.</b> "
+                        "Counted under their raw spelling until someone adds them on the portal "
+                        "(Data, Item glossary):<br>" + esc(", ".join(unglossed)))
         if uncat:
             bits.append(f"<b>{len(uncat)} item{'s' if len(uncat)!=1 else ''} with no category.</b> "
                         "They are counted in every total on this page, but they sit under "
