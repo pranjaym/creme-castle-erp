@@ -12,7 +12,14 @@ import ItemRow from '../ItemRow';
 export const dynamic = 'force-dynamic';
 
 const OCCASIONS = ['Rakhi', 'Christmas', 'Valentine', 'Friendship Day', "Mother's Day",
-                   "Father's Day", 'Diwali', 'New Year', 'Holi', "Teacher's Day", 'Janmashtami'];
+                   "Father's Day", 'Diwali', 'New Year', 'Holi', "Teacher's Day", 'Janmashtami',
+                   'Halloween', 'Karwa Chauth'];
+
+// The twelve FORMAT categories the evening ratings mail reads (menu_category). Must agree
+// with kitchen/workers/cc-ratings/categories.json and the check constraint of migration 251.
+const RATING_CATEGORIES = ['Cakes', 'Bento Cakes', 'Cheesecakes', 'Pastries & Slices', 'Tubs & Jars',
+                           'Desserts', 'Croissants & Breads', 'Cookies & Brownies', 'Sweet Snacks',
+                           'Savoury Snacks', 'Hampers', 'Add-ons'];
 
 function rs(n: number | null | undefined): string {
   if (!n) return '0';
@@ -46,6 +53,7 @@ export default async function ItemGlossaryPage({ searchParams }:
 
   const categories = Array.from(new Set(all.map(r => r.category as string).filter(Boolean))).sort();
   const aliases = Array.from(new Set(all.map(r => r.alias as string).filter(Boolean))).sort();
+  const menuAliases = Array.from(new Set(all.map(r => r.menu_alias as string).filter(Boolean))).sort();
   const queueRevenue = gaps.reduce((s, r) => s + Number(r.revenue_tracked_30d ?? 0), 0);
 
   return (
@@ -58,7 +66,11 @@ export default async function ItemGlossaryPage({ searchParams }:
         What each item on the menu is called, and what kind of thing it is. Two names for
         one product share an <b>alias</b>, so a renamed item keeps one history. The{' '}
         <b>category</b> is the product type. An <b>occasion</b> is a separate tag, so a
-        Rakhi cookie tin counts under Cookies and under Rakhi at the same time.
+        Rakhi cookie tin counts under Cookies and under Rakhi at the same time. The{' '}
+        <b>menu alias</b> and <b>ratings category</b> are what the evening ratings mail reads:
+        the alias merges flavours into one production item (every cheesecake slice is one
+        alias), the menu alias keeps the flavour and merges only spellings, sizes, sets and
+        occasion versions of the same product.
       </p>
 
       {sp.ok ? <p className="callout">{sp.ok}</p> : null}
@@ -100,7 +112,7 @@ export default async function ItemGlossaryPage({ searchParams }:
           <table className="sheet">
             <thead><tr>
               <th>Item, as Petpooja sends it</th>
-              <th colSpan={4}>Alias, category, occasion, shelf life</th>
+              <th colSpan={4}>Alias, category, occasion, shelf life, then menu alias and ratings category</th>
             </tr></thead>
             <tbody>
               {gaps.map(g => (
@@ -110,6 +122,8 @@ export default async function ItemGlossaryPage({ searchParams }:
                   aliases={aliases}
                   categories={categories}
                   occasions={OCCASIONS}
+                  menuAliases={menuAliases}
+                  ratingCategories={RATING_CATEGORIES}
                   back="/glossary/items"
                   context={
                     <>
@@ -149,7 +163,7 @@ export default async function ItemGlossaryPage({ searchParams }:
           <table className="sheet">
             <thead><tr>
               <th>Item, as Petpooja sends it</th>
-              <th colSpan={4}>Alias, category, occasion, shelf life</th>
+              <th colSpan={4}>Alias, category, occasion, shelf life, then menu alias and ratings category</th>
             </tr></thead>
             <tbody>
               {all.map(r => (
@@ -160,9 +174,13 @@ export default async function ItemGlossaryPage({ searchParams }:
                   category={r.category}
                   occasion={r.occasion}
                   shelfLife={r.shelf_life}
+                  menuAlias={r.menu_alias}
+                  menuCategory={r.menu_category}
                   aliases={aliases}
                   categories={categories}
                   occasions={OCCASIONS}
+                  menuAliases={menuAliases}
+                  ratingCategories={RATING_CATEGORIES}
                   back="/glossary/items?all=1"
                 />
               ))}
@@ -173,6 +191,9 @@ export default async function ItemGlossaryPage({ searchParams }:
 
       <datalist id="cc-aliases">
         {aliases.map(a => <option key={a} value={a} />)}
+      </datalist>
+      <datalist id="cc-menu-aliases">
+        {menuAliases.map(a => <option key={a} value={a} />)}
       </datalist>
 
       {!canEdit ? (
