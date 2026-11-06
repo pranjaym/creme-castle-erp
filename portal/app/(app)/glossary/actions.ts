@@ -41,6 +41,8 @@ export async function saveItem(form: FormData) {
   const category = clean(form.get('category'));
   const occasion = clean(form.get('occasion'));
   const shelfLife = clean(form.get('shelf_life'));
+  const menuAlias = clean(form.get('menu_alias'));
+  const menuCategory = clean(form.get('menu_category'));
 
   if (!itemName) bounce(back, 'No item name was posted.', 'err');
   // Alias and category are the two that must never be guessed. Shelf life is allowed to
@@ -55,6 +57,8 @@ export async function saveItem(form: FormData) {
     category,
     occasion,
     shelf_life: shelfLife,
+    menu_alias: menuAlias,
+    menu_category: menuCategory,
     updated_at: new Date().toISOString(),
     updated_by: user.email,
   }, { onConflict: 'item_name' });

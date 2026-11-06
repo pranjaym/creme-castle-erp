@@ -12,17 +12,27 @@ import { saveItem } from './actions';
 //             the CSV and stayed there.
 //   Occasion  optional tag. Rakhi, Christmas, Valentine, Friendship Day. A Rakhi cookie
 //             tin is category Cookies and occasion Rakhi, so it counts in both views.
+//   Menu alias and ratings category (6 Nov 2026): the alias above is the PRODUCTION item
+//             and merges flavours (every cheesecake slice is one alias), which the sales
+//             dashboard wants. The evening ratings mail needs the flavour, so it reads
+//             menu_alias (merges spellings, sizes, sets and occasion versions only) and
+//             menu_category (the twelve format categories). Blank menu alias = the item's
+//             own name; blank ratings category = the mail's keyword rules decide.
 export interface ItemRowProps {
   itemName: string;
   alias?: string | null;
   category?: string | null;
   occasion?: string | null;
   shelfLife?: string | null;
+  menuAlias?: string | null;
+  menuCategory?: string | null;
   /** Context shown to the left so the decision can be made without leaving the row. */
   context?: React.ReactNode;
   aliases: string[];
   categories: string[];
   occasions: string[];
+  menuAliases: string[];
+  ratingCategories: string[];
   back: string;
 }
 
@@ -53,6 +63,14 @@ export default function ItemRow(p: ItemRowProps) {
 
           <input name="shelf_life" defaultValue={p.shelfLife ?? ''} placeholder="Shelf life"
                  style={{ width: 100 }} />
+
+          <input name="menu_alias" list="cc-menu-aliases" defaultValue={p.menuAlias ?? ''}
+                 placeholder="Menu alias (ratings)" style={{ minWidth: 230 }} />
+
+          <select name="menu_category" defaultValue={p.menuCategory ?? ''} style={{ minWidth: 150 }}>
+            <option value="">Ratings category</option>
+            {p.ratingCategories.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
 
           <button className="btn btn-primary smallbtn" type="submit">Save</button>
         </form>
