@@ -37,7 +37,7 @@ LOG_AJAX = BASE + "/logs/online_log_status_ajax/?page={page}"
 ACTIVITY = BASE + "/reports/online_rider_report"
 DASHBOARD = BASE + "/users/dashboard"
 PAGE_SIZE = 15
-POLITE_SLEEP = float(os.environ.get("PETPOOJA_LOGS_SLEEP", "0.4"))
+POLITE_SLEEP = float(os.environ.get("PETPOOJA_LOGS_SLEEP", "2.0"))   # F80: steady, unhurried
 ACCOUNT = os.environ.get("PETPOOJA_ACCOUNT", "primary")
 
 
@@ -62,6 +62,40 @@ def load_session() -> dict:
         return json.load(f)
 
 
+class _Resp:
+    """The few parts of a requests.Response that this module reads."""
+
+    def __init__(self, status: int, text: str, url: str):
+        self.status_code, self.text, self.url = status, text, url
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"HTTP {self.status_code} for {self.url}")
+
+
+class BrowserClient:
+    """F80, 7 Nov 2026: the log calls go out from the profile browser itself (its own
+    request channel: same cookies, same browser), never from a separate program
+    holding a copied cookie. Petpooja has ended such copied sessions within minutes
+    since 5 Nov. Same get/post shape as requests.Session, so fetch_log and
+    list_outlets are unchanged."""
+
+    def __init__(self, context):
+        self.ctx = context
+
+    def get(self, url, timeout=60, headers=None):
+        r = self.ctx.request.get(url, headers=headers or {}, timeout=int(timeout * 1000))
+        return _Resp(r.status, r.text(), url)
+
+    def post(self, url, data=None, headers=None, timeout=60):
+        if isinstance(timeout, tuple):
+            timeout = sum(timeout)
+        h = {"X-Requested-With": "XMLHttpRequest"}
+        h.update(headers or {})
+        r = self.ctx.request.post(url, form=data or {}, headers=h, timeout=int(timeout * 1000))
+        return _Resp(r.status, r.text(), url)
+
+
 def http_session(state: dict) -> requests.Session:
     s = requests.Session()
     for c in state.get("cookies", []):
@@ -72,6 +106,11 @@ def http_session(state: dict) -> requests.Session:
 
 
 def _check_logged_in(html: str):
+    # A dead session answers a log call with a one-line script that bounces to the
+    # home page (seen 6 Nov 2026); without this check it read as "0 rows".
+    if "window.location.href" in html[:400] and len(html) < 600:
+        raise SessionExpired("Petpooja ended the login (a log call bounced to the sign-in page). "
+                             "Re-login by hand: python3 ../petpooja-ingest/scrape.py bootstrap primary")
     if "UserEmail" in html and "UserLoginDetail" in html:
         raise SessionExpired("Petpooja asked for login: the saved session has expired (F24). "
                              "Re-login by hand: python3 ../petpooja-ingest/scrape.py bootstrap primary")
@@ -263,95 +302,122 @@ def fetch_activity(state: dict, outlets: list[tuple[str, str]], want_days: set[d
     """For each outlet: scope, open the activity report, read every record type
     the page offers, page through the table, keep orders received on want_days.
     Returns ({rest_id: rows}, diagnostics). Always restores All Outlets."""
-    from playwright.sync_api import sync_playwright
     result, diag = {}, {"record_types": None, "restored": None, "errors": {}}
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=SC._is_headless())
-        ctx = browser.new_context(storage_state=state, viewport={"width": 1400, "height": 1000})
-        page = ctx.new_page()
-        try:
-            for rid, label in outlets:
+    if isinstance(state, dict):
+        # the old saved-cookie path (PETPOOJA_PROFILE=0)
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=SC._is_headless())
+            ctx = browser.new_context(storage_state=state, viewport={"width": 1400, "height": 1000})
+            try:
+                return _activity_in(ctx, ctx.new_page(), outlets, want_days, on_outlet, result, diag,
+                                    close_page=True)
+            finally:
                 try:
-                    _scope(page, int(rid))
-                    page.goto(ACTIVITY, wait_until="domcontentloaded", timeout=60000)
-                    page.wait_for_timeout(2500)
-                    if "online_rider_report" not in page.url:
-                        bounced = page.url
-                        page.goto(DASHBOARD, wait_until="domcontentloaded", timeout=60000)
-                        raise RuntimeError(f"report redirected to {bounced}; dashboard scope field now reads {_scope_value(page)!r}")
-                    opts = _record_type_options(page)
-                    if diag["record_types"] is None:
-                        diag["record_types"] = opts
-                        log(f"activity report record types: {opts}")
-                    rows_all: dict[str, dict] = {}
-                    seen_min = seen_max = None       # reach of the report, before the window filter
-                    values = [v for v, _ in opts] or [None]
-                    for val in values:
-                        if val is not None:
-                            try:
-                                page.evaluate("""(v) => { const s = Array.from(document.querySelectorAll('select'))
-                                    .find(s => Array.from(s.options).some(o => o.value === v));
-                                    if (s) { s.value = v; s.dispatchEvent(new Event('change', {bubbles: true})); } }""", val)
-                                # click through the page's own script: an overlay (popup, banner)
-                                # on some outlets' pages blocked every normal click on 9 Sep
-                                _dismiss_overlays(page)
-                                clicked = page.evaluate("""() => { const b = Array.from(document.querySelectorAll('button, input[type=submit]'))
-                                    .find(x => /^\\s*search\\s*$/i.test(x.innerText || x.value || '')); if (b) { b.click(); return true; } return false; }""")
-                                if not clicked:
-                                    btn = page.get_by_role("button", name=re.compile(r"^Search$", re.I))
-                                    if btn.count():
-                                        btn.first.click(timeout=8000, force=True)
-                                page.wait_for_timeout(4000)
-                            except Exception as e:
-                                shot = _shot(page, f"activity_{rid}_search")
-                                log(f"  record type {val}: search click skipped ({type(e).__name__}); screenshot {shot}")
-                        seen_pages = 0
-                        while True:
-                            headers, rows = _read_table(page)
-                            if not headers:
-                                break                      # no table at all: an outlet with no online orders
-                            for rec in P.parse_activity_rows(headers, rows, rid, min(want_days).year):
-                                bd = rec["business_date"]
-                                seen_min = bd if seen_min is None or bd < seen_min else seen_min
-                                seen_max = bd if seen_max is None or bd > seen_max else seen_max
-                                if bd in want_days:
-                                    rows_all[rec["order_id"]] = rec
-                            seen_pages += 1
-                            if seen_pages >= 200:
+                    browser.close()
+                except Exception:
+                    pass
+    # F80: state is the profile browser's context; work in its one tab (a new tab can
+    # pop up un-minimised), and leave that tab open for the rest of the run
+    return _activity_in(state, SC.main_page(state), outlets, want_days, on_outlet, result, diag,
+                        close_page=False)
+
+
+def _activity_in(ctx, page, outlets, want_days, on_outlet, result, diag, close_page=True):
+    """Scope each outlet in turn, read its activity report, always restore All Outlets."""
+    page.goto(DASHBOARD, wait_until="domcontentloaded", timeout=60000)
+    page.wait_for_timeout(1000)
+    if not SC._looks_logged_in(page):
+        # without this a dead login reads as "outlet switcher not available" 49 times
+        raise SessionExpired("Petpooja ended the login before the activity report. "
+                             "Re-login by hand: python3 ../petpooja-ingest/scrape.py bootstrap primary")
+    try:
+        for rid, label in outlets:
+            try:
+                _scope(page, int(rid))
+                page.goto(ACTIVITY, wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(2500)
+                if "online_rider_report" not in page.url:
+                    bounced = page.url
+                    page.goto(DASHBOARD, wait_until="domcontentloaded", timeout=60000)
+                    raise RuntimeError(f"report redirected to {bounced}; dashboard scope field now reads {_scope_value(page)!r}")
+                opts = _record_type_options(page)
+                if diag["record_types"] is None:
+                    diag["record_types"] = opts
+                    log(f"activity report record types: {opts}")
+                rows_all: dict[str, dict] = {}
+                seen_min = seen_max = None       # reach of the report, before the window filter
+                values = [v for v, _ in opts] or [None]
+                for val in values:
+                    if val is not None:
+                        try:
+                            page.evaluate("""(v) => { const s = Array.from(document.querySelectorAll('select'))
+                                .find(s => Array.from(s.options).some(o => o.value === v));
+                                if (s) { s.value = v; s.dispatchEvent(new Event('change', {bubbles: true})); } }""", val)
+                            # click through the page's own script: an overlay (popup, banner)
+                            # on some outlets' pages blocked every normal click on 9 Sep
+                            _dismiss_overlays(page)
+                            clicked = page.evaluate("""() => { const b = Array.from(document.querySelectorAll('button, input[type=submit]'))
+                                .find(x => /^\\s*search\\s*$/i.test(x.innerText || x.value || '')); if (b) { b.click(); return true; } return false; }""")
+                            if not clicked:
+                                btn = page.get_by_role("button", name=re.compile(r"^Search$", re.I))
+                                if btn.count():
+                                    btn.first.click(timeout=8000, force=True)
+                            page.wait_for_timeout(4000)
+                        except Exception as e:
+                            shot = _shot(page, f"activity_{rid}_search")
+                            log(f"  record type {val}: search click skipped ({type(e).__name__}); screenshot {shot}")
+                    seen_pages = 0
+                    while True:
+                        headers, rows = _read_table(page)
+                        if not headers:
+                            break                      # no table at all: an outlet with no online orders
+                        for rec in P.parse_activity_rows(headers, rows, rid, min(want_days).year):
+                            bd = rec["business_date"]
+                            seen_min = bd if seen_min is None or bd < seen_min else seen_min
+                            seen_max = bd if seen_max is None or bd > seen_max else seen_max
+                            if bd in want_days:
+                                rows_all[rec["order_id"]] = rec
+                        seen_pages += 1
+                        if seen_pages >= 200:
+                            break
+                        # pager: a live "Next" that is not disabled. Petpooja renders the
+                        # link even on the last page (found 9 Sep: three outlets timed out
+                        # clicking a Next that could not be clicked), so check its state and
+                        # never let one click kill the outlet.
+                        nxt = page.locator("li.next:not(.disabled) a, a.next:not(.disabled), a[rel='next']:not(.disabled)").first
+                        try:
+                            if not nxt.count() or not nxt.is_visible():
                                 break
-                            # pager: a live "Next" that is not disabled. Petpooja renders the
-                            # link even on the last page (found 9 Sep: three outlets timed out
-                            # clicking a Next that could not be clicked), so check its state and
-                            # never let one click kill the outlet.
-                            nxt = page.locator("li.next:not(.disabled) a, a.next:not(.disabled), a[rel='next']:not(.disabled)").first
-                            try:
-                                if not nxt.count() or not nxt.is_visible():
-                                    break
-                                parent_cls = nxt.evaluate("e => (e.parentElement && e.parentElement.className) || ''")
-                                if "disabled" in (nxt.get_attribute("class") or "") or "disabled" in parent_cls:
-                                    break
-                                before = page.evaluate("() => document.querySelector('table tbody') ? document.querySelector('table tbody').innerText.slice(0,200) : ''")
-                                _dismiss_overlays(page)
-                                nxt.evaluate("e => e.click()")
-                                page.wait_for_timeout(2500)
-                                after = page.evaluate("() => document.querySelector('table tbody') ? document.querySelector('table tbody').innerText.slice(0,200) : ''")
-                                if after == before:
-                                    break                  # the click changed nothing: last page
-                            except Exception as e:
-                                shot = _shot(page, f"activity_{rid}_pager")
-                                log(f"  pager stopped on page {seen_pages} ({type(e).__name__}); screenshot {shot}")
+                            parent_cls = nxt.evaluate("e => (e.parentElement && e.parentElement.className) || ''")
+                            if "disabled" in (nxt.get_attribute("class") or "") or "disabled" in parent_cls:
                                 break
-                    result[rid] = list(rows_all.values())
-                    diag.setdefault("reach", {})[rid] = (str(seen_min), str(seen_max))
-                    log(f"  {label}: report reaches {seen_min} to {seen_max} (business dates), "
-                        f"{len(result[rid])} orders kept for the window")
-                    if on_outlet:
-                        on_outlet(rid, label, len(result[rid]))
-                except Exception as e:
-                    diag["errors"][rid] = f"{type(e).__name__}: {str(e)[:160]}"
-                    log(f"  {label}: {diag['errors'][rid]}")
-                time.sleep(POLITE_SLEEP)
-        finally:
-            diag["restored"] = restore_all_outlets(page)
-            browser.close()
+                            before = page.evaluate("() => document.querySelector('table tbody') ? document.querySelector('table tbody').innerText.slice(0,200) : ''")
+                            _dismiss_overlays(page)
+                            nxt.evaluate("e => e.click()")
+                            page.wait_for_timeout(2500)
+                            after = page.evaluate("() => document.querySelector('table tbody') ? document.querySelector('table tbody').innerText.slice(0,200) : ''")
+                            if after == before:
+                                break                  # the click changed nothing: last page
+                        except Exception as e:
+                            shot = _shot(page, f"activity_{rid}_pager")
+                            log(f"  pager stopped on page {seen_pages} ({type(e).__name__}); screenshot {shot}")
+                            break
+                result[rid] = list(rows_all.values())
+                diag.setdefault("reach", {})[rid] = (str(seen_min), str(seen_max))
+                log(f"  {label}: report reaches {seen_min} to {seen_max} (business dates), "
+                    f"{len(result[rid])} orders kept for the window")
+                if on_outlet:
+                    on_outlet(rid, label, len(result[rid]))
+            except Exception as e:
+                diag["errors"][rid] = f"{type(e).__name__}: {str(e)[:160]}"
+                log(f"  {label}: {diag['errors'][rid]}")
+            time.sleep(POLITE_SLEEP)
+    finally:
+        diag["restored"] = restore_all_outlets(page)
+        if close_page:
+            try:
+                page.close()
+            except Exception:
+                pass
     return result, diag

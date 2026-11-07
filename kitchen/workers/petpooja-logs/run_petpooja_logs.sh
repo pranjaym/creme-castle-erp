@@ -89,12 +89,14 @@ fi
 # so one hung run silently ate every later slot. macOS ships no timeout(1), so
 # a watchdog subshell kills the run after CC_WALL_CAP seconds (default 40 min);
 # the exit is non-zero, no stamp is written, and the next slot retries.
-WALL_CAP="${CC_WALL_CAP:-2400}"
+# F80 (7 Nov 2026): the run now goes through one browser at a steady pace and
+# takes about 45 to 55 minutes, so the cap is 80 minutes, not 40.
+WALL_CAP="${CC_WALL_CAP:-4800}"
 "$PYTHON" run_daily.py >> "$LOG" 2>&1 &
 RUN_PID=$!
 ( sleep "$WALL_CAP"; if kill -0 "$RUN_PID" 2>/dev/null; then
     echo "wall-clock cap of ${WALL_CAP}s hit at $(date): killing run (pid $RUN_PID)" >> "$LOG"
-    kill "$RUN_PID" 2>/dev/null; sleep 15; kill -9 "$RUN_PID" 2>/dev/null; fi ) &
+    kill "$RUN_PID" 2>/dev/null; sleep 45; kill -9 "$RUN_PID" 2>/dev/null; fi ) &
 WATCHDOG=$!
 wait "$RUN_PID"
 status=$?

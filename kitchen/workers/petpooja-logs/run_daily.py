@@ -129,15 +129,23 @@ def main() -> int:
     log(f"===== petpooja-logs run at {now:%Y-%m-%d %H:%M} IST, window {d_from} to {d_to}"
         f"{' (dry run)' if args.dry_run else ''} =====")
 
-    # 1. session
+    # 1. session. F80 (7 Nov 2026): the whole run lives inside the account's permanent
+    # browser profile; the log calls and the activity report both go through it.
     try:
-        state = F.load_session()
-        s = F.http_session(state)
+        if F.SC.profile_mode():
+            state = F.SC.shared_context(F.ACCOUNT)   # one window for the whole run
+            s = F.BrowserClient(state)
+        else:
+            state = F.load_session()
+            s = F.http_session(state)
         outlets = F.list_outlets(s)
     except F.SessionExpired as e:
         log(f"SESSION EXPIRED: {e}")
         alert("[CC ERP] Petpooja logs: saved login expired (F24)", str(e))
         return 1
+    except F.SC.ProfileBusy as e:
+        log(f"{e}; deferring to the next slot")
+        return 75
     except Exception as e:
         if is_transport(e):
             log(f"transport problem before the pull ({type(e).__name__}: {str(e)[:120]}); deferring")
@@ -268,5 +276,21 @@ def main() -> int:
                 pass
 
 
+def _on_term(signum, frame):
+    # F80: the wrapper's time cap sends SIGTERM. Turn it into an ordinary exit so the
+    # activity report's finally block still puts the account back on All Outlets
+    # (7 Nov 2026: a capped run left it scoped to CC-ND-Sector 68).
+    raise SystemExit(143)
+
+
+def _run() -> int:
+    import signal
+    signal.signal(signal.SIGTERM, _on_term)
+    try:
+        return main()
+    finally:
+        F.SC.close_shared()
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(_run())

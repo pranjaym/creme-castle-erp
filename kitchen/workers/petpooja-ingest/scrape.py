@@ -245,6 +245,178 @@ def push_session(account=None):
 
 # ------------------------------- browser flow --------------------------------
 
+# ---------------------------- permanent profile (F80) ------------------------
+# 7 Nov 2026. Since the afternoon of 5 Nov Petpooja ends a session within minutes
+# once it is carried out of the browser it was logged in with: a cookie copied into
+# a hidden browser or into plain Python dies, while the same session kept in the
+# window that logged in survived 50 paced reads (tests in
+# erp-plan/petpooja-pulls-inventory.md, 7a to 7c). So every Mac job now runs inside
+# ONE permanent browser profile per account, in the same visible mode the human logs
+# in with, exactly like an ordinary Chrome profile keeps its login. Nothing about the
+# browser is disguised. One job at a time holds the profile (a file lock); the window
+# is minimised so it does not sit over the owner's work. PETPOOJA_PROFILE=0 restores
+# the old saved-cookie path.
+
+PROFILE_ROOT = os.path.expanduser(os.environ.get(
+    "PETPOOJA_PROFILE_ROOT", "~/Library/Application Support/CremeCastle/petpooja-profile"))
+
+
+class LoginNeeded(RuntimeError):
+    """The profile's Petpooja login has ended: only a hand OTP login fixes it."""
+
+
+class ProfileBusy(RuntimeError):
+    """Another job held the profile for longer than this one would wait."""
+
+
+def profile_mode():
+    return env("PETPOOJA_PROFILE", "1") not in ("0", "false", "False", "")
+
+
+def profile_dir(account=None):
+    return os.path.join(PROFILE_ROOT, account or DEFAULT_ACCOUNT)
+
+
+def login_needed_message(account=None):
+    acct = account or DEFAULT_ACCOUNT
+    return (f"the Petpooja login in the Mac's browser profile for account '{acct}' has ended. "
+            f"Log in once by hand: cd ~/creme-castle-erp/kitchen/workers/petpooja-ingest && "
+            f"python3 scrape.py bootstrap {acct}")
+
+
+class ProfileBrowser:
+    """The account's permanent, visible browser profile, held by one job at a time.
+
+        with ProfileBrowser("primary") as context:
+            page = context.pages[0]
+    """
+
+    def __init__(self, account=None, wait_s=None, minimise=None):
+        self.account = account or DEFAULT_ACCOUNT
+        self.wait_s = int(env("PETPOOJA_PROFILE_WAIT", "1500")) if wait_s is None else wait_s
+        self.minimise = (env("PETPOOJA_MINIMISE", "1") not in ("0", "false", "False", "")
+                         if minimise is None else minimise)
+        self.context = None
+        self._pw = None
+        self._lock = None
+
+    def _acquire(self):
+        import fcntl
+        os.makedirs(PROFILE_ROOT, exist_ok=True)
+        self._lock = open(profile_dir(self.account) + ".lock", "w")
+        waited, told = 0, False
+        while True:
+            try:
+                fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return
+            except BlockingIOError:
+                if waited >= self.wait_s:
+                    self._lock.close()
+                    self._lock = None
+                    raise ProfileBusy(f"the Petpooja browser profile '{self.account}' stayed busy "
+                                      f"for {self.wait_s}s (another job is using it)")
+                if not told:
+                    print("Petpooja browser profile busy with another job; waiting...", flush=True)
+                    told = True
+                time.sleep(5)
+                waited += 5
+
+    def start(self):
+        self._acquire()
+        try:
+            from playwright.sync_api import sync_playwright
+            self._pw = sync_playwright().start()
+            self.context = self._pw.chromium.launch_persistent_context(
+                profile_dir(self.account), headless=False, accept_downloads=True,
+                viewport={"width": 1366, "height": 860})
+            self.context.set_default_timeout(SEL_TIMEOUT)
+            self.context.set_default_navigation_timeout(NAV_TIMEOUT)
+            if not self.context.pages:
+                self.context.new_page()
+            if self.minimise:
+                self._minimise(self.context.pages[0])
+            return self.context
+        except Exception:
+            self.close()
+            raise
+
+    def _minimise(self, page):
+        """Keep the window out of the owner's way. Playwright launches Chromium with
+        background throttling switched off, so a minimised window works normally."""
+        try:
+            cdp = self.context.new_cdp_session(page)
+            wid = cdp.send("Browser.getWindowForTarget")["windowId"]
+            cdp.send("Browser.setWindowBounds", {"windowId": wid, "bounds": {"windowState": "minimized"}})
+        except Exception as e:
+            print(f"(could not minimise the Petpooja window: {type(e).__name__})", flush=True)
+
+    def close(self):
+        for step in (lambda: self.context and self.context.close(),
+                     lambda: self._pw and self._pw.stop()):
+            try:
+                step()
+            except Exception:
+                pass
+        self.context, self._pw = None, None
+        if self._lock:
+            try:
+                import fcntl
+                fcntl.flock(self._lock, fcntl.LOCK_UN)
+                self._lock.close()
+            except Exception:
+                pass
+            self._lock = None
+
+    def __enter__(self):
+        return self.start()
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
+
+
+_SHARED = {}          # account -> ProfileBrowser kept open for the rest of this process
+_DIALOG_PAGES = set()
+
+
+def shared_context(account=None):
+    """F80b, 7 Nov 2026 (Pranjay: windows opening again and again are an obstacle).
+    One job, one window: the first Petpooja step of a process opens the profile
+    browser and every later step reuses it, in the same tab. It closes when the
+    process ends, so a job shows one window, minimised, for its whole run."""
+    acct = account or DEFAULT_ACCOUNT
+    b = _SHARED.get(acct)
+    if b is None or b.context is None:
+        b = ProfileBrowser(acct)
+        b.start()
+        _SHARED[acct] = b
+        if len(_SHARED) == 1:
+            import atexit
+            atexit.register(close_shared)
+    return b.context
+
+
+def main_page(context):
+    """The one tab every step uses (a new tab could pop up un-minimised)."""
+    page = context.pages[0] if context.pages else context.new_page()
+    if id(page) not in _DIALOG_PAGES:
+        page.on("dialog", lambda d: d.accept())
+        _DIALOG_PAGES.add(id(page))
+    return page
+
+
+def drop_shared(account=None):
+    """Close the shared browser after a failed step, so a retry starts clean."""
+    b = _SHARED.pop(account or DEFAULT_ACCOUNT, None)
+    if b:
+        b.close()
+
+
+def close_shared():
+    for acct in list(_SHARED):
+        drop_shared(acct)
+
+
 def _is_headless():
     return env("PETPOOJA_HEADLESS", "1") not in ("0", "false", "False", "")
 
@@ -273,6 +445,8 @@ def perform_login(page, context, account=None):
     headless runner there is no human, so a login prompt there means that account's
     saved session expired: fail loudly and name the account to re-bootstrap."""
     acct = account or DEFAULT_ACCOUNT
+    if profile_mode():
+        raise LoginNeeded(login_needed_message(acct))
     user = env("PETPOOJA_USERNAME", required=True)
     pw = env("PETPOOJA_PASSWORD", required=True)
     if _is_headless():
@@ -492,37 +666,55 @@ def _fetch_once(report, from_date=None, to_date=None, server_type=None, outlet_i
     acct = spec.get("account", DEFAULT_ACCOUNT)
     dest = env("PETPOOJA_DOWNLOAD_DIR", tempfile.gettempdir())
     os.makedirs(dest, exist_ok=True)
+    if profile_mode():
+        try:
+            context = shared_context(acct)
+            return _fetch_in_context(context, main_page(context), spec, acct, dest, from_date,
+                                     to_date, server_type, outlet_id, report)
+        except LoginNeeded:
+            raise
+        except Exception:
+            drop_shared(acct)
+            raise
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=_is_headless())
         context = _open_context(browser, acct)
         try:
-            page = context.new_page()
-            page.on("dialog", lambda d: d.accept())
-            page.goto(spec["url"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
-            if _login_form_visible(page):
-                perform_login(page, context, acct)
-                page.goto(spec["url"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
-            if spec.get("needs_outlet_id"):
-                if not outlet_id:
-                    raise ValueError(f"report '{report}' needs an outlet_id")
-                _switch_outlet_id(page, outlet_id)
-                page.goto(spec["url"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
-                page.wait_for_timeout(2000)
-                if "inventory.petpooja.com" not in page.url:
-                    raise RuntimeError(
-                        f"inventory report redirected to {page.url}: the outlet scope "
-                        f"did not stick for id {outlet_id}")
-            if spec["needs_outlet"] and spec["outlet_label"]:
-                _select_outlet(page, spec["outlet_label"])
-                page.goto(spec["url"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
-            return _download(page, spec, dest, from_date=from_date, to_date=to_date,
-                             server_type=server_type)
+            return _fetch_in_context(context, context.new_page(), spec, acct, dest, from_date,
+                                     to_date, server_type, outlet_id, report)
         finally:
             try:
                 browser.close()
             except Exception:
                 pass
+
+
+def _fetch_in_context(context, page, spec, acct, dest, from_date, to_date, server_type,
+                      outlet_id, report):
+    """The report steps themselves, shared by the profile and the saved-cookie paths."""
+    if id(page) not in _DIALOG_PAGES:
+        page.on("dialog", lambda d: d.accept())
+        _DIALOG_PAGES.add(id(page))
+    page.goto(spec["url"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+    if _login_form_visible(page):
+        perform_login(page, context, acct)
+        page.goto(spec["url"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+    if spec.get("needs_outlet_id"):
+        if not outlet_id:
+            raise ValueError(f"report '{report}' needs an outlet_id")
+        _switch_outlet_id(page, outlet_id)
+        page.goto(spec["url"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+        page.wait_for_timeout(2000)
+        if "inventory.petpooja.com" not in page.url:
+            raise RuntimeError(
+                f"inventory report redirected to {page.url}: the outlet scope "
+                f"did not stick for id {outlet_id}")
+    if spec["needs_outlet"] and spec["outlet_label"]:
+        _select_outlet(page, spec["outlet_label"])
+        page.goto(spec["url"], wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+    return _download(page, spec, dest, from_date=from_date, to_date=to_date,
+                     server_type=server_type)
 
 
 def scrape_and_download(report="oms_purchase", max_retries=2, days_back=0,
@@ -535,7 +727,8 @@ def scrape_and_download(report="oms_purchase", max_retries=2, days_back=0,
         from_date = (dt.date.today() - dt.timedelta(days=days_back)).strftime("%Y-%m-%d")
         to_date = dt.date.today().strftime("%Y-%m-%d")
     acct = REPORTS.get(report, {}).get("account", DEFAULT_ACCOUNT)
-    pull_session(acct)
+    if not profile_mode():
+        pull_session(acct)
     last = None
     for attempt in range(1, max_retries + 2):
         try:
@@ -543,6 +736,9 @@ def scrape_and_download(report="oms_purchase", max_retries=2, days_back=0,
                   f"attempt {attempt}/{max_retries + 1}")
             return _fetch_once(report, from_date=from_date, to_date=to_date,
                                server_type=server_type, outlet_id=outlet_id)
+        except LoginNeeded as e:
+            # retrying cannot help and every retry is another visit on a dead login
+            raise SystemExit(f"Petpooja login needed: {e}")
         except Exception as e:
             last = e
             print(f"attempt {attempt} failed: {str(e)[:160]}")
@@ -560,20 +756,40 @@ def _looks_logged_in(page):
 
 
 def bootstrap(account=None, timeout_s=480, poll_s=3):
-    """One-time per ACCOUNT, headed, run from the Mac. Opens Petpooja; the USER logs in
-    BY HAND (username, password, OTP) in the window. Nothing is auto-filled and no
-    Petpooja password is ever read from the environment or seen by the agent. When login
-    is detected the session is saved under that account's name and pushed to Supabase
-    Storage, so later headless runs reuse it and never see an OTP again.
+    """One-time per ACCOUNT, run from the Mac. Opens the account's permanent browser
+    profile (F80); the USER logs in BY HAND (username, password, OTP). Nothing is
+    auto-filled and no Petpooja password is read from the environment or seen by the
+    agent. The login then lives in that profile, the way an ordinary Chrome profile
+    keeps it, and every scheduled job reuses the same profile.
 
-    Creme Castle has two logins: `bootstrap('primary')` for the sales reports and
-    `bootstrap('inventory')` for the stock and material-transfer reports. Sessions are
-    stored separately, so doing one never disturbs the other.
+    With PETPOOJA_PROFILE=0 the old path runs instead: a saved-cookie file pushed to
+    Supabase Storage for headless reuse (the path Petpooja stopped tolerating on 5 Nov).
 
     Polls instead of waiting on a keypress, so it can run unattended-by-stdin."""
     import time as _t
     acct = account or DEFAULT_ACCOUNT
     print(f"bootstrapping Petpooja account '{acct}'")
+    if profile_mode():
+        with ProfileBrowser(acct, minimise=False) as context:
+            page = context.pages[0]
+            page.goto(portal(), wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+            if _looks_logged_in(page):
+                print("already logged in in the profile; nothing to do.")
+                return
+            print("A browser window is open. Log in to Petpooja by hand "
+                  "(username, password, OTP).")
+            print(f"Waiting up to {timeout_s // 60} min for login to complete...")
+            waited = 0
+            while waited < timeout_s and not _looks_logged_in(page):
+                _t.sleep(poll_s)
+                waited += poll_s
+            if not _looks_logged_in(page):
+                raise SystemExit("login not detected within the time limit; re-run to retry.")
+            print("login detected; waiting 5 seconds so Petpooja finishes setting up the session.")
+            _t.sleep(5)
+        print(f"bootstrap complete: account '{acct}' is logged in in its browser profile "
+              f"({profile_dir(acct)}).")
+        return
     os.environ["PETPOOJA_HEADLESS"] = "0"
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
@@ -601,10 +817,25 @@ def bootstrap(account=None, timeout_s=480, poll_s=3):
     print(f"bootstrap complete: session for account '{acct}' saved and pushed.")
 
 
+def check_login(account=None):
+    """Read-only: is the profile still logged in? One dashboard page load, inside the
+    profile itself. Prints ALIVE or DEAD and returns True/False."""
+    acct = account or DEFAULT_ACCOUNT
+    page = main_page(shared_context(acct))
+    page.goto(portal().rstrip("/") + "/users/dashboard", wait_until="domcontentloaded",
+              timeout=NAV_TIMEOUT)
+    page.wait_for_timeout(1500)
+    ok = _looks_logged_in(page)
+    print(f"Petpooja login for '{acct}' in the browser profile: {'ALIVE' if ok else 'DEAD'}")
+    return ok
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "bootstrap":
         # `python3 scrape.py bootstrap [account]`  (account defaults to "primary")
         bootstrap(sys.argv[2] if len(sys.argv) > 2 else None)
+    elif len(sys.argv) > 1 and sys.argv[1] == "check":
+        # `python3 scrape.py check [account]`: read-only, ALIVE or DEAD
+        sys.exit(0 if check_login(sys.argv[2] if len(sys.argv) > 2 else None) else 1)
     else:
         report = sys.argv[1] if len(sys.argv) > 1 else "oms_purchase"
         print(scrape_and_download(report))
