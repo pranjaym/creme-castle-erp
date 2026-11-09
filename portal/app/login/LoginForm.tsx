@@ -11,7 +11,10 @@ export default function LoginForm({ next }: { next: string }) {
       <label className="fld" htmlFor="email">Email</label>
       <input className="txt" id="email" name="email" type="email" autoComplete="username"
         autoFocus required placeholder="you@cremecastle.in" />
-      <label className="fld" htmlFor="password">Password</label>
+      <div className="pwrow">
+        <label className="fld" htmlFor="password">Password</label>
+        <a className="linkbtn" href="/forgot">Forgot password?</a>
+      </div>
       <input className="txt" id="password" name="password" type="password"
         autoComplete="current-password" required placeholder="Your password" />
       {state?.error ? <div className="err">{state.error}</div> : null}

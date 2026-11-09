@@ -10,7 +10,13 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
-const PUBLIC_PREFIXES = ['/login', '/auth'];
+// /forgot and /reset are the password reset by emailed link (9 Nov 2026): the
+// person using them is, by definition, not signed in.
+const PUBLIC_PREFIXES = ['/login', '/auth', '/forgot', '/reset'];
+
+// A login marked "must change password" (an admin-typed temporary password, or
+// a new account) may open only this page until they choose their own.
+const MUST_CHANGE_PATH = '/change-password';
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -46,6 +52,17 @@ export async function middleware(request: NextRequest) {
     to.pathname = '/login';
     to.searchParams.set('next', path);
     return NextResponse.redirect(to);
+  }
+
+  // getUser() asks the Auth server, so this mark is current, not the copy in an
+  // old session cookie. A refreshed session cookie rides along on the redirect.
+  if (user && user.app_metadata?.must_change_password === true && !isPublic && path !== MUST_CHANGE_PATH) {
+    const to = request.nextUrl.clone();
+    to.pathname = MUST_CHANGE_PATH;
+    to.search = '';
+    const r = NextResponse.redirect(to);
+    response.cookies.getAll().forEach((c) => r.cookies.set(c));
+    return r;
   }
 
   return response;

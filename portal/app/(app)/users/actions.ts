@@ -15,6 +15,8 @@ import { revalidatePath } from 'next/cache';
 import { getSessionUser, type Role, type SessionUser } from '@/lib/session';
 import { spine } from '@/lib/supabase/service';
 import { ROLE_DEFS, ROLE_LABEL } from '@/lib/roles';
+import { requestResetLink } from '@/lib/password-reset';
+import { istTime } from '@/lib/mail';
 
 // The roles an admin may save. Read from ROLE_DEFS, never typed out again: a
 // hand-kept second list is how chef and controls were added to the form on
@@ -102,8 +104,10 @@ export async function createUser(formData: FormData): Promise<void> {
   if ('error' in scope) bounce(back, scope.error, 'err');
 
   const db = spine();
+  // The typed password is a handover, not the one they keep: they must choose
+  // their own at first sign-in (9 Nov 2026, middleware + /change-password).
   const { data: created, error } = await db.auth.admin.createUser({
-    email, password, email_confirm: true,
+    email, password, email_confirm: true, app_metadata: { must_change_password: true },
   });
   if (error || !created.user) {
     bounce(back, `Could not create the account: ${error?.message ?? 'unknown error'}`, 'err');
@@ -116,9 +120,9 @@ export async function createUser(formData: FormData): Promise<void> {
     .eq('id', created.user.id);
   if (profErr) bounce(back, `Account created but the profile update failed: ${profErr.message}`, 'err');
 
-  await log(actor, 'user_created', email, { role, outlets: scope.codes, full_name: fullName, recipe_grant: String(formData.get('recipe_grant') || '') });
+  await log(actor, 'user_created', email, { forced: true, role, outlets: scope.codes, full_name: fullName, recipe_grant: String(formData.get('recipe_grant') || '') });
   revalidatePath('/users');
-  bounce('/users', `${email} added as ${ROLE_LABEL(role)}. Give them the temporary password in person or on a call, not by email.`);
+  bounce('/users', `${email} added as ${ROLE_LABEL(role)}. Give them the temporary password in person or on a call, not by email. They will choose their own when they first sign in.`);
 }
 
 export async function updateUser(formData: FormData): Promise<void> {
@@ -153,7 +157,9 @@ export async function updateUser(formData: FormData): Promise<void> {
 
 // Passwords were issued on paper, so "they lost it" is a routine request and
 // needs to be one button, not a support ticket. The admin types the new
-// temporary password and hands it over the same way.
+// temporary password and hands it over the same way. Since 9 Nov 2026 it is a
+// handover only: the person must choose their own at next sign-in. The usual
+// route now is emailResetLink below.
 export async function resetPassword(formData: FormData): Promise<void> {
   const actor = await requireAdminAction();
 
@@ -165,11 +171,47 @@ export async function resetPassword(formData: FormData): Promise<void> {
   if (!id) bounce('/users', 'Missing account id.', 'err');
   if (password.length < 8) bounce(back, 'The new password needs at least 8 characters.', 'err');
 
-  const { error } = await spine().auth.admin.updateUserById(id, { password });
+  const { error } = await spine().auth.admin.updateUserById(id, {
+    password, app_metadata: { must_change_password: true },
+  });
   if (error) bounce(back, `Could not set the password: ${error.message}`, 'err');
 
   // The password itself is never logged, only that it was reset and by whom.
-  await log(actor, 'password_reset', email || id, { by_admin: true });
-  bounce(back, `New temporary password set for ${email || 'the account'}. Give it to them directly, not by email.`);
+  await log(actor, 'password_reset', (email || id).toLowerCase(), { by_admin: true, forced: true });
+  bounce(back, `Temporary password set for ${email || 'the account'}. Read it out on a call, not by email. They will be asked to choose their own the moment they sign in.`);
+}
+
+// Email the person a one-time reset link (the same one "Forgot password?" on
+// the sign-in page sends). The admin never knows their password. Counts toward
+// the same limit of 3 links an hour.
+export async function emailResetLink(formData: FormData): Promise<void> {
+  const actor = await requireAdminAction();
+
+  const id = String(formData.get('id') || '');
+  const back = `/users/${id}`;
+  if (!id) bounce('/users', 'Missing account id.', 'err');
+
+  const { data: prof } = await spine().from('profiles').select('email, active').eq('id', id).maybeSingle();
+  const email = (prof?.email as string | undefined) ?? '';
+  if (!email) bounce(back, 'This account has no email address on file.', 'err');
+  if (prof?.active === false) bounce(back, 'This account is switched off. Switch it on first, then send the link.', 'err');
+
+  const r = await requestResetLink(email, 'portal', { id: actor.id, email: actor.email });
+  switch (r.status) {
+    case 'sent':
+      bounce(back, `Reset link emailed to ${email} at ${istTime(r.sentAt)}. It works until ${istTime(r.until)}. Their current password keeps working until they use it.`);
+    case 'limited':
+      bounce(back, `3 links already went to ${email} in the last hour. Ask them to use the newest email, or set a temporary password below. Next link possible at ${istTime(r.nextAt)}.`, 'err');
+    case 'wait':
+      bounce(back, `A link went to ${email} at ${istTime(r.lastAt)}. Wait until ${istTime(r.nextAt)} before sending another.`, 'err');
+    case 'not_configured':
+      bounce(back, 'Email is not set up on the server yet (SMTP_USER and SMTP_PASS). Set a temporary password below instead.', 'err');
+    case 'no_account':
+      bounce(back, `No login exists for ${email}. Check the address on this account.`, 'err');
+    case 'inactive':
+      bounce(back, 'This account is switched off. Switch it on first, then send the link.', 'err');
+    default:
+      bounce(back, 'The email could not be sent just now. Try again in a few minutes, or set a temporary password below.', 'err');
+  }
 }
 

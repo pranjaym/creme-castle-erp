@@ -398,6 +398,28 @@ label.fld { display: block; margin: 14px 0 5px; font-size: 12px; font-weight: 60
 .loginwrap input.txt { max-width: none; }
 .loginwrap .primary { width: 100%; margin-top: 20px; padding: 12px; }
 
+/* Password reset by emailed link (9 Nov 2026): /forgot, /reset, /change-password */
+.loginwrap .pwrow { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.loginwrap .linkbtn { color: var(--coral-dark); font-size: 13px; font-weight: 600; }
+.loginwrap .lede { font-size: 14px; margin: 0 0 4px; }
+.loginwrap .center { text-align: center; }
+.loginwrap .h-reset { font-family: var(--font-display); font-weight: 700; color: var(--maroon); font-size: 21px; margin: 4px 0 8px; }
+.loginwrap .addr { word-break: break-all; }
+.loginwrap .btnlink { display: block; text-align: center; text-decoration: none; border-radius: var(--radius-sm); font-weight: 600; }
+.loginwrap .btnlink:hover { text-decoration: none; }
+.loginwrap .ghostbtn { display: block; width: 100%; text-align: center; margin-top: 10px; padding: 11px; background: transparent;
+  color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius-sm); font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; }
+.loginwrap .ghostbtn:hover { border-color: var(--coral); text-decoration: none; }
+.loginwrap .showpw { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); margin-top: 10px; }
+.pwrules { list-style: none; padding: 0; margin: 12px 0 0; font-size: 13px; display: grid; gap: 4px; }
+.pwrules li { display: flex; gap: 8px; align-items: center; color: var(--muted); }
+.pwrules .dot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--line); flex: 0 0 16px;
+  display: grid; place-items: center; font-size: 10px; }
+.pwrules li.met { color: var(--ok-fg); }
+.pwrules li.met .dot { background: var(--ok-bg); border-color: var(--ok-fg); }
+.pwopts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; max-width: 900px; }
+.pwopts h3 { color: var(--ink); font-family: var(--font-body); font-size: 15.5px; margin: 0 0 4px; }
+
 /* ============================ home compass =============================== */
 
 .homegrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));

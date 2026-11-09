@@ -18,7 +18,7 @@ export async function login(_prev: unknown, formData: FormData): Promise<{ error
   const supabase = await authClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user) {
-    return { error: 'Email or password is not correct.' };
+    return { error: 'Email or password is not correct. Forgot it? Use "Forgot password?" above to get a link by email.' };
   }
 
   const { data: profile } = await spine()
