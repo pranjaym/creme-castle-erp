@@ -47,3 +47,38 @@ export async function lastPurchases(days = 120): Promise<{ rows: FulfilmentRow[]
   for (const r of vendor) if (!latest.has(r.sku_code)) latest.set(r.sku_code, r);
   return { rows: [...latest.values()], directions, pages };
 }
+
+// ---------------------------------------------------------------------------
+// Whole-dataset pulls for the inventory sync (10 Nov 2026). Keyset paging:
+// pass meta.next_cursor back as cursor and keep every other parameter the same.
+// 1000 rows a page at most; a short pause between pages keeps us under the
+// 60 requests a minute of the standard tier. A 429 or a 5xx is retried.
+// ---------------------------------------------------------------------------
+export const SN_WAREHOUSE = WAREHOUSE;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export async function pullDataset(dataset: string, params: Record<string, string | number | undefined> = {}, maxPages = 80): Promise<Record<string, unknown>[]> {
+  const all: Record<string, unknown>[] = [];
+  let cursor: string | undefined; let pages = 0;
+  do {
+    if (pages > 0) await sleep(1100);
+    let r: { data: Record<string, unknown>[]; meta: Record<string, unknown> } | null = null; let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 3 && !r; attempt++) {
+      try {
+        r = await get<Record<string, unknown>[]>(`/v2/data/${dataset}`, { ...params, limit: 1000, cursor });
+      } catch (e) {
+        lastErr = e;
+        const m = e instanceof Error ? e.message : '';
+        // only transport trouble and throttling are worth a retry; a 4xx is a real answer
+        if (/^SupplyNote 4\d\d/.test(m) && !/^SupplyNote 429/.test(m)) throw e;
+        await sleep(4000 * (attempt + 1));
+      }
+    }
+    if (!r) throw lastErr instanceof Error ? lastErr : new Error('SupplyNote request failed');
+    if (!Array.isArray(r.data)) throw new Error(`SupplyNote ${dataset}: no data array in the answer`);
+    all.push(...r.data); pages += 1;
+    cursor = (r.meta?.next_cursor as string | null) ?? undefined;
+  } while (cursor && pages < maxPages);
+  if (cursor) throw new Error(`SupplyNote ${dataset}: more than ${maxPages} pages, refusing a partial pull`);
+  return all;
+}

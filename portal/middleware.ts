@@ -12,7 +12,9 @@ import { createServerClient } from '@supabase/ssr';
 
 // /forgot and /reset are the password reset by emailed link (9 Nov 2026): the
 // person using them is, by definition, not signed in.
-const PUBLIC_PREFIXES = ['/login', '/auth', '/forgot', '/reset'];
+// /api/cron is called by the Vercel scheduler, which has no login. Every route
+// under it checks the CRON_SECRET itself and answers 401 without it.
+const PUBLIC_PREFIXES = ['/login', '/auth', '/forgot', '/reset', '/api/cron'];
 
 // A login marked "must change password" (an admin-typed temporary password, or
 // a new account) may open only this page until they choose their own.
