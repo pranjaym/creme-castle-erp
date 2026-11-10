@@ -95,6 +95,10 @@ export function portalAccess(u: { role: Role; modules?: string[] }) {
     recipes: recipePerms(u),
     coupons: couponPerms(u),
     questions: questionPerms(u),
+    // Inventory module (10 Nov 2026): packaging stock, order plan, PO tracker.
+    // Owner, Central Team and the Costing Controller (the control and purchase
+    // side). One screen for everyone who may see it, no per-role home (Pranjay).
+    inventory: { view: mgmt || u.role === 'controls' },
     users: u.role === 'admin',
   };
 }

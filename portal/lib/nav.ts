@@ -62,6 +62,18 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
     items.push({ href: '/recipes/approvals', label: 'Changes & approvals' });
     sections.push({ title: 'Recipes & costing', items });
   }
+  if (acc.inventory.view) {
+    sections.push({
+      title: 'Inventory',
+      items: [
+        { href: '/inventory', label: 'Inventory today' },
+        { href: '/inventory/items', label: 'Projection' },
+        { href: '/inventory/orders', label: 'Order plan' },
+        { href: '/inventory/pos', label: 'PO tracker' },
+        { href: '/inventory/health', label: 'Stock health' },
+      ],
+    });
+  }
   if (acc.coupons.view) {
     sections.push({
       title: 'Discounts',

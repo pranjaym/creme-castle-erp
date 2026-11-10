@@ -1011,3 +1011,77 @@ a.qd-close { position: absolute; right: 14px; top: 10px; font-size: 22px; color:
 .issues .mustq { color: var(--coral); font-weight: 700; } .issues .optq { color: var(--muted); }
 .issues tr.opt td { color: var(--muted); } .issues tr.opt td .ik { opacity: .75; }
 .issues .isum b.red { color: #B3122B; }
+
+/* ============================ inventory module (10 Nov 2026) ==============
+   Classes are prefixed inv- so nothing here can restyle another module.
+   Colours are the tokens above; the two chart lines (coral, teal #1F8FA8) were
+   checked for colour-blind separation. */
+.inv { max-width: 1320px; }
+.inv .card { margin-bottom: 14px; padding: 14px 16px; }
+.inv .card h2 { margin: 0 0 2px; }
+.inv-sub { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; }
+.inv-warn { background: var(--warn-bg); color: var(--warn-fg); border-radius: var(--radius); padding: 9px 14px; margin: 0 0 12px; font-size: 13px; }
+.inv-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
+.inv-tabs a { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 13px; }
+.inv-tabs a:hover { border-color: var(--coral); text-decoration: none; }
+.inv-tabs a.on { background: var(--maroon); border-color: var(--maroon); color: #fff; font-weight: 600; }
+.inv-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.inv-tile { position: relative; display: block; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-card); padding: 12px 14px; color: inherit; }
+.inv-tile:hover { border-color: var(--coral); text-decoration: none; }
+.inv-tile.bad { border-left-color: #C0392B; } .inv-tile.good { border-left-color: #3E8E41; } .inv-tile.info { border-left-color: #1F8FA8; }
+.inv-tile .l { font-size: 12.5px; font-weight: 600; color: var(--ink); padding-right: 92px; }
+.inv-tile .v { font-family: var(--font-display); font-weight: 700; font-size: 30px; margin: 4px 0 2px; line-height: 1.1; color: var(--ink); }
+.inv-tile.bad .v { color: var(--bad-fg); } .inv-tile.good .v { color: var(--ok-fg); }
+.inv-tile .u { font-family: var(--font-body); font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 4px; }
+.inv-tile .s { font-size: 12px; color: var(--muted); }
+.inv-tile .tgt { position: absolute; top: 10px; right: 10px; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 2px 8px; }
+.inv-tile .tgt.unmet { background: var(--bad-bg); color: var(--bad-fg); } .inv-tile .tgt.met { background: var(--ok-bg); color: var(--ok-fg); }
+.inv-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.inv-grid2 > div { min-width: 0; }
+.inv-scroll { overflow-x: auto; }
+.inv-table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+.inv-table th { background: var(--head); text-align: left; font-size: 11.5px; font-weight: 600; color: var(--muted); padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; cursor: pointer; user-select: none; }
+.inv-table th:hover { color: var(--ink); }
+.inv-table th .ar { display: inline-block; width: 10px; margin-left: 3px; color: var(--coral); }
+.inv-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.inv-table th.n, .inv-table td.n { text-align: right; }
+.inv-table tbody tr:nth-child(even) > td { background: #FDFBFB; }
+/* not .row: the portal already has a flex .row, which would turn a table row into a flex box */
+.inv-table tr.inv-row { cursor: pointer; } .inv-table tr.inv-row:hover > td { background: #FFF8F9; }
+.inv-table tr.inv-detail > td { background: #FFFBFC; padding: 12px 14px 16px; }
+.inv-inner { background: #fff; border: 1px solid var(--line); } .inv-inner th { cursor: default; }
+.inv-detail h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 12px 0 4px; }
+.inv-calc, .inv-rules { margin: 0; padding-left: 18px; } .inv-calc li, .inv-rules li { margin: 3px 0; }
+.inv-item { font-weight: 600; } .inv-sku { color: var(--muted); font-size: 11.5px; }
+.inv-lk { color: var(--coral-dark); font-weight: 600; cursor: pointer; }
+.inv-bad { color: var(--bad-fg); font-weight: 600; }
+.inv-more { padding: 10px 2px 0; color: var(--muted); font-size: 12.5px; }
+.inv-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.inv-p-out { background: var(--bad-bg); color: var(--bad-fg); } .inv-p-order { background: var(--warn-bg); color: var(--warn-fg); }
+.inv-p-chase { background: var(--pink); color: var(--maroon); } .inv-p-ok { background: var(--ok-bg); color: var(--ok-fg); } .inv-p-idle { background: #F1EEEE; color: var(--muted); }
+.inv-tag { display: inline-block; font-size: 11px; color: var(--warn-fg); background: var(--warn-bg); border-radius: 4px; padding: 0 5px; margin-left: 4px; font-weight: 400; }
+.inv-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.inv-chip { font: inherit; font-size: 13px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: #fff; cursor: pointer; color: var(--ink); }
+.inv-chip b { font-weight: 600; opacity: .75; margin-left: 5px; } .inv-chip.on { background: var(--maroon); color: #fff; border-color: var(--maroon); }
+.inv-meaning { margin: 0 0 10px; padding: 8px 12px; background: var(--head); border-radius: 8px; font-size: 13px; }
+.inv-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.inv-tools input, .inv-tools select { font: inherit; font-size: 13px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); max-width: 260px; }
+.inv-btn { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--coral); background: var(--coral); color: #fff; cursor: pointer; font-weight: 600; }
+.inv-btn:hover { background: var(--coral-dark); }
+.inv-cov { display: inline-flex; align-items: center; gap: 8px; }
+.inv-cov .trk { position: relative; width: 64px; height: 8px; background: #F1EEEE; border-radius: 4px; flex: none; }
+.inv-cov .fl { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+.inv-cov .nd { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+.inv-chart { position: relative; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 8px 2px; max-width: 860px; }
+.inv-chart svg { display: block; width: 100%; height: auto; }
+.inv-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); padding: 2px 6px 6px; }
+.inv-legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+.inv-tip { position: absolute; top: 40px; pointer-events: none; background: var(--ink); color: #fff; font-size: 12px; border-radius: 6px; padding: 6px 8px; white-space: nowrap; z-index: 3; }
+.inv-list { list-style: none; margin: 0; padding: 0; }
+.inv-list li { padding: 8px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; }
+.inv-list li:last-child { border: 0; } .inv-list .r { color: var(--muted); text-align: right; white-space: nowrap; }
+.inv-bars { padding-top: 2px; }
+.inv-bar { display: grid; grid-template-columns: 130px 1fr 40px; gap: 8px; align-items: center; margin: 5px 0; font-size: 13px; }
+.inv-bar i { display: block; height: 16px; border-radius: 0 4px 4px 0; background: #1F8FA8; } .inv-bar .n { text-align: right; }
+.inv-lg { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; align-items: start; font-size: 13px; }
+@media (max-width: 900px) { .inv-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .inv-grid2 { grid-template-columns: 1fr; } }
