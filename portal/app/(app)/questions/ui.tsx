@@ -5,7 +5,7 @@
 // (erp-plan/questions-mock-area-v1.html).
 import Script from 'next/script';
 import {
-  fmtIst, chipClass, chipLabel, statusWord, firstName, MAX_PHOTOS,
+  fmtIst, aboutDay, chipClass, chipLabel, statusWord, firstName, MAX_PHOTOS,
   type QuestionRow, type EventRow, type Field, type Cause, type Person,
 } from '@/lib/questions';
 import { askQuestion, answerQuestion, closeQuestion, pushBackQuestion, explainQuestion } from './actions';
@@ -23,11 +23,13 @@ export function Chip({ r, href }: { r: QuestionRow; href?: string }) {
 }
 
 // The row a question was asked on, vertical, every column with its own label.
-export function RowBox({ section, fields, small }: { section: string; fields: Field[]; small?: boolean }) {
+// `when` is the day the row belongs to (aboutDay), shown under the section.
+export function RowBox({ section, fields, small, when }: { section: string; fields: Field[]; small?: boolean; when?: string | null }) {
   return (
     <div className="qd-row">
       <div className="qd-sec">The row this question is about</div>
       <div className="qd-sectitle">{section}</div>
+      {when ? <div className="qd-when">{when}</div> : null}
       <table className={small ? 'vrow small' : 'vrow'}><tbody>
         {fields.map((f, i) => <tr key={i}><th>{f.label}</th><td>{f.value}</td></tr>)}
       </tbody></table>
@@ -240,6 +242,7 @@ export function QuestionCard({ r, href, isNew, thread, pushedBack }: {
   pushedBack?: { note: string | null; by: string | null; at_iso: string };   // open again after a push-back
 }) {
   const st = statusWord(r);
+  const when = aboutDay(r.anchor_type, r.business_date, r.page_date, r.row_snapshot);
   const right = st === 'closed' ? `Closed ${fmtIst(r.closed_at_iso)}`
     : st === 'answered' ? `Answered ${fmtIst(r.answered_at_iso)}`
     : `Due ${fmtIst(r.due_at_iso)}`;
@@ -254,6 +257,7 @@ export function QuestionCard({ r, href, isNew, thread, pushedBack }: {
       <div className="qc-body">
         <div className="qc-col">
           <h4>The row it was asked on</h4>
+          {when ? <div className="qc-when">{when}</div> : null}
           <table className="vrow small"><tbody>
             {r.row_snapshot.map((f, i) => <tr key={i}><th>{f.label}</th><td>{f.value}</td></tr>)}
           </tbody></table>

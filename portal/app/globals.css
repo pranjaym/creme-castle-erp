@@ -874,7 +874,9 @@ a.qd-close { position: absolute; right: 14px; top: 10px; font-size: 22px; color:
 .qd-body { padding: 14px 20px 30px; overflow-y: auto; flex: 1; font-size: 13.5px; }
 .qd-row { background: var(--page); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12.5px; }
 .qd-sec { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.qd-sectitle { font-weight: 700; color: var(--ink); margin: 2px 0 8px; font-size: 13.5px; }
+.qd-sectitle { font-weight: 700; color: var(--ink); margin: 2px 0 4px; font-size: 13.5px; }
+.qd-when { font-weight: 600; color: var(--ink); margin: 0 0 8px; font-size: 13px; }
+.qc-when { font-weight: 600; color: var(--ink); margin: -2px 0 8px; font-size: 13px; }
 .vrow { border-collapse: collapse; width: 100%; margin: 0; background: transparent; }
 .vrow th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 4px 10px 4px 0; vertical-align: top;
   white-space: nowrap; width: 1%; border-top: 1px solid var(--line); text-transform: none; letter-spacing: 0; background: transparent; }

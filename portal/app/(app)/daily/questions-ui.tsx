@@ -6,7 +6,7 @@
 import Link from 'next/link';
 import { questionPerms, type SessionUser } from '@/lib/session';
 import {
-  getQuestion, getEvents, getEventsFor, causes, peopleAt, peopleAtAny, chipClass, chipLabel, orderKey, dayKey, weekKey,
+  getQuestion, getEvents, getEventsFor, causes, peopleAt, peopleAtAny, aboutDay, chipClass, chipLabel, orderKey, dayKey, weekKey,
   type QuestionRow, type EventRow, type Field, type AnchorType, type Cause, type Person,
 } from '@/lib/questions';
 import { RowBox, Thread, Flash, AskForm, ExplainForm, AnswerForm, CloseForm, Chip } from '../questions/ui';
@@ -145,7 +145,7 @@ export async function QuestionDrawer({ kit, user, sp }: {
     return (
       <Drawer closeHref={closeHref} title={e.outlet} sub="New question to the area manager">
         <Flash ok={sp.ok} err={sp.err} />
-        <RowBox section={e.section} fields={e.fields} />
+        <RowBox section={e.section} fields={e.fields} when={aboutDay(e.anchor_type, e.businessDate, e.pageDate, e.fields)} />
         {live && live.status !== 'closed'
           ? <div className="readonly">There is already an open question on this row. <Link href={`${kit.back}&q=${live.id}`}>Open it</Link>.</div>
           : <AskForm entry={e} back={kit.back} to="the area manager" />}
@@ -163,7 +163,7 @@ export async function QuestionDrawer({ kit, user, sp }: {
     return (
       <Drawer closeHref={closeHref} title={e.outlet} sub="Explain this row to central">
         <Flash ok={sp.ok} err={sp.err} />
-        <RowBox section={e.section} fields={e.fields} />
+        <RowBox section={e.section} fields={e.fields} when={aboutDay(e.anchor_type, e.businessDate, e.pageDate, e.fields)} />
         {live && live.status !== 'closed'
           ? <div className="readonly">There is already a question on this row. <Link href={`${kit.back}&q=${live.id}`}>Open it</Link>.</div>
           : <ExplainForm entry={e} back={kit.back} causes={cs} people={people} />}
@@ -249,7 +249,7 @@ function ThreadBody({ r, events, cs, people, user, kit }:
   const answerable = p.answer && (user.role === 'admin' || user.outletCodes.includes(r.outlet_code)) && r.status === 'open';
   return (
     <>
-      <RowBox section={r.section} fields={r.row_snapshot} />
+      <RowBox section={r.section} fields={r.row_snapshot} when={aboutDay(r.anchor_type, r.business_date, r.page_date, r.row_snapshot)} />
       <Thread events={events} />
       {answerable ? <AnswerForm q={r} back={kit.back} causes={cs} people={people} /> : null}
       {p.close && r.status !== 'closed' ? <CloseForm q={r} back={kit.back} answered={r.status === 'answered'} /> : null}

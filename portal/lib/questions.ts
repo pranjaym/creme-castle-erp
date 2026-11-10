@@ -267,6 +267,30 @@ export function fmtIst(iso: string | null | undefined): string {
   return d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })
     .replace(',', '').replace(' am', ' am').replace(' pm', ' pm');
 }
+// Which day a question is about (Rishabh, 10 Nov 2026: a card said "hours
+// short on the day" without saying which day). Read from the question's own
+// business_date, never from the page the viewer happens to be on. A week
+// anchor names its 7 days; a day anchor whose row carries a week figure also
+// names that week, which the dashboards count as the 7 days ending on the day
+// (ws = p_date - 6 .. p_date in migrations 213 and the Zomato functions). An
+// older order question saved without a business_date says only which page it
+// was asked from, since the order may be from earlier in that week.
+const ymd = (s: string) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+const fmtDay = (d: Date, opts: Intl.DateTimeFormatOptions) => d.toLocaleDateString('en-GB', { timeZone: 'UTC', ...opts });
+const longDay = (d: Date) => fmtDay(d, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const weekSpan = (start: Date, end: Date) =>
+  `${fmtDay(start, { day: 'numeric', month: start.getUTCMonth() === end.getUTCMonth() ? undefined : 'short' })} to ${fmtDay(end, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+export function aboutDay(anchorType: AnchorType, businessDate: string | null, pageDate: string | null, fields: Field[]): string | null {
+  if (businessDate) {
+    const d = ymd(businessDate);
+    if (anchorType === 'outlet_week') return `Week of ${weekSpan(d, new Date(d.getTime() + 6 * 864e5))}`;
+    const hasWeek = anchorType === 'outlet_day' && fields.some(f => /\bweek\b/i.test(f.label));
+    return hasWeek
+      ? `${longDay(d)} (week figures: ${weekSpan(new Date(d.getTime() - 6 * 864e5), d)})`
+      : longDay(d);
+  }
+  return pageDate ? `Asked from the page for ${longDay(ymd(pageDate))}` : null;
+}
 export function ago(iso: string): string {
   const h = Math.round((Date.now() - new Date(iso).getTime()) / 36e5);
   if (h < 1) return 'just now';
