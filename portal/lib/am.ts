@@ -375,7 +375,9 @@ export async function checkOut(person: string, visitId: number, lat: number | nu
   if (sectionsFor(d.kind).some(s => !d.sectionsDone.includes(s))) throw new Error('Finish every section first.');
   if (!d.seenAt) throw new Error('The in-charge has to see the to-do list first.');
   const pin = (await stores()).find(s => s.store === v.store);
-  const dist = pin && lat != null && lng != null ? metres(lat, lng, pin.lat, pin.lng) : null;
+  if (lat == null || lng == null) throw new Error('Your phone did not give a location. Allow location for this site and try again.');
+  const dist = pin ? metres(lat, lng, pin.lat, pin.lng) : null;
+  if (pin && dist != null && dist > pin.radius) throw new Error(`You are ${dist} m from the store. Check out works within ${pin.radius} m.`);
   await q(`update am.visit set status = 'closed', checkout_at = now(), checkout_lat = $2, checkout_lng = $3, checkout_acc_m = $4, checkout_dist_m = $5, updated_at = now() where id = $1`,
     [visitId, lat, lng, acc, dist]);
 }

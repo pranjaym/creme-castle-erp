@@ -75,6 +75,7 @@ export default function AmApp(props: {
   const [ppDraft, setPpDraft] = useState<Record<string, string>>({});
   const [text, setText] = useState('');
   const [qOpen, setQOpen] = useState(false);
+  const [outLoc, setOutLoc] = useState<Loc | null>(null);
   const [qaKind, setQaKind] = useState<'am_audit' | 'qa_audit' | 'other_audit'>('qa_audit');
   const [qaStore, setQaStore] = useState(props.stores[0]?.store ?? '');
   const [lastClosed, setLastClosed] = useState<{ store: string; minutes: number | null; from: string; to: string | null } | null>(null);
@@ -485,11 +486,25 @@ export default function AmApp(props: {
           <div className={s.row}><div className={s.rowl}><b>The in-charge has seen the to-do list</b><span>In the live app the in-charge taps this on their own phone. In the test, tap it once you have shown them.</span></div>
             {v.seenAt ? <span className={`${s.pill} ${s.good}`}>seen</span> : <button className={`${s.btn} ${s.small}`} disabled={busy} onClick={() => call('seen')}>Seen</button>}</div>
         </div>
-        <button className={s.btn} disabled={busy || !v.seenAt} onClick={async () => {
-          let loc: Loc | null = null;
-          try { setBusy(true); loc = await locate(); } catch { loc = null; } finally { setBusy(false); }
+        {(() => {
+          const pin = pinOf(v.store);
+          const dist = outLoc && pin ? metres(outLoc.lat, outLoc.lng, pin.lat, pin.lng) : null;
+          const inside = dist != null && pin != null && dist <= pin.radius;
+          return (<>
+            <div className={s.sub}>Check out also works only within {pin?.radius ?? 100} m of the store&apos;s pin.</div>
+            <button className={`${s.btn} ${s.ghost}`} disabled={busy} onClick={async () => {
+              setErr(null); setBusy(true);
+              try { setOutLoc(await locate()); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+            }}>{outLoc ? 'Check my location again' : 'Get my location'}</button>
+            {err?.startsWith('Location is blocked') ? <div className={s.sub}>Allow location as you did for check-in: Settings, Privacy and Security, Location Services, Safari Websites; then Safari&apos;s aA, Website Settings, Location.</div> : null}
+            {outLoc ? <div className={inside ? s.ok : s.err}>You are <b>{dist} m</b> from the store (GPS ±{outLoc.acc} m). {inside ? 'Inside the circle.' : `Move within ${pin?.radius ?? 100} m to check out.`}</div> : null}
+          </>);
+        })()}
+        <button className={s.btn} disabled={busy || !v.seenAt || !outLoc || (() => { const pin = pinOf(v.store); return !pin || metres(outLoc.lat, outLoc.lng, pin.lat, pin.lng) > pin.radius; })()} onClick={async () => {
+          const loc = outLoc!;
           const info = { store: v.store, from: v.checkinAt };
-          if (await call('checkOut', { lat: loc?.lat ?? null, lng: loc?.lng ?? null, acc: loc?.acc ?? null })) {
+          if (await call('checkOut', { lat: loc.lat, lng: loc.lng, acc: loc.acc })) {
+            setOutLoc(null);
             setLastClosed({ store: info.store, minutes: Math.round((Date.now() - new Date(info.from).getTime()) / 60000), from: info.from, to: new Date().toISOString() });
             go('closed');
           }
