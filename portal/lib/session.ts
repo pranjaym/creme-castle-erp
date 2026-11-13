@@ -73,6 +73,20 @@ export function questionPerms(u: { role: Role; modules?: string[] }) {
   };
 }
 
+// Area Manager app (migration 256, 13 Nov 2026). In TEST until Pranjay takes it
+// live: only the owner and people given a grant may use it, so area managers do
+// not see it yet. am:use = plan the day, check in, run a visit. am:review = see
+// every visit with its photos. On go-live, area_manager joins `use` here.
+export type AmGrant = 'am:use' | 'am:review';
+export function amPerms(u: { role: Role; modules?: string[] }) {
+  const g = new Set(u.modules ?? []);
+  const owner = u.role === 'admin';
+  return {
+    use: owner || g.has('am:use'),
+    review: owner || g.has('am:review'),
+  };
+}
+
 // The whole portal's permission table, in one place (26 Sep 2026). The menu
 // (lib/nav.ts) and every page gate read these same answers, so a page can no
 // longer be missing from someone's menu yet open to them when they type its
@@ -99,6 +113,7 @@ export function portalAccess(u: { role: Role; modules?: string[] }) {
     // Owner, Central Team and the Costing Controller (the control and purchase
     // side). One screen for everyone who may see it, no per-role home (Pranjay).
     inventory: { view: mgmt || u.role === 'controls' },
+    am: amPerms(u),
     users: u.role === 'admin',
   };
 }
