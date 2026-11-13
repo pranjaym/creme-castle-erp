@@ -1,24 +1,21 @@
-// One Area Manager app visit in full, with every photo (migration 256, in test).
+// One visit or store audit in full, with every photo (migrations 256, 257; in test).
+// Shared by the AM visit app and the store audit app; each page checks access first.
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requireAccess } from '@/lib/session';
-import { visitDetail, checklist, ORDER_CHECKS, KIND_NAMES, type VisitKind } from '@/lib/am';
-import s from '../../am.module.css';
+import { visitDetail, checklist, ORDER_CHECKS, KIND_NAMES, kindsFor, type VisitKind, type AppMode } from '@/lib/am';
+import s from './am.module.css';
 import VoidVisit from './VoidVisit';
 
-export const dynamic = 'force-dynamic';
 
 function when(ts: string | null): string {
   if (!ts) return '';
   return new Date(ts).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' });
 }
 
-export default async function AmVisit({ params }: { params: Promise<{ id: string }> }) {
-  await requireAccess(a => a.am.review);
-  const id = Number((await params).id);
+export default async function VisitDetailPage({ id, mode, back, backLabel }: { id: number; mode: AppMode; back: string; backLabel: string }) {
   if (!Number.isInteger(id) || id <= 0) notFound();
   const [v, items] = await Promise.all([visitDetail(id), checklist(1)]);
-  if (!v) notFound();
+  if (!v || !kindsFor(mode).includes(v.kind as VisitKind)) notFound();
   const passed = items.filter(i => v.audit[i.code]?.result === 'pass').length;
   const crit = items.filter(i => i.critical && v.audit[i.code]?.result === 'fail').length;
   const mins = v.checkoutAt ? Math.round((new Date(v.checkoutAt).getTime() - new Date(v.checkinAt).getTime()) / 60000) : null;
@@ -27,7 +24,7 @@ export default async function AmVisit({ params }: { params: Promise<{ id: string
     : null;
   return (
     <div className={s.wide}>
-      <Link href="/am/review" className={s.link}>‹ All visits</Link>
+      <Link href={back} className={s.link}>‹ {backLabel}</Link>
       <div className={s.h}>{KIND_NAMES[v.kind as VisitKind] ?? v.kind} · {v.store} · {v.personName}</div>
       <div className={s.sub}>
         Checked in {when(v.checkinAt)}, {v.checkinDist} m from the pin (GPS ±{v.checkinAcc} m)
@@ -62,7 +59,7 @@ export default async function AmVisit({ params }: { params: Promise<{ id: string
       <div className={s.card}><div className={s.cardh}>Open points from earlier visits</div>
         {v.openPoints.length ? v.openPoints.map(p => <div key={`${p.kind}${p.id}`} className={s.row}><div className={s.rowl}><b>{p.text}</b></div><span className={`${s.pill} ${p.mark === 'done' ? s.good : p.mark === 'open' ? s.warn : s.grey}`}>{p.mark ?? 'not marked'}</span></div>) : <div className={s.sub}>None.</div>}
       </div>
-      <VoidVisit id={v.id} />
+      <VoidVisit id={v.id} mode={mode} back={back} />
     </div>
   );
 }

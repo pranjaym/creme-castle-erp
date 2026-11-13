@@ -14,7 +14,7 @@ const MAX = 5 * 1024 * 1024;
 
 export async function POST(req: Request) {
   const u = await getSessionUser();
-  if (!u || !portalAccess(u).am.use) return NextResponse.json({ error: 'Not allowed for this role.' }, { status: 403 });
+  if (!u || !(portalAccess(u).am.use || portalAccess(u).audit.use)) return NextResponse.json({ error: 'Not allowed for this role.' }, { status: 403 });
   let form: FormData;
   try { form = await req.formData(); } catch { return NextResponse.json({ error: 'The photo did not arrive. Try again.' }, { status: 400 }); }
   const file = form.get('photo');

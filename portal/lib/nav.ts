@@ -65,9 +65,16 @@ export function navSectionsFor(user: SessionUser): NavSection[] {
   // Area Manager app (13 Nov 2026, in test): plan the day, check in, run a visit.
   if (acc.am.use || acc.am.review) {
     const items: NavItem[] = [];
-    if (acc.am.use) items.push({ href: '/am', label: 'My day (test)' });
-    if (acc.am.review) items.push({ href: '/am/review', label: 'All visits (test)' });
-    sections.push({ title: 'Area Manager app', items });
+    if (acc.am.use) items.push({ href: '/area-manager-visit', label: 'My day (test)' });
+    if (acc.am.review) items.push({ href: '/area-manager-visit/review', label: 'All visits (test)' });
+    sections.push({ title: 'Area Manager visit', items });
+  }
+  // Store audit app (13 Nov 2026, in test): its own screens, not part of the AM visit.
+  if (acc.audit.use || acc.audit.review) {
+    const items: NavItem[] = [];
+    if (acc.audit.use) items.push({ href: '/store-audit', label: 'Do a store audit (test)' });
+    if (acc.audit.review) items.push({ href: '/store-audit/results', label: 'Audit results (test)' });
+    sections.push({ title: 'Store audit', items });
   }
   if (acc.inventory.view) {
     sections.push({

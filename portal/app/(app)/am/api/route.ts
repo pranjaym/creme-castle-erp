@@ -12,13 +12,18 @@ const who = (u: SessionUser) => u.fullName ?? u.email;
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
-const dayState = (u: SessionUser) => am.dayState(u.id);
 
 export async function POST(req: Request) {
   const u = await getSessionUser();
-  if (!u || !portalAccess(u).am.use) return NextResponse.json({ error: 'Not allowed for this role.' }, { status: 403 });
+  if (!u) return NextResponse.json({ error: 'Not allowed for this role.' }, { status: 403 });
   let b: Record<string, unknown>;
   try { b = await req.json(); } catch { return NextResponse.json({ error: 'Bad request.' }, { status: 400 }); }
+  // Two apps share this endpoint: the AM visit app (mode visit, am:use) and the
+  // store audit app (mode audit, audit:use). Each only reaches its own kinds.
+  const mode: am.AppMode = b.mode === 'audit' ? 'audit' : 'visit';
+  const access = portalAccess(u);
+  if (!(mode === 'audit' ? access.audit.use : access.am.use) && b.action !== 'void') return NextResponse.json({ error: 'Not allowed for this role.' }, { status: 403 });
+  const dayState = (x: SessionUser) => am.dayState(x.id, mode);
   const action = String(b.action ?? '');
   const visitId = num(b.visitId) ?? 0;
   try {
@@ -31,7 +36,7 @@ export async function POST(req: Request) {
         const lat = num(b.lat), lng = num(b.lng), acc = num(b.acc), photo = num(b.photo);
         if (lat == null || lng == null) throw new Error('Your phone did not give a location. Allow location for this site and try again.');
         if (photo == null) throw new Error('Take the store-front photo first.');
-        await am.checkIn(u.id, who(u), { kind: (am.VISIT_KINDS as string[]).includes(String(b.kind)) ? (b.kind as am.VisitKind) : 'am_visit', store: String(b.store ?? ''), allowed: portalAccess(u).am.review || u.role === 'admin' || !u.outletCodes.length ? null : u.outletCodes, planned: b.planned === true, reason: str(b.reason), lat, lng, acc: acc ?? 0, frontPhoto: photo });
+        await am.checkIn(u.id, who(u), { kind: mode === 'visit' ? 'am_visit' : (am.AUDIT_KINDS as string[]).includes(String(b.kind)) ? (b.kind as am.VisitKind) : 'qa_audit', store: String(b.store ?? ''), allowed: (mode === 'audit' ? access.audit.review : access.am.review) || u.role === 'admin' || !u.outletCodes.length ? null : u.outletCodes, planned: b.planned === true, reason: str(b.reason), lat, lng, acc: acc ?? 0, frontPhoto: photo });
         break;
       }
       case 'reportPin': await am.reportPin(u.id, who(u), String(b.store ?? ''), num(b.lat), num(b.lng), num(b.acc), num(b.dist), str(b.note)); break;
@@ -50,8 +55,8 @@ export async function POST(req: Request) {
         break;
       }
       case 'void': {
-        if (!portalAccess(u).am.review) return NextResponse.json({ error: 'Only reviewers can void.' }, { status: 403 });
-        await am.voidVisit(u.id, num(b.id) ?? 0, String(b.reason ?? ''));
+        if (!(mode === 'audit' ? access.audit.review : access.am.review)) return NextResponse.json({ error: 'Only reviewers can void.' }, { status: 403 });
+        await am.voidVisit(u.id, num(b.id) ?? 0, String(b.reason ?? ''), mode);
         break;
       }
       case 'seen': await am.markSeen(u.id, visitId); break;

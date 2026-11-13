@@ -77,7 +77,15 @@ export function questionPerms(u: { role: Role; modules?: string[] }) {
 // live: only the owner and people given a grant may use it, so area managers do
 // not see it yet. am:use = plan the day, check in, run a visit. am:review = see
 // every visit with its photos. On go-live, area_manager joins `use` here.
-export type AmGrant = 'am:use' | 'am:review';
+export type AmGrant = 'am:use' | 'am:review' | 'audit:use' | 'audit:review';
+// Store audit app (13 Nov 2026, in test), separate from the AM visit app: anyone
+// Pranjay gives audit:use may run a store audit; audit:review sees all audits
+// and results by store. Same tables (schema am), different screens.
+export function auditPerms(u: { role: Role; modules?: string[] }) {
+  const g = new Set(u.modules ?? []);
+  const owner = u.role === 'admin';
+  return { use: owner || g.has('audit:use'), review: owner || g.has('audit:review') };
+}
 export function amPerms(u: { role: Role; modules?: string[] }) {
   const g = new Set(u.modules ?? []);
   const owner = u.role === 'admin';
@@ -114,6 +122,7 @@ export function portalAccess(u: { role: Role; modules?: string[] }) {
     // side). One screen for everyone who may see it, no per-role home (Pranjay).
     inventory: { view: mgmt || u.role === 'controls' },
     am: amPerms(u),
+    audit: auditPerms(u),
     users: u.role === 'admin',
   };
 }

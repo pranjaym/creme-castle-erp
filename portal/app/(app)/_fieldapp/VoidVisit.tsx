@@ -3,9 +3,9 @@
 // the API re-checks the am:review grant.
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import s from '../../am.module.css';
+import s from './am.module.css';
 
-export default function VoidVisit({ id }: { id: number }) {
+export default function VoidVisit({ id, mode, back }: { id: number; mode: 'visit' | 'audit'; back: string }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -22,11 +22,11 @@ export default function VoidVisit({ id }: { id: number }) {
       <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
         <button className={`${s.btn} ${s.small}`} disabled={busy || reason.trim().length < 5} onClick={async () => {
           setBusy(true); setErr(null);
-          const r = await fetch('/am/api', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'void', id, reason }) });
+          const r = await fetch('/am/api', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'void', id, reason, mode }) });
           const j = await r.json().catch(() => ({}));
           setBusy(false);
           if (!r.ok) { setErr(j.error ?? 'Could not void.'); return; }
-          router.push('/am/review'); router.refresh();
+          router.push(back); router.refresh();
         }}>Void</button>
         <button className={s.link} onClick={() => setOpen(false)}>Cancel</button>
       </div>

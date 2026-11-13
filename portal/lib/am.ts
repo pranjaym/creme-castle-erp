@@ -15,6 +15,9 @@ export const VISIT_KINDS: VisitKind[] = ['am_visit', 'am_audit', 'qa_audit', 'ot
 // Names on screen. am_visit's audit and am_audit both score the AM audit line;
 // qa_audit scores the QA line; other_audit is recorded with no points (257).
 export const KIND_NAMES: Record<VisitKind, string> = { am_visit: 'AM visit', am_audit: 'AM monthly audit', qa_audit: 'QA surprise audit', other_audit: 'Other visit' };
+export type AppMode = 'visit' | 'audit';
+export const AUDIT_KINDS: VisitKind[] = ['am_audit', 'qa_audit', 'other_audit'];
+export const kindsFor = (mode: AppMode): VisitKind[] => (mode === 'audit' ? AUDIT_KINDS : ['am_visit']);
 export const sectionsFor = (kind: string): readonly Section[] => (kind === 'am_visit' ? SECTIONS : ['audit', 'todo']);
 // Store KPI line 7 and 8 (proposed): full 15 at 25 or more of 28, zero at 19 or fewer, straight line between.
 export const auditPoints = (passed: number): number => Math.round(Math.max(0, Math.min(1, (passed - 19) / 6)) * 150) / 10;
@@ -116,16 +119,16 @@ const summarySql = `
 type SumRow = { id: string; kind: string; store: string; person_name: string | null; planned: boolean; status: string; checkin_at: string; checkout_at: string | null; minutes: number | null; passed: number; failed: number; crit: number; todos: number };
 const toSummary = (r: SumRow): VisitSummary => ({ id: Number(r.id), kind: r.kind, store: r.store, personName: r.person_name, planned: r.planned, status: r.status, checkinAt: r.checkin_at, checkoutAt: r.checkout_at, minutes: r.minutes, passed: r.passed, failed: r.failed, critical: r.crit, todos: r.todos });
 
-export async function myVisitsToday(person: string): Promise<VisitSummary[]> {
-  const rows = await q<SumRow>(`${summarySql} and v.person = $1 and (v.checkin_at at time zone 'Asia/Kolkata')::date = $2 order by v.checkin_at`, [person, istDate()]);
+export async function myVisitsToday(person: string, mode: AppMode = 'visit'): Promise<VisitSummary[]> {
+  const rows = await q<SumRow>(`${summarySql} and v.person = $1 and (v.checkin_at at time zone 'Asia/Kolkata')::date = $2 and v.kind = any($3) order by v.checkin_at`, [person, istDate(), kindsFor(mode)]);
   return rows.map(toSummary);
 }
-export async function allVisits(limit = 300): Promise<VisitSummary[]> {
-  const rows = await q<SumRow>(`${summarySql} order by v.checkin_at desc limit $1`, [limit]);
+export async function allVisits(mode: AppMode, limit = 300): Promise<VisitSummary[]> {
+  const rows = await q<SumRow>(`${summarySql} and v.kind = any($2) order by v.checkin_at desc limit $1`, [limit, kindsFor(mode)]);
   return rows.map(toSummary);
 }
-export async function openVisitId(person: string): Promise<number | null> {
-  const r = await one<{ id: string }>(`select id from am.visit where person = $1 and status = 'in_progress' and voided_at is null order by checkin_at desc limit 1`, [person]);
+export async function openVisitId(person: string, mode: AppMode | null = null): Promise<number | null> {
+  const r = await one<{ id: string }>(`select id from am.visit where person = $1 and status = 'in_progress' and voided_at is null and ($2::text[] is null or kind = any($2)) order by checkin_at desc limit 1`, [person, mode ? kindsFor(mode) : null]);
   return r ? Number(r.id) : null;
 }
 
@@ -133,7 +136,7 @@ export async function checkIn(person: string, name: string, args: { kind: VisitK
   const pin = (await stores()).find(s => s.store === args.store);
   if (!pin) throw new Error('That store has no map pin yet.');
   if (args.allowed && !pin.testSite && !args.allowed.includes(args.store)) throw new Error('That store is not one of yours.');
-  if (await openVisitId(person)) throw new Error('You are already checked in somewhere. Check out there first.');
+  if (await openVisitId(person)) throw new Error('You already have an open visit or audit. Finish and check out of it first (it may be in the other app).');
   const dist = metres(args.lat, args.lng, pin.lat, pin.lng);
   if (dist > pin.radius) throw new Error(`You are ${dist} m from the store. Check in works within ${pin.radius} m.`);
   if (!VISIT_KINDS.includes(args.kind)) throw new Error('Unknown visit type.');
@@ -388,7 +391,7 @@ export async function storeResults(): Promise<StoreResult[]> {
   const by = new Map<string, StoreResult>();
   for (const r of rows) {
     const x = by.get(r.store) ?? { store: r.store, am: r.am ?? 'Test', amVisit: null, qaVisit: null, amPoints: null, qaPoints: null, standIn: null, critical: 0, capped: false, audits: 0 };
-    if (r.kind === 'other_audit') continue; // recorded, no points
+    if (r.kind === 'other_audit' || r.kind === 'am_visit') continue; // store audit app only; other visits score nothing
     x.audits += 1; x.critical += r.crit;
     const one = { id: Number(r.id), at: r.checkin_at, by: r.person_name, passed: r.passed, points: auditPoints(r.passed) };
     if (r.kind === 'qa_audit') { if (!x.qaVisit) x.qaVisit = one; } else if (!x.amVisit) x.amVisit = one;
@@ -401,17 +404,17 @@ export async function storeResults(): Promise<StoreResult[]> {
 }
 
 // A mistaken visit or audit is voided with a reason, never deleted.
-export async function voidVisit(person: string, id: number, reason: string) {
+export async function voidVisit(person: string, id: number, reason: string, mode: AppMode) {
   if (reason.trim().length < 5) throw new Error('Give the reason for voiding in a few words.');
-  const r = await q(`update am.visit set voided_at = now(), void_reason = $2, voided_by = $3, updated_at = now() where id = $1 and voided_at is null returning id`,
-    [id, reason.trim(), person]);
+  const r = await q(`update am.visit set voided_at = now(), void_reason = $2, voided_by = $3, updated_at = now() where id = $1 and voided_at is null and kind = any($4) returning id`,
+    [id, reason.trim(), person, kindsFor(mode)]);
   if (!r.length) throw new Error('That visit is not there or is already void.');
   await q(`update am.photo set voided_at = now(), void_reason = 'visit voided' where visit_id = $1 and voided_at is null`, [id]);
 }
 
 // Everything the phone screen shows for today, in one read.
-export async function dayState(person: string) {
-  const [plan, visits, openId] = await Promise.all([planFor(person, istDate()), myVisitsToday(person), openVisitId(person)]);
+export async function dayState(person: string, mode: AppMode = 'visit') {
+  const [plan, visits, openId] = await Promise.all([mode === 'visit' ? planFor(person, istDate()) : Promise.resolve(null), myVisitsToday(person, mode), openVisitId(person, mode)]);
   const visit = openId ? await visitDetail(openId) : null;
   return { date: istDate(), plan, visits, visit };
 }

@@ -8,7 +8,8 @@ import { photoFor } from '@/lib/am';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const u = await getSessionUser();
-  const acc = u ? portalAccess(u).am : null;
+  const a = u ? portalAccess(u) : null;
+  const acc = a ? { use: a.am.use || a.audit.use, review: a.am.review || a.audit.review } : null;
   if (!u || !acc || !(acc.use || acc.review)) return new NextResponse('Not allowed for this role.', { status: 403 });
   const id = Number((await params).id);
   if (!Number.isInteger(id) || id <= 0) return new NextResponse('Not found', { status: 404 });

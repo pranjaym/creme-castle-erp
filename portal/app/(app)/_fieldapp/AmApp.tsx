@@ -55,8 +55,9 @@ function shrink(file: File): Promise<Blob> {
 
 export default function AmApp(props: {
   initial: DayState; stores: StoreRow[]; items: AuditItem[]; orderChecks: OrderCheck[];
-  varianceReasons: string[]; missReasons: string[]; me: string;
+  varianceReasons: string[]; missReasons: string[]; me: string; mode: 'visit' | 'audit';
 }) {
+  const mode = props.mode;
   const { stores, items, orderChecks, varianceReasons, missReasons } = props;
   const [st, setSt] = useState<DayState>(props.initial);
   const [view, setView] = useState<View>(props.initial.visit ? 'hub' : 'day');
@@ -87,7 +88,7 @@ export default function AmApp(props: {
   async function call(action: string, body: Record<string, unknown> = {}): Promise<DayState | null> {
     setBusy(true); setErr(null);
     try {
-      const r = await fetch('/am/api', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, visitId: v?.id, ...body }) });
+      const r = await fetch('/am/api', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, visitId: v?.id, mode, ...body }) });
       const j = await r.json().catch(() => ({ error: 'The server did not answer. Check your connection and try again.' }));
       if (j.date) setSt({ date: j.date, plan: j.plan ?? null, visits: j.visits ?? [], visit: j.visit ?? null });
       if (!r.ok || j.error) { setErr(j.error ?? 'Not saved. Try again.'); return null; }
@@ -225,7 +226,7 @@ export default function AmApp(props: {
         ))}
         <button className={s.btn} disabled={!all} onClick={() => go('out')}>Check out</button>
         {!all ? <div className={s.sub} style={{ textAlign: 'center' }}>Check out unlocks when every section is done</div> : null}
-        <button className={s.link} onClick={() => go('day')}>Back to my day</button>
+        <button className={s.link} onClick={() => go('day')}>{mode === 'audit' ? 'Back to store audit' : 'Back to my day'}</button>
       </div>
     );
   }
@@ -501,10 +502,10 @@ export default function AmApp(props: {
   if (view === 'closed' && lastClosed) {
     return (
       <div className={s.app}>
-        <div className={s.h}>Visit closed</div>
+        <div className={s.h}>{mode === 'audit' ? 'Audit closed' : 'Visit closed'}</div>
         <div className={s.card}><div style={{ display: 'flex', gap: 14, alignItems: 'flex-end' }}><div><div className={s.big}>{lastClosed.minutes}</div><div className={s.sub}>minutes at {short(lastClosed.store)}</div></div><div className={s.sub}>{hm(lastClosed.from)} to {hm(lastClosed.to)}</div></div></div>
-        <div className={s.sub}>Saved. It shows under All visits for review.</div>
-        <button className={s.btn} onClick={() => go('day')}>Back to my day</button>
+        <div className={s.sub}>Saved. It shows under {mode === 'audit' ? 'Audit results' : 'All visits'} for review.</div>
+        <button className={s.btn} onClick={() => go('day')}>{mode === 'audit' ? 'Back to store audit' : 'Back to my day'}</button>
       </div>
     );
   }
@@ -542,7 +543,38 @@ export default function AmApp(props: {
         ) : null}
         <div className={s.card}><div className={s.cardh}>Evening mail, plan against actual</div><pre className={s.mail}>{lines.join('\n')}</pre></div>
         <div className={s.sub}>In the live app this goes to the review list each evening. The test shows it only.</div>
-        <button className={s.btn} onClick={() => go('day')}>Back to my day</button>
+        <button className={s.btn} onClick={() => go('day')}>{mode === 'audit' ? 'Back to store audit' : 'Back to my day'}</button>
+      </div>
+    );
+  }
+
+  // ---------------- store audit app: today ----------------
+  if (mode === 'audit') {
+    return (
+      <div className={s.app}>
+        <Band />
+        <Msgs />
+        <div className={s.h}>Store audit</div>
+        {v ? (<>
+          <div className={s.info}>Audit in progress at <b>{short(v.store)}</b> since {hm(v.checkinAt)}.</div>
+          <button className={s.btn} onClick={() => go('hub')}>Continue the audit</button>
+        </>) : null}
+      {!v ? (
+        <div className={s.card}><div className={s.cardh}>Start an audit</div>
+          <div className={s.sub}>The same {items.length} items with a photo on each, no day plan needed. Check-in rules are the same: within the store&apos;s circle, store-front photo.</div>
+          <div className={s.chips} style={{ marginTop: 6 }}>{(['am_audit', 'qa_audit', 'other_audit'] as const).map(k => <button key={k} className={`${s.chip} ${qaKind === k ? s.chipon : ''}`} onClick={() => setQaKind(k)}>{KIND[k]}</button>)}</div>
+          <div className={s.sub} style={{ marginTop: 4 }}>{KIND_NOTE[qaKind]}</div>
+          <label className={s.lbl} htmlFor="am-qa">Store</label>
+          <select id="am-qa" className={s.txt} value={qaStore} onChange={e => setQaStore(e.target.value)}>{stores.map(x => <option key={x.store} value={x.store}>{short(x.store)}</option>)}</select>
+          <button className={`${s.btn} ${s.small}`} style={{ marginTop: 8 }} disabled={!qaStore} onClick={() => { setCi({ kind: qaKind, store: qaStore, planned: false, reason: null, loc: null, photo: null, preview: null }); go('checkin'); }}>Start the audit</button>
+        </div>
+      ) : null}
+        <div className={s.card}><div className={s.cardh}>Your audits today</div>
+          {st.visits.length ? st.visits.map(x => (
+            <div key={x.id} className={s.row}><div className={s.rowl}><b>{short(x.store)}</b><span>{KIND[x.kind as keyof typeof KIND] ?? x.kind} · {hm(x.checkinAt)}{x.checkoutAt ? ` to ${hm(x.checkoutAt)}` : ''} · {x.passed}/{items.length} passed{x.critical ? `, ${x.critical} critical` : ''}</span></div>
+              <span className={`${s.pill} ${x.status === 'closed' ? s.good : s.blue}`}>{x.status === 'closed' ? 'done' : 'in progress'}</span></div>
+          )) : <div className={s.sub}>None yet.</div>}
+        </div>
       </div>
     );
   }
@@ -605,16 +637,6 @@ export default function AmApp(props: {
         )}
         <button className={`${s.btn} ${s.ghost}`} onClick={() => go('dayEnd')}>End the day and see the evening mail</button>
       </>)}
-      {!v ? (
-        <div className={s.card}><div className={s.cardh}>Store audit</div>
-          <div className={s.sub}>The same {items.length} items with a photo on each, no day plan needed. Check-in rules are the same: within the store&apos;s circle, store-front photo.</div>
-          <div className={s.chips} style={{ marginTop: 6 }}>{(['am_audit', 'qa_audit', 'other_audit'] as const).map(k => <button key={k} className={`${s.chip} ${qaKind === k ? s.chipon : ''}`} onClick={() => setQaKind(k)}>{KIND[k]}</button>)}</div>
-          <div className={s.sub} style={{ marginTop: 4 }}>{KIND_NOTE[qaKind]}</div>
-          <label className={s.lbl} htmlFor="am-qa">Store</label>
-          <select id="am-qa" className={s.txt} value={qaStore} onChange={e => setQaStore(e.target.value)}>{stores.map(x => <option key={x.store} value={x.store}>{short(x.store)}</option>)}</select>
-          <button className={`${s.btn} ${s.small}`} style={{ marginTop: 8 }} disabled={!qaStore} onClick={() => { setCi({ kind: qaKind, store: qaStore, planned: false, reason: null, loc: null, photo: null, preview: null }); go('checkin'); }}>Start the audit</button>
-        </div>
-      ) : null}
     </div>
   );
 }
