@@ -142,7 +142,7 @@ export default function AmApp(props: {
     return (
       <div className={s.app}>
         <Band />
-        <div className={s.h}>{ci.kind === 'qa_audit' ? 'Store audit' : 'Check in'} · {short(ci.store)}</div>
+        <div className={s.h}>{ci.kind === 'qa_audit' ? 'QA audit' : 'Check in'} · {short(ci.store)}</div>
         <div className={s.sub}>Check in works only within {pin.radius} m of the store&apos;s pin.{pin.needsCheck ? ` This pin is not confirmed yet (${pin.pinNote ?? 'from SalaryBox'}).` : ''}</div>
         <Msgs />
         <button className={`${s.btn} ${s.ghost}`} disabled={busy} onClick={async () => {
@@ -192,7 +192,7 @@ export default function AmApp(props: {
     return (
       <div className={s.app}>
         <Band />
-        <div className={s.h}>{v.kind === 'qa_audit' ? 'Store audit · ' : ''}{short(v.store)}</div>
+        <div className={s.h}>{v.kind === 'qa_audit' ? 'QA audit · ' : ''}{short(v.store)}</div>
         <div className={s.sub}>Checked in {hm(v.checkinAt)}, {v.checkinDist} m from the pin · {mins} min so far · every answer saves as you go</div>
         <Msgs />
         {secs.map(([k, t, d]) => (
@@ -588,11 +588,11 @@ export default function AmApp(props: {
         <button className={`${s.btn} ${s.ghost}`} onClick={() => go('dayEnd')}>End the day and see the evening mail</button>
       </>)}
       {!v ? (
-        <div className={s.card}><div className={s.cardh}>Store audit (QA or any auditor)</div>
-          <div className={s.sub}>The same {items.length} items with a photo on each, no day plan needed. Check-in rules are the same: within the store&apos;s circle, store-front photo.</div>
+        <div className={s.card}><div className={s.cardh}>QA surprise audit</div>
+          <div className={s.sub}>The same {items.length} items with a photo on each, unannounced, no day plan needed. Check-in rules are the same: within the store&apos;s circle, store-front photo.</div>
           <label className={s.lbl} htmlFor="am-qa">Store</label>
           <select id="am-qa" className={s.txt} value={qaStore} onChange={e => setQaStore(e.target.value)}>{stores.map(x => <option key={x.store} value={x.store}>{short(x.store)}</option>)}</select>
-          <button className={`${s.btn} ${s.small}`} style={{ marginTop: 8 }} disabled={!qaStore} onClick={() => { setCi({ kind: 'qa_audit', store: qaStore, planned: false, reason: null, loc: null, photo: null, preview: null }); go('checkin'); }}>Start a store audit</button>
+          <button className={`${s.btn} ${s.small}`} style={{ marginTop: 8 }} disabled={!qaStore} onClick={() => { setCi({ kind: 'qa_audit', store: qaStore, planned: false, reason: null, loc: null, photo: null, preview: null }); go('checkin'); }}>Start a QA audit</button>
         </div>
       ) : null}
     </div>

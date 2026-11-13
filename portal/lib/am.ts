@@ -125,9 +125,10 @@ export async function openVisitId(person: string): Promise<number | null> {
   return r ? Number(r.id) : null;
 }
 
-export async function checkIn(person: string, name: string, args: { kind: VisitKind; store: string; planned: boolean; reason: string | null; lat: number; lng: number; acc: number; frontPhoto: number }): Promise<number> {
+export async function checkIn(person: string, name: string, args: { kind: VisitKind; store: string; allowed: string[] | null; planned: boolean; reason: string | null; lat: number; lng: number; acc: number; frontPhoto: number }): Promise<number> {
   const pin = (await stores()).find(s => s.store === args.store);
   if (!pin) throw new Error('That store has no map pin yet.');
+  if (args.allowed && !pin.testSite && !args.allowed.includes(args.store)) throw new Error('That store is not one of yours.');
   if (await openVisitId(person)) throw new Error('You are already checked in somewhere. Check out there first.');
   const dist = metres(args.lat, args.lng, pin.lat, pin.lng);
   if (dist > pin.radius) throw new Error(`You are ${dist} m from the store. Check in works within ${pin.radius} m.`);
@@ -357,19 +358,45 @@ export async function photoFor(id: number): Promise<{ storage_path: string; cont
   return one('select storage_path, content_type, visit_id, taken_by from am.photo where id = $1 and voided_at is null', [id]);
 }
 
-// This month's audit results by store: the latest closed audit of each kind
-// (Area Manager visit, store audit) with its proposed points.
-export interface StoreResult { store: string; am: string; kind: string; visitId: number; at: string; by: string | null; passed: number; critical: number; points: number; count: number }
+// This month's audit results by store (store KPI lines 7 and 8, proposed):
+// the latest closed AM audit (the audit inside an AM visit) and the latest
+// closed QA surprise audit; if one is missing the other counts for both. Any
+// critical fail in any closed audit this month caps the store's month at 60.
+export interface StoreResult {
+  store: string; am: string;
+  amVisit: { id: number; at: string; by: string | null; passed: number; points: number } | null;
+  qaVisit: { id: number; at: string; by: string | null; passed: number; points: number } | null;
+  amPoints: number | null; qaPoints: number | null; standIn: 'am' | 'qa' | null;
+  critical: number; capped: boolean; audits: number;
+}
 export async function storeResults(): Promise<StoreResult[]> {
   const month = istDate().slice(0, 7);
-  const rows = await q<SumRow & { am: string | null; n: number }>(
-    `select x.*, o.area_manager am from (
-       select s.*, count(*) over (partition by s.store, s.kind)::int n,
-              row_number() over (partition by s.store, s.kind order by s.checkin_at desc) rn
-         from (${summarySql} and v.status = 'closed' and to_char(v.checkin_at at time zone 'Asia/Kolkata', 'YYYY-MM') = $1) s) x
-       left join public.outlets o on o.internal_code = x.store
-      where x.rn = 1 order by o.area_manager nulls first, x.store, x.kind`, [month]);
-  return rows.map(r => ({ store: r.store, am: r.am ?? 'Test', kind: r.kind, visitId: Number(r.id), at: r.checkin_at, by: r.person_name, passed: r.passed, critical: r.crit, points: auditPoints(r.passed), count: r.n }));
+  const rows = await q<SumRow & { am: string | null }>(
+    `select s.*, o.area_manager am from (${summarySql} and v.status = 'closed'
+        and to_char(v.checkin_at at time zone 'Asia/Kolkata', 'YYYY-MM') = $1) s
+       left join public.outlets o on o.internal_code = s.store
+      order by s.checkin_at desc`, [month]);
+  const by = new Map<string, StoreResult>();
+  for (const r of rows) {
+    const x = by.get(r.store) ?? { store: r.store, am: r.am ?? 'Test', amVisit: null, qaVisit: null, amPoints: null, qaPoints: null, standIn: null, critical: 0, capped: false, audits: 0 };
+    x.audits += 1; x.critical += r.crit;
+    const one = { id: Number(r.id), at: r.checkin_at, by: r.person_name, passed: r.passed, points: auditPoints(r.passed) };
+    if (r.kind === 'qa_audit') { if (!x.qaVisit) x.qaVisit = one; } else if (!x.amVisit) x.amVisit = one;
+    by.set(r.store, x);
+  }
+  return [...by.values()].map((x): StoreResult => {
+    const a = x.amVisit?.points ?? null, b = x.qaVisit?.points ?? null;
+    return { ...x, amPoints: a ?? b, qaPoints: b ?? a, standIn: a == null ? 'qa' : b == null ? 'am' : null, capped: x.critical > 0 };
+  }).sort((p, q2) => p.am.localeCompare(q2.am) || p.store.localeCompare(q2.store));
+}
+
+// A mistaken visit or audit is voided with a reason, never deleted.
+export async function voidVisit(name: string, id: number, reason: string) {
+  if (reason.trim().length < 5) throw new Error('Give the reason for voiding in a few words.');
+  const r = await q(`update am.visit set voided_at = now(), void_reason = $2, updated_at = now() where id = $1 and voided_at is null returning id`,
+    [id, `${reason.trim()} (voided by ${name})`]);
+  if (!r.length) throw new Error('That visit is not there or is already void.');
+  await q(`update am.photo set voided_at = now(), void_reason = 'visit voided' where visit_id = $1 and voided_at is null`, [id]);
 }
 
 // Everything the phone screen shows for today, in one read.

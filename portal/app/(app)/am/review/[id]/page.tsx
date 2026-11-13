@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { requireAccess } from '@/lib/session';
 import { visitDetail, checklist, ORDER_CHECKS } from '@/lib/am';
 import s from '../../am.module.css';
+import VoidVisit from './VoidVisit';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,7 @@ export default async function AmVisit({ params }: { params: Promise<{ id: string
   return (
     <div className={s.wide}>
       <Link href="/am/review" className={s.link}>‹ All visits</Link>
-      <div className={s.h}>{v.kind === 'qa_audit' ? 'Store audit · ' : ''}{v.store} · {v.personName}</div>
+      <div className={s.h}>{v.kind === 'qa_audit' ? 'QA audit · ' : 'AM visit · '}{v.store} · {v.personName}</div>
       <div className={s.sub}>
         Checked in {when(v.checkinAt)}, {v.checkinDist} m from the pin (GPS ±{v.checkinAcc} m)
         {v.checkoutAt ? <> · out {when(v.checkoutAt)}{v.checkoutDist != null ? `, ${v.checkoutDist} m from the pin` : ', no location at check-out'} · <b>{mins} min</b></> : ' · still in progress'}
@@ -61,6 +62,7 @@ export default async function AmVisit({ params }: { params: Promise<{ id: string
       <div className={s.card}><div className={s.cardh}>Open points from earlier visits</div>
         {v.openPoints.length ? v.openPoints.map(p => <div key={`${p.kind}${p.id}`} className={s.row}><div className={s.rowl}><b>{p.text}</b></div><span className={`${s.pill} ${p.mark === 'done' ? s.good : p.mark === 'open' ? s.warn : s.grey}`}>{p.mark ?? 'not marked'}</span></div>) : <div className={s.sub}>None.</div>}
       </div>
+      <VoidVisit id={v.id} />
     </div>
   );
 }

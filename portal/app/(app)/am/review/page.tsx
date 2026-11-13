@@ -13,7 +13,8 @@ function when(ts: string | null): string {
   return new Date(ts).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' });
 }
 
-export default async function AmReview() {
+export default async function AmReview({ searchParams }: { searchParams: Promise<{ am?: string }> }) {
+  const amF = (await searchParams).am ?? '';
   await requireAccess(a => a.am.review);
   const [visits, items, plans, pins, results] = await Promise.all([
     allVisits(),
@@ -27,7 +28,10 @@ export default async function AmReview() {
       'select store, reported_by_name, dist_m, reported_at from am.store_pin_report order by id desc limit 30'),
     storeResults(),
   ]);
-  const kindName = (k: string) => (k === 'qa_audit' ? 'Store audit' : 'AM visit');
+  const kindName = (k: string) => (k === 'qa_audit' ? 'QA audit' : 'AM visit');
+  const ams = Array.from(new Set(results.map(r => r.am)));
+  const shown = results.filter(r => !amF || r.am === amF);
+  const pts = (p: number | null, stand: boolean) => (p == null ? '' : `${p} of 15${stand ? ' (stands in)' : ''}`);
   return (
     <div className={s.wide}>
       <div className={s.testband}><b>Test version.</b> Everything here is test data and will be cleared from all reports before the app goes live.</div>
@@ -52,17 +56,24 @@ export default async function AmReview() {
         </table>
       </div></div>
       <div className={s.h}>Audit results by store, this month</div>
-      <div className={s.sub}>The latest closed audit of each type per store. Points on the proposed line: 15 at 25 or more of {items.length} passed, 0 at 19 or fewer, straight line between. A critical fail is shown, not yet applied to the store score.</div>
+      <div className={s.sub}>Latest closed AM audit (the audit inside an AM visit) and latest QA surprise audit per store. Points on the proposed line: 15 at 25 or more of {items.length} passed, 0 at 19 or fewer, straight line between. If one audit is missing the other counts for both. Any critical fail this month caps the store&apos;s month at 60.</div>
+      <div className={s.chips}>
+        <Link href="/am/review" className={`${s.chip} ${!amF ? s.chipon : ''}`}>All</Link>
+        {ams.map(a => <Link key={a} href={`/am/review?am=${encodeURIComponent(a)}`} className={`${s.chip} ${a === amF ? s.chipon : ''}`}>{a}</Link>)}
+      </div>
       <div className={s.card}><div className={s.scroll}>
         <table className={s.table}>
-          <thead><tr><th>Area Manager</th><th>Store</th><th>Type</th><th>Latest</th><th>By</th><th>Passed</th><th>Points</th><th>This month</th></tr></thead>
+          <thead><tr><th>Area Manager</th><th>Store</th><th>AM audit</th><th>AM points</th><th>QA audit</th><th>QA points</th><th>Critical</th><th>Audits</th></tr></thead>
           <tbody>
-            {results.length ? results.map(r => (
-              <tr key={`${r.store}${r.kind}`}>
-                <td>{r.am}</td><td>{r.store.replace(/^CC-/, '')}</td><td>{kindName(r.kind)}</td>
-                <td><Link href={`/am/review/${r.visitId}`}>{when(r.at)}</Link></td><td>{r.by}</td>
-                <td>{r.passed}/{items.length}{r.critical ? <span className={`${s.pill} ${s.bad}`} style={{ marginLeft: 6 }}>{r.critical} critical</span> : null}</td>
-                <td><b>{r.points}</b> of 15</td><td>{r.count}</td>
+            {shown.length ? shown.map(r => (
+              <tr key={r.store}>
+                <td>{r.am}</td><td>{r.store.replace(/^CC-/, '')}</td>
+                <td>{r.amVisit ? <Link href={`/am/review/${r.amVisit.id}`}>{r.amVisit.passed}/{items.length}, {when(r.amVisit.at)}</Link> : 'none'}</td>
+                <td><b>{pts(r.amPoints, r.standIn === 'qa')}</b></td>
+                <td>{r.qaVisit ? <Link href={`/am/review/${r.qaVisit.id}`}>{r.qaVisit.passed}/{items.length}, {when(r.qaVisit.at)}</Link> : 'none'}</td>
+                <td><b>{pts(r.qaPoints, r.standIn === 'am')}</b></td>
+                <td>{r.capped ? <span className={`${s.pill} ${s.bad}`}>{r.critical} fail, month capped at 60</span> : <span className={`${s.pill} ${s.good}`}>none</span>}</td>
+                <td>{r.audits}</td>
               </tr>
             )) : <tr><td colSpan={8}>No closed audits this month yet.</td></tr>}
           </tbody>
