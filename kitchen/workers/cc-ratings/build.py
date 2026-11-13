@@ -118,6 +118,16 @@ def parse_items(s):
         m = ITEM_RE.match(part)
         out.append(m.group(2).strip() if m else part)
     return out
+def parse_qty(s):
+    # quantities in the same order as parse_items, for the order lines under + on
+    # the Item Ratings table ("2 x Chocochip Cookie" shows as 2x)
+    out = []
+    for part in str(s or "").split(","):
+        part = part.strip()
+        if not part: continue
+        m = ITEM_RE.match(part)
+        out.append(int(m.group(1)) if m else 1)
+    return out
 
 def fetch(days):
     conn = psycopg2.connect(os.environ["SPINE_DATABASE_URL"], connect_timeout=30, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
@@ -177,6 +187,8 @@ def build(days=45):
                       "r": int(round(float(r["rating"]))), "i": [alias_of(n) for n in parse_items(r["items_in_order"])],
                       "v": rev, "th": theme_of(rev, tag),
                       "e": 1 if tier1_of(rev) else 0, "q": 1 if tier2_of(rev) else 0})
+        q = parse_qty(r["items_in_order"])
+        if any(n > 1 for n in q): RATED[-1]["iq"] = q   # only when a line has 2 or more
     RATED.sort(key=lambda x: (x["d"], x["t"]))
     # Category of an alias: the glossary's menu_category where the alias has one,
     # else the rules in categories.json (a new name with no glossary row yet).
@@ -193,11 +205,12 @@ def build(days=45):
         print(f"  {len(unglossed)} rated item name(s) have no glossary row (listed in the mail): "
               + ", ".join(unglossed[:8]) + (" ..." if len(unglossed) > 8 else ""))
     OUTLETS = {o: city_of[o] for o in sorted(city_of)}
-    meta = {"days": len({d[0] for d in DAILY}), "outlets": len(OUTLETS),
+    meta = {"platform": "Zomato", "days": len({d[0] for d in DAILY}), "outlets": len(OUTLETS),
             "orders": sum(d[2] for d in DAILY), "delivered": sum(d[3] for d in DAILY),
             "rated": len(RATED), "from": min(d[0] for d in DAILY), "to": max(d[0] for d in DAILY),
             "unmapped": gaps, "uncategorised": uncat, "unglossed": unglossed,
             "glossary_rows": len(items_gl), "source": "landing.zomato_order_details"}
+    meta["last_rated"] = max((r["d"] for r in RATED), default=None)
     return DAILY, RATED, CAT, OUTLETS, meta
 
 def render(tpl, out, DAILY, RATED, CAT, OUTLETS, meta):

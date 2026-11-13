@@ -196,6 +196,35 @@ tr.drill td{background:var(--surface-2);padding:0}
 .v-time{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-dim);margin-left:auto}
 .v-text{font-family:'Fraunces',Georgia,serif;font-size:13.5px;line-height:1.45;margin:0 0 7px}
 .v-foot{font-size:10.5px;color:var(--accent);border-top:1px solid var(--border-soft);padding-top:5px}
+.plat{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
+  letter-spacing:.06em;color:#fff;background:#B5343C;border-radius:3px;padding:1px 6px;margin-right:6px;vertical-align:1px}
+.plat.s{background:#E07B24}
+.plat-gap{max-width:1240px;margin:14px auto 0;padding:11px 15px;border-radius:8px;
+  background:var(--critical-bg);border:1px solid #EFD5CF;color:var(--critical);font-size:12.5px;line-height:1.45}
+.plat-gap strong{color:var(--critical)}
+/* order lines under + on Item Ratings: one compact line per rated order */
+.olist{text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  box-shadow:var(--shadow);overflow:hidden}
+.olist .sh{font-size:11.5px;color:var(--text-muted);padding:9px 13px;border-bottom:1px solid var(--border-soft)}
+.olist .sh strong{color:var(--text)}
+.olist .obody{max-height:340px;overflow-y:auto}
+.oline{display:grid;grid-template-columns:34px 92px 26px 170px 1fr;gap:8px;align-items:baseline;
+  padding:5px 13px;border-bottom:1px solid var(--border-soft);font-size:11.5px}
+.oline:last-child{border-bottom:none}
+.oline .ostar{font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;text-align:center;
+  padding:1px 0;border-radius:9px;background:#E5F1E8;color:#2F6B45}
+.oline .ostar.b1,.oline .ostar.b2{background:var(--critical-bg);color:var(--critical)}
+.oline .ostar.b3{background:var(--warning-bg);color:#8A6A20}
+.oline .owhen{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--text-dim);white-space:nowrap}
+.oline .oplat{font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:600;text-align:center;
+  border-radius:3px;padding:1px 0;color:#fff;background:#B5343C}
+.oline .oplat.s{background:#E07B24}
+.oline .oout{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oline .oitems{color:var(--text-muted)}
+.oline .oitems b{color:var(--text);font-weight:600}
+.oline .oitems .q{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-dim)}
+@media (max-width:720px){.oline{grid-template-columns:34px 1fr 26px;}
+  .oline .oout{grid-column:1 / -1;grid-row:2}.oline .oitems{grid-column:1 / -1;grid-row:3}}
 /* compact rating-only strip */
 .silent{background:var(--surface);border:1px solid var(--border);border-radius:8px;
   padding:10px 13px;box-shadow:var(--shadow)}
@@ -223,7 +252,7 @@ tfoot .totrow .cellsub{font-weight:400}
 <body>
 
 <header><div class="header-inner">
-  <div><div class="brand">Creme Castle · Ratings &amp; Reviews</div><h1 id="hTitle">—</h1></div>
+  <div><div class="brand" id="brandLine">Creme Castle · Ratings &amp; Reviews</div><h1 id="hTitle">—</h1></div>
   <div class="hdr-ctl"><label for="selDate">Day</label><select id="selDate"></select></div>
   <span class="maturity" id="matBadge">—</span>
   <nav class="nav">
@@ -232,6 +261,7 @@ tfoot .totrow .cellsub{font-weight:400}
     <a href="#verbatims">Verbatims</a>
   </nav>
 </div></header>
+<div class="plat-gap" id="platGap" hidden></div>
 
 <div class="container">
 
@@ -364,7 +394,7 @@ tfoot .totrow .cellsub{font-weight:400}
   <div class="method">
     <h4>How to read this</h4>
     <p><strong>Ratings arrive over about three days.</strong> Unhappy customers rate within hours, happy ones take up to three days: at one day old roughly 88% of eventual 1★ are in but only 70% of 5★. So a fresh day always reads worse than it will finish. The badge in the header compares the day's rated % against <strong>the same weekday over the last four weeks, using only days old enough to have settled</strong>, and tells you whether to trust the percentages yet. Counts are real either way.</p>
-    <p><strong>Rated % is a store manager metric, not just sample size.</strong> Zomato shows the customer's number while the order is live, so managers call and ask for a rating. Swiggy does not expose the number, which is why Zomato is the platform where the rating is winnable. Across 45 days rated % ranges from <strong>5.2% to 13.4%</strong> between our own stores, and outlets that collect more ratings score better (correlation +0.61 with average rating, −0.59 with bad share). Two consequences: an outlet's average is <strong>not comparable</strong> to another's unless you look at rated % beside it, and the stores in the bottom half have room to lift their score by calling more, without changing a single recipe.</p>
+    <p id="mRated"><strong>Rated % is a store manager metric, not just sample size.</strong> Zomato shows the customer's number while the order is live, so managers call and ask for a rating. Swiggy does not expose the number, which is why Zomato is the platform where the rating is winnable. Across 45 days rated % ranges from <strong>5.2% to 13.4%</strong> between our own stores, and outlets that collect more ratings score better (correlation +0.61 with average rating, −0.59 with bad share). Two consequences: an outlet's average is <strong>not comparable</strong> to another's unless you look at rated % beside it, and the stores in the bottom half have room to lift their score by calling more, without changing a single recipe.</p>
     <p><strong>Bad is 1–3★, good is 4–5★.</strong> 3★ sits with bad deliberately: on this platform it is a soft complaint from someone who will not bother complaining twice.</p>
     <p><strong>Item attribution is by presence, not blame.</strong> An item is credited with a rating if it was in the order. On multi-item orders every item carries the rating, so an item's average is a co-occurrence signal — corroborate across outlets before acting.</p>
     <p><strong>Never put Zomato and Swiggy on one axis.</strong> Zomato ratings are partly solicited by manager calls; Swiggy's are unprompted because no number is shared. The two are measuring different things.</p>
@@ -375,6 +405,9 @@ tfoot .totrow .cellsub{font-weight:400}
 <script>
 const DAILY=__DAILY__, RATED=__RATED__, CAT=__CAT__, OUTLETS=__OUTLETS__;
 const THEME_ORDER=__THEMES__, META=__META__;
+/* Which app this page is. Zomato and Swiggy each get their own page in the evening
+   mail (decided 13 Nov 2026), never one blended page or one average. */
+const PLAT=META.platform||'Zomato', PCODE=PLAT==='Swiggy'?'S':'Z';
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -416,7 +449,7 @@ function roll(rows){
 }
 
 /* ---- state ---- */
-const S={date:DATES[DATES.length-1],
+const S={date:(META.last_rated&&META.last_rated<DATES[DATES.length-1]&&DATES.includes(META.last_rated))?META.last_rated:DATES[DATES.length-1],
   oCity:new Set(),oWin:1,thRate:4.2,thPct:5,oSort:{k:'ratedPD',dir:-1},
   iWin:7,iCat:new Set(),iCity:new Set(),iMin:1,iSearch:'',iSort:{k:'n',dir:-1},iOpen:new Set(),
   vWin:1,vStar:'bad3',vTheme:new Set(),vOutlet:'',vSearch:''};
@@ -700,6 +733,24 @@ function silentStrip(rows){
     +'</strong> rating'+(rows.length===1?'':'s')+' with no review text — star and outlet only</div>'
     +'<div class="srow">'+parts.join('')+'</div></div>';
 }
+/* One compact line per rated order for the item under +: star, date and time,
+   platform, outlet, and everything in that order (this item in bold). Newest first. */
+function orderLines(rows,item){
+  const sorted=rows.slice().sort((a,b)=>(b.d+b.t).localeCompare(a.d+a.t));
+  const plat=r=>(r.p||PCODE)==='S'?'<span class="oplat s" title="Swiggy">S</span>'
+    :'<span class="oplat" title="Zomato">Z</span>';
+  const items=r=>r.i.map((n,k)=>{const q=(r.iq&&r.iq[k])||1;
+    const nm=n===item?'<b>'+esc(n)+'</b>':esc(n);
+    return (q>1?'<span class="q">'+q+'×</span> ':'')+nm;}).join(', ');
+  return '<div class="olist"><div class="sh"><strong>'+rows.length+'</strong> rated order'
+    +(rows.length===1?'':'s')+' with no review text, newest first'
+    +'</div><div class="obody">'
+    +sorted.map(r=>'<div class="oline"><span class="ostar'+(r.r<=3?' b'+r.r:'')+'">'+r.r+'★</span>'
+      +'<span class="owhen">'+esc(fmtD(r.d))+' '+esc(r.t)+'</span>'+plat(r)
+      +'<span class="oout" title="'+esc(r.o)+'">'+esc(r.o)+'</span>'
+      +'<span class="oitems">'+items(r)+'</span></div>').join('')
+    +'</div></div>';
+}
 function renderItems(){
   let arr=itemData();
   const k=S.iSort.k,dir=S.iSort.dir;
@@ -742,7 +793,7 @@ function renderItems(){
         +(withText.length?'<div class="v-cards" style="margin-bottom:10px">'
           +withText.map(r=>vcard(r)).join('')+'</div>'
           :'<p class="empty-note" style="padding:8px">No review text for this item in the window.</p>')
-        +(silent.length?silentStrip(silent):'')+'</div></td></tr>';
+        +(silent.length?orderLines(silent,x.k):'')+'</div></td></tr>';
     }
     return h;}).join('')
   :'<tr><td colspan="8" class="empty-note">No items match these filters.</td></tr>';
@@ -817,6 +868,18 @@ function renderAll(){renderHeader();renderBriefing();renderGlance();renderCharts
   renderAnatomy();renderOutlets();renderItems();renderVerbatims();}
 
 (function init(){
+  $('#brandLine').innerHTML='<span class="plat'+(PCODE==='S'?' s':'')+'">'+PLAT.toUpperCase()
+    +'</span>Creme Castle · '+PLAT+' Ratings &amp; Reviews';
+  document.title='Creme Castle · '+PLAT+' Daily Ratings & Reviews';
+  const newest=DATES[DATES.length-1];
+  if(META.last_rated&&daysApart(META.last_rated,newest)>=2){
+    $('#platGap').hidden=false;
+    $('#platGap').innerHTML='<strong>'+PLAT+' has sent no ratings since '+fmtFull(META.last_rated)+'.</strong> '
+      +'Orders after that day are in (to '+fmtFull(newest)+') but carry zero ratings because '+PLAT
+      +'\'s daily file arrives with its ratings sheet empty, not because customers stopped rating. '
+      +'The page opens on the last day that has ratings.';
+  }
+  if(PLAT==='Swiggy') $('#mRated').innerHTML='<strong>Rated % on Swiggy is unprompted.</strong> Swiggy does not show the customer\'s number to the store, so nobody can call and ask for a rating. Rated % here mostly reflects how strongly customers felt, which is why it runs lower than on Zomato and why the two apps get separate pages.';
   $('#selDate').innerHTML=DATES.slice().reverse().map(d=>'<option value="'+d+'">'
     +fmtD(d)+' · '+dow(d).slice(0,3)+'</option>').join('');
   $('#selDate').value=S.date;

@@ -3,7 +3,7 @@
   "groups": [
     {
       "name": "HTML Daily",
-      "attach": ["dashboard"],
+      "attach": ["dashboard", "swiggy"],
       "to": [
         "pawan.g@cremecastle.in",
         "pranjay@cremecastle.in",
@@ -12,7 +12,8 @@
         "gopal.ch@cremecastle.in",
         "sanjeev.sejwal@cremecastle.in",
         "am.jaipur@cremecastle.in",
-        "am.chandigarh@cremecastle.in"
+        "am.chandigarh@cremecastle.in",
+        "abdul.wahab@cremecastle.in"
       ]
     },
     {

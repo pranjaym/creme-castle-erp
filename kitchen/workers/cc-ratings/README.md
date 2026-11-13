@@ -111,3 +111,21 @@ assignment of every name ever sold is in `erp-plan/exports/ratings-item-categori
 - The digest is written both as a fragment (email body) and wrapped by
   `digest.standalone()` with `<meta charset="utf-8">` for the file and the PDF. Without the
   charset the star glyphs and any Hindi or emoji in reviews mojibake.
+
+## Two pages: Zomato and Swiggy (live from 13 Nov 2026)
+
+Decided by Pranjay 13 Nov 2026: no combined page. The HTML group gets two
+attachments, `CC_Daily_Ratings_Zomato_<date>.html` (build.py) and
+`CC_Daily_Ratings_Swiggy_<date>.html` (build_swiggy.py), rendered from the same
+template.html; `META.platform` sets the badge, title and the rated % note. Never
+one average across the apps. The PDF group still gets the Zomato digest only.
+
+- Swiggy: orders and baskets from `landing.swiggy_item_sales`, cancellations added
+  for all orders, one rating per order from `landing.swiggy_item_feedback`, outlets
+  via `core.mv_swiggy_outlet_codes` (never by name), ratings on the order's day.
+- A red banner shows when an app's newest rating is 2 or more days behind its newest
+  order day, and the page then opens on the last day with ratings (F83: Swiggy sent
+  none after 25 Oct 2026).
+- A Swiggy build failure is printed and the mail goes with the Zomato page alone.
+- Item Ratings: + lists every rated order on one line (star, date and time, Z or S,
+  outlet, whole basket with quantities, the item in bold).
