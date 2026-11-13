@@ -2,7 +2,7 @@
 // owner and anyone with the am:review grant. Each row opens the visit in full.
 import Link from 'next/link';
 import { requireAccess } from '@/lib/session';
-import { allVisits, checklist, storeResults } from '@/lib/am';
+import { allVisits, checklist, storeResults, KIND_NAMES, type VisitKind } from '@/lib/am';
 import { q } from '@/lib/db';
 import s from '../am.module.css';
 
@@ -28,7 +28,7 @@ export default async function AmReview({ searchParams }: { searchParams: Promise
       'select store, reported_by_name, dist_m, reported_at from am.store_pin_report order by id desc limit 30'),
     storeResults(),
   ]);
-  const kindName = (k: string) => (k === 'qa_audit' ? 'QA audit' : 'AM visit');
+  const kindName = (k: string) => KIND_NAMES[k as VisitKind] ?? k;
   const ams = Array.from(new Set(results.map(r => r.am)));
   const shown = results.filter(r => !amF || r.am === amF);
   const pts = (p: number | null, stand: boolean) => (p == null ? '' : `${p} of 15${stand ? ' (stands in)' : ''}`);
@@ -44,7 +44,7 @@ export default async function AmReview({ searchParams }: { searchParams: Promise
               <tr key={v.id}>
                 <td><Link href={`/am/review/${v.id}`}>{when(v.checkinAt)}</Link></td>
                 <td>{kindName(v.kind)}</td>
-                <td>{v.store.replace(/^CC-/, '')}{v.planned || v.kind === 'qa_audit' ? '' : ' (unplanned)'}</td>
+                <td>{v.store.replace(/^CC-/, '')}{v.planned || v.kind !== 'am_visit' ? '' : ' (unplanned)'}</td>
                 <td>{v.personName}</td>
                 <td>{v.minutes ?? ''}</td>
                 <td>{v.passed}/{items.length}{v.critical ? <span className={`${s.pill} ${s.bad}`} style={{ marginLeft: 6 }}>{v.critical} critical</span> : null}</td>
@@ -56,7 +56,7 @@ export default async function AmReview({ searchParams }: { searchParams: Promise
         </table>
       </div></div>
       <div className={s.h}>Audit results by store, this month</div>
-      <div className={s.sub}>Latest closed AM audit (the audit inside an AM visit) and latest QA surprise audit per store. Points on the proposed line: 15 at 25 or more of {items.length} passed, 0 at 19 or fewer, straight line between. If one audit is missing the other counts for both. Any critical fail this month caps the store&apos;s month at 60.</div>
+      <div className={s.sub}>Latest closed AM audit (an AM monthly audit or the audit inside an AM visit) and latest QA surprise audit per store; Other visits score nothing. Points on the proposed line: 15 at 25 or more of {items.length} passed, 0 at 19 or fewer, straight line between. If one audit is missing the other counts for both. Any critical fail this month caps the store&apos;s month at 60.</div>
       <div className={s.chips}>
         <Link href="/am/review" className={`${s.chip} ${!amF ? s.chipon : ''}`}>All</Link>
         {ams.map(a => <Link key={a} href={`/am/review?am=${encodeURIComponent(a)}`} className={`${s.chip} ${a === amF ? s.chipon : ''}`}>{a}</Link>)}

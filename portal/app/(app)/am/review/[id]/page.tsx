@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireAccess } from '@/lib/session';
-import { visitDetail, checklist, ORDER_CHECKS } from '@/lib/am';
+import { visitDetail, checklist, ORDER_CHECKS, KIND_NAMES, type VisitKind } from '@/lib/am';
 import s from '../../am.module.css';
 import VoidVisit from './VoidVisit';
 
@@ -28,11 +28,11 @@ export default async function AmVisit({ params }: { params: Promise<{ id: string
   return (
     <div className={s.wide}>
       <Link href="/am/review" className={s.link}>‹ All visits</Link>
-      <div className={s.h}>{v.kind === 'qa_audit' ? 'QA audit · ' : 'AM visit · '}{v.store} · {v.personName}</div>
+      <div className={s.h}>{KIND_NAMES[v.kind as VisitKind] ?? v.kind} · {v.store} · {v.personName}</div>
       <div className={s.sub}>
         Checked in {when(v.checkinAt)}, {v.checkinDist} m from the pin (GPS ±{v.checkinAcc} m)
         {v.checkoutAt ? <> · out {when(v.checkoutAt)}{v.checkoutDist != null ? `, ${v.checkoutDist} m from the pin` : ', no location at check-out'} · <b>{mins} min</b></> : ' · still in progress'}
-        {v.kind === 'qa_audit' ? '' : v.planned ? ' · planned' : ` · unplanned: ${v.unplannedReason}`}
+        {v.kind !== 'am_visit' ? '' : v.planned ? ' · planned' : ` · unplanned: ${v.unplannedReason}`}
         {v.seenAt ? ` · in-charge saw the to-dos ${when(v.seenAt)}` : ''}
       </div>
       <div className={s.card}><div className={s.cardh}>Store front</div><div className={s.thumbs}>{img(v.frontPhoto, 'Store front') ?? <span className={s.sub}>none</span>}</div></div>
@@ -40,7 +40,7 @@ export default async function AmVisit({ params }: { params: Promise<{ id: string
         <div className={s.cardh}>Audit · {passed} of {items.length} passed{crit ? ` · ${crit} critical` : ''}</div>
         <div className={s.thumbs}>{items.map(i => { const a = v.audit[i.code]; return a ? img(a.photo, i.title, `${i.code} ${a.result === 'fail' ? '✗' : '✓'}`) : null; })}</div>
         {items.filter(i => v.audit[i.code]?.result === 'fail').map(i => (
-          <div key={i.code} className={s.row}><div className={s.rowl}><b>{i.code} {i.title}</b><span>{v.audit[i.code]!.note}</span></div><span className={`${s.pill} ${i.critical ? s.bad : s.warn}`}>{i.critical ? 'critical' : 'fail'}</span></div>
+          <div key={i.code} className={s.row}><div className={s.rowl}><b>{i.code} {i.title}</b><span>{v.audit[i.code]!.note}{v.audit[i.code]!.owner ? ` · fix: ${v.audit[i.code]!.owner}, by ${v.audit[i.code]!.due}` : ''}</span></div><span className={`${s.pill} ${i.critical ? s.bad : s.warn}`}>{i.critical ? 'critical' : 'fail'}</span></div>
         ))}
         {items.filter(i => !v.audit[i.code]).length ? <div className={s.sub}>Not answered: {items.filter(i => !v.audit[i.code]).map(i => i.code).join(', ')}</div> : null}
       </div>

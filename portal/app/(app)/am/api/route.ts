@@ -31,13 +31,13 @@ export async function POST(req: Request) {
         const lat = num(b.lat), lng = num(b.lng), acc = num(b.acc), photo = num(b.photo);
         if (lat == null || lng == null) throw new Error('Your phone did not give a location. Allow location for this site and try again.');
         if (photo == null) throw new Error('Take the store-front photo first.');
-        await am.checkIn(u.id, who(u), { kind: b.kind === 'qa_audit' ? 'qa_audit' : 'am_visit', store: String(b.store ?? ''), allowed: portalAccess(u).am.review || u.role === 'admin' || !u.outletCodes.length ? null : u.outletCodes, planned: b.planned === true, reason: str(b.reason), lat, lng, acc: acc ?? 0, frontPhoto: photo });
+        await am.checkIn(u.id, who(u), { kind: (am.VISIT_KINDS as string[]).includes(String(b.kind)) ? (b.kind as am.VisitKind) : 'am_visit', store: String(b.store ?? ''), allowed: portalAccess(u).am.review || u.role === 'admin' || !u.outletCodes.length ? null : u.outletCodes, planned: b.planned === true, reason: str(b.reason), lat, lng, acc: acc ?? 0, frontPhoto: photo });
         break;
       }
       case 'reportPin': await am.reportPin(u.id, who(u), String(b.store ?? ''), num(b.lat), num(b.lng), num(b.acc), num(b.dist), str(b.note)); break;
       case 'markPoint': await am.markPoint(u.id, visitId, b.kind === 'next_check' ? 'next_check' : 'todo', num(b.refId) ?? 0, b.status === 'done' ? 'done' : 'open'); break;
       case 'questionSeen': await am.questionSeen(u.id, visitId, num(b.questionId) ?? 0); break;
-      case 'audit': await am.answerAudit(u.id, visitId, String(b.code ?? ''), b.result === 'fail' ? 'fail' : 'pass', str(b.note), num(b.photo)); break;
+      case 'audit': await am.answerAudit(u.id, visitId, String(b.code ?? ''), b.result === 'fail' ? 'fail' : 'pass', str(b.note), num(b.photo), str(b.owner), str(b.due)); break;
       case 'order': await am.orderCheck(u.id, visitId, String(b.key ?? ''), num(b.pending) ?? -1, num(b.photo)); break;
       case 'stock': await am.stockCount(u.id, visitId, String(b.item ?? ''), num(b.physical), num(b.petpooja), str(b.reason)); break;
       case 'lockCounts': await am.lockCounts(u.id, visitId); break;
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
       }
       case 'void': {
         if (!portalAccess(u).am.review) return NextResponse.json({ error: 'Only reviewers can void.' }, { status: 403 });
-        await am.voidVisit(who(u), num(b.id) ?? 0, String(b.reason ?? ''));
+        await am.voidVisit(u.id, num(b.id) ?? 0, String(b.reason ?? ''));
         break;
       }
       case 'seen': await am.markSeen(u.id, visitId); break;

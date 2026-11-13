@@ -10,8 +10,12 @@ export const SECTIONS = ['last', 'qs', 'audit', 'ord', 'inv', 'todo', 'next'] as
 export type Section = (typeof SECTIONS)[number];
 // A store audit (QA, or any auditor) is the same 28 items without the visit's
 // other sections; the to-dos still come from its fails (section 31).
-export type VisitKind = 'am_visit' | 'qa_audit';
-export const sectionsFor = (kind: string): readonly Section[] => (kind === 'qa_audit' ? ['audit', 'todo'] : SECTIONS);
+export type VisitKind = 'am_visit' | 'am_audit' | 'qa_audit' | 'other_audit';
+export const VISIT_KINDS: VisitKind[] = ['am_visit', 'am_audit', 'qa_audit', 'other_audit'];
+// Names on screen. am_visit's audit and am_audit both score the AM audit line;
+// qa_audit scores the QA line; other_audit is recorded with no points (257).
+export const KIND_NAMES: Record<VisitKind, string> = { am_visit: 'AM visit', am_audit: 'AM monthly audit', qa_audit: 'QA surprise audit', other_audit: 'Other visit' };
+export const sectionsFor = (kind: string): readonly Section[] => (kind === 'am_visit' ? SECTIONS : ['audit', 'todo']);
 // Store KPI line 7 and 8 (proposed): full 15 at 25 or more of 28, zero at 19 or fewer, straight line between.
 export const auditPoints = (passed: number): number => Math.round(Math.max(0, Math.min(1, (passed - 19) / 6)) * 150) / 10;
 export const ORDER_CHECKS = [
@@ -38,7 +42,7 @@ export interface VisitDetail {
   checkoutAt: string | null; checkoutDist: number | null; status: string; seenAt: string | null;
   sectionsDone: string[]; invItems: { item: string; kind: string }[]; invLockedAt: string | null;
   frontPhoto: number | null; stockScreenPhoto: number | null;
-  audit: Record<string, { result: 'pass' | 'fail'; note: string | null; photo: number | null }>;
+  audit: Record<string, { result: 'pass' | 'fail'; note: string | null; owner: string | null; due: string | null; photo: number | null }>;
   orders: Record<string, { pending: number; photo: number | null }>;
   stock: Record<string, { physical: number | null; petpooja: number | null; reason: string | null }>;
   todos: { id: number; text: string; source: string; critical: boolean }[];
@@ -132,7 +136,8 @@ export async function checkIn(person: string, name: string, args: { kind: VisitK
   if (await openVisitId(person)) throw new Error('You are already checked in somewhere. Check out there first.');
   const dist = metres(args.lat, args.lng, pin.lat, pin.lng);
   if (dist > pin.radius) throw new Error(`You are ${dist} m from the store. Check in works within ${pin.radius} m.`);
-  const qa = args.kind === 'qa_audit';
+  if (!VISIT_KINDS.includes(args.kind)) throw new Error('Unknown visit type.');
+  const qa = args.kind !== 'am_visit';
   const plan = qa ? null : await planFor(person, istDate());
   const inv = qa ? [] : [
     ...shuffle(ADD_ONS).slice(0, 2).map(item => ({ item, kind: 'add_on' })),
@@ -142,7 +147,7 @@ export async function checkIn(person: string, name: string, args: { kind: VisitK
     const v = await c.q<{ id: string }>(
       `insert into am.visit (kind, person, person_name, store, plan_id, planned, unplanned_reason, checkin_lat, checkin_lng, checkin_acc_m, checkin_dist_m, inv_items)
        values ($12,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
-      [person, name, args.store, plan?.id ?? null, qa ? false : args.planned, qa ? null : args.reason, args.lat, args.lng, args.acc, dist, JSON.stringify(inv), qa ? 'qa_audit' : 'am_visit']);
+      [person, name, args.store, plan?.id ?? null, qa ? false : args.planned, qa ? null : args.reason, args.lat, args.lng, args.acc, dist, JSON.stringify(inv), args.kind]);
     const id = Number(v[0].id);
     const ph = await c.q(`update am.photo set visit_id = $1 where id = $2 and taken_by = $3 and visit_id is null and purpose = 'front' returning id`, [id, args.frontPhoto, person]);
     if (!ph.length) throw new Error('The store-front photo was not found. Take it again.');
@@ -158,7 +163,7 @@ export async function visitDetail(id: number): Promise<VisitDetail | null> {
   if (!v) return null;
   const [photos, audit, orders, stock, todos, nexts] = await Promise.all([
     q<{ id: string; purpose: string }>(`select id, purpose from am.photo where visit_id = $1 and voided_at is null order by id`, [id]),
-    q<{ item_code: string; result: 'pass' | 'fail'; note: string | null; photo_id: string | null }>(`select distinct on (item_code) item_code, result, note, photo_id from am.audit_answer where visit_id = $1 order by item_code, id desc`, [id]),
+    q<{ item_code: string; result: 'pass' | 'fail'; note: string | null; fix_owner: string | null; fix_due: string | null; photo_id: string | null }>(`select distinct on (item_code) item_code, result, note, fix_owner, to_char(fix_due, 'YYYY-MM-DD') fix_due, photo_id from am.audit_answer where visit_id = $1 order by item_code, id desc`, [id]),
     q<{ check_key: string; pending: number; photo_id: string | null }>(`select distinct on (check_key) check_key, pending, photo_id from am.order_check where visit_id = $1 order by check_key, id desc`, [id]),
     q<{ item: string; physical: string | null; petpooja: string | null; reason: string | null }>(`select distinct on (item) item, physical, petpooja, reason from am.stock_count where visit_id = $1 order by item, id desc`, [id]),
     q<{ id: string; text: string; source: string; critical: boolean }>(`select id, text, source, critical from am.todo where visit_id = $1 order by id`, [id]),
@@ -166,13 +171,13 @@ export async function visitDetail(id: number): Promise<VisitDetail | null> {
   ]);
   const lastPhoto = (purpose: string) => { const p = photos.filter(x => x.purpose === purpose).pop(); return p ? Number(p.id) : null; };
   const open = await openPointsFor(v.store, Number(v.id));
-  const qs = v.store.startsWith('TEST-') || v.kind === 'qa_audit' ? [] : await questionsFor(v.store, Number(v.id));
+  const qs = v.store.startsWith('TEST-') || v.kind !== 'am_visit' ? [] : await questionsFor(v.store, Number(v.id));
   return {
     id: Number(v.id), kind: v.kind, store: v.store, am: v.am ?? 'Test', personName: v.person_name, planned: v.planned, unplannedReason: v.unplanned_reason,
     checkinAt: v.checkin_at, checkinDist: v.checkin_dist_m, checkinAcc: v.checkin_acc_m, checkoutAt: v.checkout_at, checkoutDist: v.checkout_dist_m,
     status: v.status, seenAt: v.seen_at, sectionsDone: v.sections_done ?? [], invItems: v.inv_items ?? [], invLockedAt: v.inv_locked_at,
     frontPhoto: lastPhoto('front'), stockScreenPhoto: lastPhoto('stock_screen'),
-    audit: Object.fromEntries(audit.map(a => [a.item_code, { result: a.result, note: a.note, photo: a.photo_id ? Number(a.photo_id) : null }])),
+    audit: Object.fromEntries(audit.map(a => [a.item_code, { result: a.result, note: a.note, owner: a.fix_owner, due: a.fix_due, photo: a.photo_id ? Number(a.photo_id) : null }])),
     orders: Object.fromEntries(orders.map(o => [o.check_key, { pending: o.pending, photo: o.photo_id ? Number(o.photo_id) : null }])),
     stock: Object.fromEntries(stock.map(s => [s.item, { physical: s.physical == null ? null : Number(s.physical), petpooja: s.petpooja == null ? null : Number(s.petpooja), reason: s.reason }])),
     todos: todos.map(t => ({ id: Number(t.id), text: t.text, source: t.source, critical: t.critical })),
@@ -238,15 +243,19 @@ export async function questionSeen(person: string, visitId: number, questionId: 
   await ownOpen(person, visitId);
   await q('insert into am.question_seen (visit_id, question_id, by_person) values ($1,$2,$3)', [visitId, questionId, person]);
 }
-export async function answerAudit(person: string, visitId: number, code: string, result: 'pass' | 'fail', note: string | null, photo: number | null) {
+export async function answerAudit(person: string, visitId: number, code: string, result: 'pass' | 'fail', note: string | null, photo: number | null, owner: string | null = null, due: string | null = null) {
+  if (result === 'fail') {
+    if (!(owner ?? '').trim()) throw new Error('Say who will fix it.');
+    if (!due || !/^\d{4}-\d{2}-\d{2}$/.test(due) || due < istDate()) throw new Error('Pick the date it must be fixed by (today or later).');
+  }
   await ownOpen(person, visitId);
   if (result !== 'pass' && result !== 'fail') throw new Error('Pass or fail only.');
   if (result === 'fail' && !(note ?? '').trim()) throw new Error('Say in one line what must be fixed.');
   await ownPhoto(person, visitId, photo, `audit:${code}`);
   const ok = await one('select 1 from am.audit_item where version = 1 and code = $1', [code]);
   if (!ok) throw new Error('Unknown audit item.');
-  await q('insert into am.audit_answer (visit_id, item_code, result, note, photo_id, answered_by) values ($1,$2,$3,$4,$5,$6)',
-    [visitId, code, result, result === 'fail' ? note!.trim() : null, photo, person]);
+  await q('insert into am.audit_answer (visit_id, item_code, result, note, photo_id, answered_by, fix_owner, fix_due) values ($1,$2,$3,$4,$5,$6,$7,$8)',
+    [visitId, code, result, result === 'fail' ? note!.trim() : null, photo, person, result === 'fail' ? owner!.trim() : null, result === 'fail' ? due : null]);
 }
 export async function orderCheck(person: string, visitId: number, key: string, pending: number, photo: number | null) {
   await ownOpen(person, visitId);
@@ -313,7 +322,7 @@ export async function finishSection(person: string, visitId: number, section: Se
       for (const i of items) {
         const a = d.audit[i.code];
         if (a?.result === 'fail') await c.q(`insert into am.todo (visit_id, store, text, source, critical, created_by) values ($1,$2,$3,$4,$5,$6)`,
-          [visitId, v.store, `${i.title}: ${a.note ?? 'fix'}`, `audit:${i.code}`, i.critical, person]);
+          [visitId, v.store, `${i.title}: ${a.note ?? 'fix'}${a.owner ? ` (${a.owner}, by ${a.due})` : ''}`, `audit:${i.code}`, i.critical, person]);
       }
       for (const it of d.invItems) {
         const s = d.stock[it.item];
@@ -379,6 +388,7 @@ export async function storeResults(): Promise<StoreResult[]> {
   const by = new Map<string, StoreResult>();
   for (const r of rows) {
     const x = by.get(r.store) ?? { store: r.store, am: r.am ?? 'Test', amVisit: null, qaVisit: null, amPoints: null, qaPoints: null, standIn: null, critical: 0, capped: false, audits: 0 };
+    if (r.kind === 'other_audit') continue; // recorded, no points
     x.audits += 1; x.critical += r.crit;
     const one = { id: Number(r.id), at: r.checkin_at, by: r.person_name, passed: r.passed, points: auditPoints(r.passed) };
     if (r.kind === 'qa_audit') { if (!x.qaVisit) x.qaVisit = one; } else if (!x.amVisit) x.amVisit = one;
@@ -391,10 +401,10 @@ export async function storeResults(): Promise<StoreResult[]> {
 }
 
 // A mistaken visit or audit is voided with a reason, never deleted.
-export async function voidVisit(name: string, id: number, reason: string) {
+export async function voidVisit(person: string, id: number, reason: string) {
   if (reason.trim().length < 5) throw new Error('Give the reason for voiding in a few words.');
-  const r = await q(`update am.visit set voided_at = now(), void_reason = $2, updated_at = now() where id = $1 and voided_at is null returning id`,
-    [id, `${reason.trim()} (voided by ${name})`]);
+  const r = await q(`update am.visit set voided_at = now(), void_reason = $2, voided_by = $3, updated_at = now() where id = $1 and voided_at is null returning id`,
+    [id, reason.trim(), person]);
   if (!r.length) throw new Error('That visit is not there or is already void.');
   await q(`update am.photo set voided_at = now(), void_reason = 'visit voided' where visit_id = $1 and voided_at is null`, [id]);
 }

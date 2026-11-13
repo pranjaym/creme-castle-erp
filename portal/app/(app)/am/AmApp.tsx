@@ -25,6 +25,8 @@ function metres(aLat: number, aLng: number, bLat: number, bLng: number): number 
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLng / 2) ** 2;
   return Math.round(2 * R * Math.asin(Math.sqrt(h)));
 }
+const KIND = { am_visit: 'AM visit', am_audit: 'AM monthly audit', qa_audit: 'QA surprise audit', other_audit: 'Other visit' } as const;
+const KIND_NOTE = { am_audit: 'Scores the AM audit line (15 points).', qa_audit: 'Unannounced. Scores the QA audit line (15 points).', other_audit: 'Recorded with every answer and photo, no points.' } as const;
 function locate(): Promise<Loc> {
   return new Promise((res, rej) => {
     if (!navigator.geolocation) return rej(new Error('This phone does not give a location to web pages.'));
@@ -64,14 +66,15 @@ export default function AmApp(props: {
   const [amF, setAmF] = useState<string>('Test');
   const [picking, setPicking] = useState<string[]>([]);
   const [unp, setUnp] = useState<{ open: boolean; store: string; reason: string }>({ open: false, store: '', reason: '' });
-  const [ci, setCi] = useState<{ kind: 'am_visit' | 'qa_audit'; store: string; planned: boolean; reason: string | null; loc: Loc | null; photo: number | null; preview: string | null } | null>(null);
+  const [ci, setCi] = useState<{ kind: 'am_visit' | 'am_audit' | 'qa_audit' | 'other_audit'; store: string; planned: boolean; reason: string | null; loc: Loc | null; photo: number | null; preview: string | null } | null>(null);
   const [ai, setAi] = useState(0);
-  const [draft, setDraft] = useState<{ result: 'pass' | 'fail' | null; photo: number | null; preview: string | null; note: string }>({ result: null, photo: null, preview: null, note: '' });
+  const [draft, setDraft] = useState<{ result: 'pass' | 'fail' | null; photo: number | null; preview: string | null; note: string; owner: string; due: string }>({ result: null, photo: null, preview: null, note: '', owner: '', due: '' });
   const [ordDraft, setOrdDraft] = useState<Record<string, { photo: number | null; preview: string | null; pending: string }>>({});
   const [invDraft, setInvDraft] = useState<Record<string, string>>({});
   const [ppDraft, setPpDraft] = useState<Record<string, string>>({});
   const [text, setText] = useState('');
   const [qOpen, setQOpen] = useState(false);
+  const [qaKind, setQaKind] = useState<'am_audit' | 'qa_audit' | 'other_audit'>('qa_audit');
   const [qaStore, setQaStore] = useState(props.stores[0]?.store ?? '');
   const [lastClosed, setLastClosed] = useState<{ store: string; minutes: number | null; from: string; to: string | null } | null>(null);
   const [previews, setPreviews] = useState<Record<string, string>>({});
@@ -142,7 +145,7 @@ export default function AmApp(props: {
     return (
       <div className={s.app}>
         <Band />
-        <div className={s.h}>{ci.kind === 'qa_audit' ? 'QA audit' : 'Check in'} · {short(ci.store)}</div>
+        <div className={s.h}>{ci.kind === 'am_visit' ? 'Check in' : KIND[ci.kind]} · {short(ci.store)}</div>
         <div className={s.sub}>Check in works only within {pin.radius} m of the store&apos;s pin.{pin.needsCheck ? ` This pin is not confirmed yet (${pin.pinNote ?? 'from SalaryBox'}).` : ''}</div>
         <Msgs />
         <button className={`${s.btn} ${s.ghost}`} disabled={busy} onClick={async () => {
@@ -196,14 +199,14 @@ export default function AmApp(props: {
       ['todo', 'To-dos for the store', v.sectionsDone.includes('todo') ? `${v.todos.length} saved` : 'filled from your findings'],
       ['next', 'Check next visit', v.sectionsDone.includes('next') ? `${v.nexts.length} saved` : 'for the next visit here'],
     ];
-    if (v.kind === 'qa_audit') secs.splice(0, secs.length, ...secs.filter(x => x[0] === 'audit' || x[0] === 'todo'));
+    if (v.kind !== 'am_visit') secs.splice(0, secs.length, ...secs.filter(x => x[0] === 'audit' || x[0] === 'todo'));
     const secKey: Record<string, string> = { last: 'last', qs: 'qs', audit: 'audit', ord: 'ord', inv: 'inv', todo: 'todo', next: 'next' };
     const all = secs.every(x => v.sectionsDone.includes(secKey[x[0]]));
     const mins = Math.round((Date.now() - new Date(v.checkinAt).getTime()) / 60000);
     return (
       <div className={s.app}>
         <Band />
-        <div className={s.h}>{v.kind === 'qa_audit' ? 'QA audit · ' : ''}{short(v.store)}</div>
+        <div className={s.h}>{v.kind !== 'am_visit' ? `${KIND[v.kind as keyof typeof KIND] ?? 'Audit'} · ` : ''}{short(v.store)}</div>
         <div className={s.sub}>Checked in {hm(v.checkinAt)}, {v.checkinDist} m from the pin · {mins} min so far · every answer saves as you go</div>
         <Msgs />
         {secs.map(([k, t, d]) => (
@@ -229,7 +232,7 @@ export default function AmApp(props: {
 
   function loadDraft(idx: number, from: VisitDetail | null = v) {
     const it = items[idx]; const a = from?.audit[it.code];
-    setDraft({ result: a?.result ?? null, photo: a?.photo ?? null, preview: null, note: a?.note ?? '' });
+    setDraft({ result: a?.result ?? null, photo: a?.photo ?? null, preview: null, note: a?.note ?? '', owner: a?.owner ?? '', due: a?.due ?? '' });
   }
 
   if (v && view === 'last') {
@@ -284,7 +287,7 @@ export default function AmApp(props: {
 
   if (v && view === 'audit') {
     const it = items[ai];
-    const ready = !!draft.result && !!draft.photo && (draft.result === 'pass' || draft.note.trim().length > 0);
+    const ready = !!draft.result && !!draft.photo && (draft.result === 'pass' || (draft.note.trim().length > 0 && draft.owner.trim().length > 0 && !!draft.due));
     const done = items.filter(i => v.audit[i.code]).length;
     return (
       <div className={s.app}>
@@ -307,9 +310,13 @@ export default function AmApp(props: {
         {draft.result === 'fail' ? (<>
           <label className={s.lbl} htmlFor="am-note">What must be fixed</label>
           <textarea id="am-note" className={s.txt} rows={2} value={draft.note} onChange={e => setDraft({ ...draft, note: e.target.value })} placeholder="One line" />
+          <label className={s.lbl} htmlFor="am-owner">Who will fix it</label>
+          <input id="am-owner" className={s.txt} value={draft.owner} onChange={e => setDraft({ ...draft, owner: e.target.value })} placeholder="Name or role, for example: store in-charge" />
+          <label className={s.lbl} htmlFor="am-due">Fix by</label>
+          <input id="am-due" type="date" className={s.txt} value={draft.due} min={new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)} onChange={e => setDraft({ ...draft, due: e.target.value })} />
         </>) : null}
         <button className={s.btn} disabled={busy || !ready} onClick={async () => {
-          const fresh = await call('audit', { code: it.code, result: draft.result, note: draft.note, photo: draft.photo });
+          const fresh = await call('audit', { code: it.code, result: draft.result, note: draft.note, owner: draft.owner, due: draft.due, photo: draft.photo });
           if (!fresh) return;
           if (ai < items.length - 1) { setAi(ai + 1); loadDraft(ai + 1, fresh.visit); window.scrollTo(0, 0); } else go('auditSum');
         }}>{ai === items.length - 1 ? 'Save and finish' : 'Save and next'}</button>
@@ -423,7 +430,7 @@ export default function AmApp(props: {
     const done = v.sectionsDone.includes('todo');
     const auto: string[] = [];
     if (!done) {
-      items.forEach(i => { const a = v.audit[i.code]; if (a?.result === 'fail') auto.push(`${i.title}: ${a.note ?? ''}${i.critical ? ' (critical)' : ''}`); });
+      items.forEach(i => { const a = v.audit[i.code]; if (a?.result === 'fail') auto.push(`${i.title}: ${a.note ?? ''}${a.owner ? ` (${a.owner}, by ${a.due})` : ''}${i.critical ? ' (critical)' : ''}`); });
       v.invItems.forEach(i => { const c = v.stock[i.item]; if (c && c.physical != null && c.petpooja != null && c.physical !== c.petpooja) auto.push(`${i.item}: ${c.physical - c.petpooja > 0 ? '+' : ''}${c.physical - c.petpooja} against Petpooja (${c.reason ?? ''})`); });
       orderChecks.forEach(o => { const x = v.orders[o.key]; if (x && x.pending > 0) auto.push(`${o.title}: ${x.pending} pending to clear`); });
     }
@@ -599,11 +606,13 @@ export default function AmApp(props: {
         <button className={`${s.btn} ${s.ghost}`} onClick={() => go('dayEnd')}>End the day and see the evening mail</button>
       </>)}
       {!v ? (
-        <div className={s.card}><div className={s.cardh}>QA surprise audit</div>
-          <div className={s.sub}>The same {items.length} items with a photo on each, unannounced, no day plan needed. Check-in rules are the same: within the store&apos;s circle, store-front photo.</div>
+        <div className={s.card}><div className={s.cardh}>Store audit</div>
+          <div className={s.sub}>The same {items.length} items with a photo on each, no day plan needed. Check-in rules are the same: within the store&apos;s circle, store-front photo.</div>
+          <div className={s.chips} style={{ marginTop: 6 }}>{(['am_audit', 'qa_audit', 'other_audit'] as const).map(k => <button key={k} className={`${s.chip} ${qaKind === k ? s.chipon : ''}`} onClick={() => setQaKind(k)}>{KIND[k]}</button>)}</div>
+          <div className={s.sub} style={{ marginTop: 4 }}>{KIND_NOTE[qaKind]}</div>
           <label className={s.lbl} htmlFor="am-qa">Store</label>
           <select id="am-qa" className={s.txt} value={qaStore} onChange={e => setQaStore(e.target.value)}>{stores.map(x => <option key={x.store} value={x.store}>{short(x.store)}</option>)}</select>
-          <button className={`${s.btn} ${s.small}`} style={{ marginTop: 8 }} disabled={!qaStore} onClick={() => { setCi({ kind: 'qa_audit', store: qaStore, planned: false, reason: null, loc: null, photo: null, preview: null }); go('checkin'); }}>Start a QA audit</button>
+          <button className={`${s.btn} ${s.small}`} style={{ marginTop: 8 }} disabled={!qaStore} onClick={() => { setCi({ kind: qaKind, store: qaStore, planned: false, reason: null, loc: null, photo: null, preview: null }); go('checkin'); }}>Start the audit</button>
         </div>
       ) : null}
     </div>
