@@ -14,7 +14,7 @@ type OrderCheck = { key: string; title: string; hint: string };
 type View = 'day' | 'checkin' | 'hub' | 'last' | 'qs' | 'audit' | 'auditSum' | 'ord' | 'inv' | 'todo' | 'next' | 'out' | 'closed' | 'dayEnd';
 type Loc = { lat: number; lng: number; acc: number };
 
-const short = (store: string) => store.replace(/^CC-/, '').replace(/^TEST-OFFICE$/, 'Test site: Corporate Office');
+const short = (store: string) => store.replace(/^CC-/, '').replace(/^TEST-OFFICE$/, 'Test site: Corporate Office B-79').replace(/^TEST-KITCHEN$/, 'Test site: Base Kitchen A-37');
 function hm(ts: string | null): string {
   if (!ts) return '';
   return new Date(ts).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' });
@@ -560,7 +560,7 @@ export default function AmApp(props: {
       </>) : null}
       {!plan ? (<>
         <div className={s.h}>Plan today</div>
-        <div className={s.sub}>Pick the stores you will visit, in order. The plan locks at 10:00 and goes to the review list. For the test, the Test site (the Corporate Office in Sector 67) lets you check in without going to a store.</div>
+        <div className={s.sub}>Pick the stores you will visit, in order. The plan locks at 10:00 and goes to the review list. For the test, the two Test sites (Corporate Office B-79 and Base Kitchen A-37, Sector 67) let you check in without going to a store.</div>
         <div className={s.chips}>{ams.map(a => <button key={a} className={`${s.chip} ${a === amF ? s.chipon : ''}`} onClick={() => setAmF(a)}>{a === 'Test' ? 'Test site' : a}</button>)}</div>
         <div className={s.card}>
           {[...picking.map(p => stores.find(x => x.store === p)!).filter(Boolean), ...stores.filter(x => x.am === amF && !picking.includes(x.store))].map(x => {
