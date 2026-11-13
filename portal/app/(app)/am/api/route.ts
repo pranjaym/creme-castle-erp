@@ -31,7 +31,7 @@ export async function POST(req: Request) {
         const lat = num(b.lat), lng = num(b.lng), acc = num(b.acc), photo = num(b.photo);
         if (lat == null || lng == null) throw new Error('Your phone did not give a location. Allow location for this site and try again.');
         if (photo == null) throw new Error('Take the store-front photo first.');
-        await am.checkIn(u.id, who(u), { store: String(b.store ?? ''), planned: b.planned === true, reason: str(b.reason), lat, lng, acc: acc ?? 0, frontPhoto: photo });
+        await am.checkIn(u.id, who(u), { kind: b.kind === 'qa_audit' ? 'qa_audit' : 'am_visit', store: String(b.store ?? ''), planned: b.planned === true, reason: str(b.reason), lat, lng, acc: acc ?? 0, frontPhoto: photo });
         break;
       }
       case 'reportPin': await am.reportPin(u.id, who(u), String(b.store ?? ''), num(b.lat), num(b.lng), num(b.acc), num(b.dist), str(b.note)); break;

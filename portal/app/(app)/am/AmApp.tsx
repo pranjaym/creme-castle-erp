@@ -64,7 +64,7 @@ export default function AmApp(props: {
   const [amF, setAmF] = useState<string>('Test');
   const [picking, setPicking] = useState<string[]>([]);
   const [unp, setUnp] = useState<{ open: boolean; store: string; reason: string }>({ open: false, store: '', reason: '' });
-  const [ci, setCi] = useState<{ store: string; planned: boolean; reason: string | null; loc: Loc | null; photo: number | null; preview: string | null } | null>(null);
+  const [ci, setCi] = useState<{ kind: 'am_visit' | 'qa_audit'; store: string; planned: boolean; reason: string | null; loc: Loc | null; photo: number | null; preview: string | null } | null>(null);
   const [ai, setAi] = useState(0);
   const [draft, setDraft] = useState<{ result: 'pass' | 'fail' | null; photo: number | null; preview: string | null; note: string }>({ result: null, photo: null, preview: null, note: '' });
   const [ordDraft, setOrdDraft] = useState<Record<string, { photo: number | null; preview: string | null; pending: string }>>({});
@@ -72,6 +72,7 @@ export default function AmApp(props: {
   const [ppDraft, setPpDraft] = useState<Record<string, string>>({});
   const [text, setText] = useState('');
   const [qOpen, setQOpen] = useState(false);
+  const [qaStore, setQaStore] = useState(props.stores[0]?.store ?? '');
   const [lastClosed, setLastClosed] = useState<{ store: string; minutes: number | null; from: string; to: string | null } | null>(null);
   const [previews, setPreviews] = useState<Record<string, string>>({});
 
@@ -141,7 +142,7 @@ export default function AmApp(props: {
     return (
       <div className={s.app}>
         <Band />
-        <div className={s.h}>Check in · {short(ci.store)}</div>
+        <div className={s.h}>{ci.kind === 'qa_audit' ? 'Store audit' : 'Check in'} · {short(ci.store)}</div>
         <div className={s.sub}>Check in works only within {pin.radius} m of the store&apos;s pin.{pin.needsCheck ? ` This pin is not confirmed yet (${pin.pinNote ?? 'from SalaryBox'}).` : ''}</div>
         <Msgs />
         <button className={`${s.btn} ${s.ghost}`} disabled={busy} onClick={async () => {
@@ -165,7 +166,7 @@ export default function AmApp(props: {
           }} />
         ) : null}
         <button className={s.btn} disabled={busy || !inside || !ci.photo} onClick={async () => {
-          if (await call('checkIn', { store: ci.store, planned: ci.planned, reason: ci.reason, lat: ci.loc!.lat, lng: ci.loc!.lng, acc: ci.loc!.acc, photo: ci.photo })) { setCi(null); go('hub'); }
+          if (await call('checkIn', { kind: ci.kind, store: ci.store, planned: ci.planned, reason: ci.reason, lat: ci.loc!.lat, lng: ci.loc!.lng, acc: ci.loc!.acc, photo: ci.photo })) { setCi(null); go('hub'); }
         }}>Check in</button>
         <button className={s.link} onClick={() => { setCi(null); go('day'); }}>Back</button>
       </div>
@@ -184,13 +185,14 @@ export default function AmApp(props: {
       ['todo', 'To-dos for the store', v.sectionsDone.includes('todo') ? `${v.todos.length} saved` : 'filled from your findings'],
       ['next', 'Check next visit', v.sectionsDone.includes('next') ? `${v.nexts.length} saved` : 'for the next visit here'],
     ];
+    if (v.kind === 'qa_audit') secs.splice(0, secs.length, ...secs.filter(x => x[0] === 'audit' || x[0] === 'todo'));
     const secKey: Record<string, string> = { last: 'last', qs: 'qs', audit: 'audit', ord: 'ord', inv: 'inv', todo: 'todo', next: 'next' };
     const all = secs.every(x => v.sectionsDone.includes(secKey[x[0]]));
     const mins = Math.round((Date.now() - new Date(v.checkinAt).getTime()) / 60000);
     return (
       <div className={s.app}>
         <Band />
-        <div className={s.h}>{short(v.store)}</div>
+        <div className={s.h}>{v.kind === 'qa_audit' ? 'Store audit · ' : ''}{short(v.store)}</div>
         <div className={s.sub}>Checked in {hm(v.checkinAt)}, {v.checkinDist} m from the pin · {mins} min so far · every answer saves as you go</div>
         <Msgs />
         {secs.map(([k, t, d]) => (
@@ -566,7 +568,7 @@ export default function AmApp(props: {
               <div key={`${sp.store}${k}`} className={s.row}>
                 <div className={s.rowl}><b>{short(sp.store)}</b><span>{sp.planned ? 'planned' : `added: ${sp.reason}`}{done ? ` · ${hm(done.checkinAt)} to ${hm(done.checkoutAt)}, ${done.minutes} min` : ''}</span></div>
                 {done ? <span className={`${s.pill} ${s.good}`}>visited</span> : live ? <span className={`${s.pill} ${s.blue}`}>in progress</span> : v ? <span className={`${s.pill} ${s.grey}`}>later</span> :
-                  <button className={`${s.btn} ${s.small}`} onClick={() => { setCi({ store: sp.store, planned: sp.planned, reason: sp.reason, loc: null, photo: null, preview: null }); go('checkin'); }}>Check in</button>}
+                  <button className={`${s.btn} ${s.small}`} onClick={() => { setCi({ kind: 'am_visit', store: sp.store, planned: sp.planned, reason: sp.reason, loc: null, photo: null, preview: null }); go('checkin'); }}>Check in</button>}
               </div>
             );
           })}
@@ -585,6 +587,14 @@ export default function AmApp(props: {
         )}
         <button className={`${s.btn} ${s.ghost}`} onClick={() => go('dayEnd')}>End the day and see the evening mail</button>
       </>)}
+      {!v ? (
+        <div className={s.card}><div className={s.cardh}>Store audit (QA or any auditor)</div>
+          <div className={s.sub}>The same {items.length} items with a photo on each, no day plan needed. Check-in rules are the same: within the store&apos;s circle, store-front photo.</div>
+          <label className={s.lbl} htmlFor="am-qa">Store</label>
+          <select id="am-qa" className={s.txt} value={qaStore} onChange={e => setQaStore(e.target.value)}>{stores.map(x => <option key={x.store} value={x.store}>{short(x.store)}</option>)}</select>
+          <button className={`${s.btn} ${s.small}`} style={{ marginTop: 8 }} disabled={!qaStore} onClick={() => { setCi({ kind: 'qa_audit', store: qaStore, planned: false, reason: null, loc: null, photo: null, preview: null }); go('checkin'); }}>Start a store audit</button>
+        </div>
+      ) : null}
     </div>
   );
 }

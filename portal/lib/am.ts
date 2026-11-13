@@ -8,6 +8,12 @@ import { q, one, tx } from '@/lib/db';
 
 export const SECTIONS = ['last', 'qs', 'audit', 'ord', 'inv', 'todo', 'next'] as const;
 export type Section = (typeof SECTIONS)[number];
+// A store audit (QA, or any auditor) is the same 28 items without the visit's
+// other sections; the to-dos still come from its fails (section 31).
+export type VisitKind = 'am_visit' | 'qa_audit';
+export const sectionsFor = (kind: string): readonly Section[] => (kind === 'qa_audit' ? ['audit', 'todo'] : SECTIONS);
+// Store KPI line 7 and 8 (proposed): full 15 at 25 or more of 28, zero at 19 or fewer, straight line between.
+export const auditPoints = (passed: number): number => Math.round(Math.max(0, Math.min(1, (passed - 19) / 6)) * 150) / 10;
 export const ORDER_CHECKS = [
   { key: 'pp_po', title: 'Petpooja purchase orders', hint: 'Every purchase order received at this store checked and marked in Petpooja' },
   { key: 'pp_to', title: 'Petpooja transfer orders', hint: 'Every transfer from the kitchen received and matched in Petpooja' },
@@ -23,11 +29,11 @@ export interface StoreRow { store: string; am: string; lat: number; lng: number;
 export interface AuditItem { code: string; sort: number; grp: string; title: string; passLine: string; critical: boolean }
 export interface PlanChange { kind: 'added' | 'missed'; store: string; reason: string; at: string }
 export interface Plan { id: number; planDate: string; stores: string[]; confirmedAt: string; late: boolean; changes: PlanChange[] }
-export interface VisitSummary { id: number; store: string; personName: string | null; planned: boolean; status: string; checkinAt: string; checkoutAt: string | null; minutes: number | null; passed: number; failed: number; critical: number; todos: number }
+export interface VisitSummary { id: number; kind: string; store: string; personName: string | null; planned: boolean; status: string; checkinAt: string; checkoutAt: string | null; minutes: number | null; passed: number; failed: number; critical: number; todos: number }
 export interface OpenPoint { kind: 'todo' | 'next_check'; id: number; text: string; from: string; mark: 'done' | 'open' | null }
 export interface QuestionRow { id: number; prompt: string; raisedAt: string; status: string; overdue: boolean; seen: boolean }
 export interface VisitDetail {
-  id: number; store: string; am: string; personName: string | null; planned: boolean; unplannedReason: string | null;
+  id: number; kind: string; store: string; am: string; personName: string | null; planned: boolean; unplannedReason: string | null;
   checkinAt: string; checkinDist: number | null; checkinAcc: number | null;
   checkoutAt: string | null; checkoutDist: number | null; status: string; seenAt: string | null;
   sectionsDone: string[]; invItems: { item: string; kind: string }[]; invLockedAt: string | null;
@@ -91,7 +97,7 @@ export async function planChange(person: string, kind: 'added' | 'missed', store
 }
 
 const summarySql = `
-  select v.id, v.store, v.person_name, v.planned, v.status, v.checkin_at, v.checkout_at,
+  select v.id, v.kind, v.store, v.person_name, v.planned, v.status, v.checkin_at, v.checkout_at,
          case when v.checkout_at is null then null else round(extract(epoch from (v.checkout_at - v.checkin_at)) / 60)::int end as minutes,
          coalesce(a.passed,0) passed, coalesce(a.failed,0) failed, coalesce(a.crit,0) crit,
          (select count(*) from am.todo t where t.visit_id = v.id)::int todos
@@ -103,8 +109,8 @@ const summarySql = `
         join am.audit_item i on i.version = v.checklist_version and i.code = c.item_code
     ) a on true
    where v.voided_at is null`;
-type SumRow = { id: string; store: string; person_name: string | null; planned: boolean; status: string; checkin_at: string; checkout_at: string | null; minutes: number | null; passed: number; failed: number; crit: number; todos: number };
-const toSummary = (r: SumRow): VisitSummary => ({ id: Number(r.id), store: r.store, personName: r.person_name, planned: r.planned, status: r.status, checkinAt: r.checkin_at, checkoutAt: r.checkout_at, minutes: r.minutes, passed: r.passed, failed: r.failed, critical: r.crit, todos: r.todos });
+type SumRow = { id: string; kind: string; store: string; person_name: string | null; planned: boolean; status: string; checkin_at: string; checkout_at: string | null; minutes: number | null; passed: number; failed: number; crit: number; todos: number };
+const toSummary = (r: SumRow): VisitSummary => ({ id: Number(r.id), kind: r.kind, store: r.store, personName: r.person_name, planned: r.planned, status: r.status, checkinAt: r.checkin_at, checkoutAt: r.checkout_at, minutes: r.minutes, passed: r.passed, failed: r.failed, critical: r.crit, todos: r.todos });
 
 export async function myVisitsToday(person: string): Promise<VisitSummary[]> {
   const rows = await q<SumRow>(`${summarySql} and v.person = $1 and (v.checkin_at at time zone 'Asia/Kolkata')::date = $2 order by v.checkin_at`, [person, istDate()]);
@@ -119,22 +125,23 @@ export async function openVisitId(person: string): Promise<number | null> {
   return r ? Number(r.id) : null;
 }
 
-export async function checkIn(person: string, name: string, args: { store: string; planned: boolean; reason: string | null; lat: number; lng: number; acc: number; frontPhoto: number }): Promise<number> {
+export async function checkIn(person: string, name: string, args: { kind: VisitKind; store: string; planned: boolean; reason: string | null; lat: number; lng: number; acc: number; frontPhoto: number }): Promise<number> {
   const pin = (await stores()).find(s => s.store === args.store);
   if (!pin) throw new Error('That store has no map pin yet.');
   if (await openVisitId(person)) throw new Error('You are already checked in somewhere. Check out there first.');
   const dist = metres(args.lat, args.lng, pin.lat, pin.lng);
   if (dist > pin.radius) throw new Error(`You are ${dist} m from the store. Check in works within ${pin.radius} m.`);
-  const plan = await planFor(person, istDate());
-  const inv = [
+  const qa = args.kind === 'qa_audit';
+  const plan = qa ? null : await planFor(person, istDate());
+  const inv = qa ? [] : [
     ...shuffle(ADD_ONS).slice(0, 2).map(item => ({ item, kind: 'add_on' })),
     ...shuffle(GOODS).slice(0, 6).map(item => ({ item, kind: 'finished_good' })),
   ];
   return tx(async c => {
     const v = await c.q<{ id: string }>(
-      `insert into am.visit (person, person_name, store, plan_id, planned, unplanned_reason, checkin_lat, checkin_lng, checkin_acc_m, checkin_dist_m, inv_items)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
-      [person, name, args.store, plan?.id ?? null, args.planned, args.reason, args.lat, args.lng, args.acc, dist, JSON.stringify(inv)]);
+      `insert into am.visit (kind, person, person_name, store, plan_id, planned, unplanned_reason, checkin_lat, checkin_lng, checkin_acc_m, checkin_dist_m, inv_items)
+       values ($12,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
+      [person, name, args.store, plan?.id ?? null, qa ? false : args.planned, qa ? null : args.reason, args.lat, args.lng, args.acc, dist, JSON.stringify(inv), qa ? 'qa_audit' : 'am_visit']);
     const id = Number(v[0].id);
     const ph = await c.q(`update am.photo set visit_id = $1 where id = $2 and taken_by = $3 and visit_id is null and purpose = 'front' returning id`, [id, args.frontPhoto, person]);
     if (!ph.length) throw new Error('The store-front photo was not found. Take it again.');
@@ -145,7 +152,7 @@ export async function checkIn(person: string, name: string, args: { store: strin
 function shuffle<T>(a: T[]): T[] { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; }
 
 export async function visitDetail(id: number): Promise<VisitDetail | null> {
-  const v = await one<{ id: string; store: string; am: string | null; person_name: string | null; planned: boolean; unplanned_reason: string | null; checkin_at: string; checkin_dist_m: number | null; checkin_acc_m: number | null; checkout_at: string | null; checkout_dist_m: number | null; status: string; seen_at: string | null; sections_done: string[]; inv_items: { item: string; kind: string }[]; inv_locked_at: string | null; checklist_version: number }>(
+  const v = await one<{ id: string; kind: string; store: string; am: string | null; person_name: string | null; planned: boolean; unplanned_reason: string | null; checkin_at: string; checkin_dist_m: number | null; checkin_acc_m: number | null; checkout_at: string | null; checkout_dist_m: number | null; status: string; seen_at: string | null; sections_done: string[]; inv_items: { item: string; kind: string }[]; inv_locked_at: string | null; checklist_version: number }>(
     `select v.*, o.area_manager as am from am.visit v left join public.outlets o on o.internal_code = v.store where v.id = $1 and v.voided_at is null`, [id]);
   if (!v) return null;
   const [photos, audit, orders, stock, todos, nexts] = await Promise.all([
@@ -158,9 +165,9 @@ export async function visitDetail(id: number): Promise<VisitDetail | null> {
   ]);
   const lastPhoto = (purpose: string) => { const p = photos.filter(x => x.purpose === purpose).pop(); return p ? Number(p.id) : null; };
   const open = await openPointsFor(v.store, Number(v.id));
-  const qs = v.store.startsWith('TEST-') ? [] : await questionsFor(v.store, Number(v.id));
+  const qs = v.store.startsWith('TEST-') || v.kind === 'qa_audit' ? [] : await questionsFor(v.store, Number(v.id));
   return {
-    id: Number(v.id), store: v.store, am: v.am ?? 'Test', personName: v.person_name, planned: v.planned, unplannedReason: v.unplanned_reason,
+    id: Number(v.id), kind: v.kind, store: v.store, am: v.am ?? 'Test', personName: v.person_name, planned: v.planned, unplannedReason: v.unplanned_reason,
     checkinAt: v.checkin_at, checkinDist: v.checkin_dist_m, checkinAcc: v.checkin_acc_m, checkoutAt: v.checkout_at, checkoutDist: v.checkout_dist_m,
     status: v.status, seenAt: v.seen_at, sectionsDone: v.sections_done ?? [], invItems: v.inv_items ?? [], invLockedAt: v.inv_locked_at,
     frontPhoto: lastPhoto('front'), stockScreenPhoto: lastPhoto('stock_screen'),
@@ -333,7 +340,7 @@ export async function markSeen(person: string, visitId: number) {
 export async function checkOut(person: string, visitId: number, lat: number | null, lng: number | null, acc: number | null) {
   const v = await ownOpen(person, visitId);
   const d = (await visitDetail(visitId))!;
-  if (SECTIONS.some(s => !d.sectionsDone.includes(s))) throw new Error('Finish every section first.');
+  if (sectionsFor(d.kind).some(s => !d.sectionsDone.includes(s))) throw new Error('Finish every section first.');
   if (!d.seenAt) throw new Error('The in-charge has to see the to-do list first.');
   const pin = (await stores()).find(s => s.store === v.store);
   const dist = pin && lat != null && lng != null ? metres(lat, lng, pin.lat, pin.lng) : null;
@@ -348,6 +355,21 @@ export async function reportPin(person: string, name: string, store: string, lat
 
 export async function photoFor(id: number): Promise<{ storage_path: string; content_type: string; visit_id: string | null; taken_by: string } | null> {
   return one('select storage_path, content_type, visit_id, taken_by from am.photo where id = $1 and voided_at is null', [id]);
+}
+
+// This month's audit results by store: the latest closed audit of each kind
+// (Area Manager visit, store audit) with its proposed points.
+export interface StoreResult { store: string; am: string; kind: string; visitId: number; at: string; by: string | null; passed: number; critical: number; points: number; count: number }
+export async function storeResults(): Promise<StoreResult[]> {
+  const month = istDate().slice(0, 7);
+  const rows = await q<SumRow & { am: string | null; n: number }>(
+    `select x.*, o.area_manager am from (
+       select s.*, count(*) over (partition by s.store, s.kind)::int n,
+              row_number() over (partition by s.store, s.kind order by s.checkin_at desc) rn
+         from (${summarySql} and v.status = 'closed' and to_char(v.checkin_at at time zone 'Asia/Kolkata', 'YYYY-MM') = $1) s) x
+       left join public.outlets o on o.internal_code = x.store
+      where x.rn = 1 order by o.area_manager nulls first, x.store, x.kind`, [month]);
+  return rows.map(r => ({ store: r.store, am: r.am ?? 'Test', kind: r.kind, visitId: Number(r.id), at: r.checkin_at, by: r.person_name, passed: r.passed, critical: r.crit, points: auditPoints(r.passed), count: r.n }));
 }
 
 // Everything the phone screen shows for today, in one read.

@@ -27,11 +27,11 @@ export default async function AmVisit({ params }: { params: Promise<{ id: string
   return (
     <div className={s.wide}>
       <Link href="/am/review" className={s.link}>‹ All visits</Link>
-      <div className={s.h}>{v.store} · {v.personName}</div>
+      <div className={s.h}>{v.kind === 'qa_audit' ? 'Store audit · ' : ''}{v.store} · {v.personName}</div>
       <div className={s.sub}>
         Checked in {when(v.checkinAt)}, {v.checkinDist} m from the pin (GPS ±{v.checkinAcc} m)
         {v.checkoutAt ? <> · out {when(v.checkoutAt)}{v.checkoutDist != null ? `, ${v.checkoutDist} m from the pin` : ', no location at check-out'} · <b>{mins} min</b></> : ' · still in progress'}
-        {v.planned ? ' · planned' : ` · unplanned: ${v.unplannedReason}`}
+        {v.kind === 'qa_audit' ? '' : v.planned ? ' · planned' : ` · unplanned: ${v.unplannedReason}`}
         {v.seenAt ? ` · in-charge saw the to-dos ${when(v.seenAt)}` : ''}
       </div>
       <div className={s.card}><div className={s.cardh}>Store front</div><div className={s.thumbs}>{img(v.frontPhoto, 'Store front') ?? <span className={s.sub}>none</span>}</div></div>
