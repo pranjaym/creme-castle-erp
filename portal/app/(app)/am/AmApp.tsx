@@ -30,7 +30,7 @@ function locate(): Promise<Loc> {
     if (!navigator.geolocation) return rej(new Error('This phone does not give a location to web pages.'));
     navigator.geolocation.getCurrentPosition(
       p => res({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) }),
-      e => rej(new Error(e.code === 1 ? 'Location is blocked. Allow location for this site in the browser settings, then try again.' : 'Could not get your location. Step near a window or outside and try again.')),
+      e => rej(new Error(e.code === 1 ? 'Location is blocked for this site on this phone. Steps to allow it are below.' : 'Could not get your location. Step near a window or outside and try again.')),
       { enableHighAccuracy: true, timeout: 20_000, maximumAge: 0 });
   });
 }
@@ -149,6 +149,17 @@ export default function AmApp(props: {
           setErr(null); setBusy(true);
           try { const loc = await locate(); setCi({ ...ci, loc }); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
         }}>{ci.loc ? 'Check my location again' : 'Get my location'}</button>
+        {err?.startsWith('Location is blocked') ? (
+          <div className={s.card}><div className={s.cardh}>Allow location (iPhone)</div>
+            <div className={s.sub} style={{ lineHeight: 1.5 }}>
+              <b>1.</b> Settings, Privacy and Security, Location Services: switched on.<br />
+              <b>2.</b> On the same screen, scroll to <b>Safari Websites</b> (or Chrome if you use Chrome) and set it to <b>While Using the App</b> or <b>Ask Next Time</b>. &quot;Never&quot; blocks every website without asking.<br />
+              <b>3.</b> Settings, Apps, Safari, <b>Location</b>: set to <b>Ask</b> or <b>Allow</b>, not Deny.<br />
+              <b>4.</b> Back in Safari on this page, tap <b>aA</b> in the address bar, Website Settings, <b>Location</b>: <b>Ask</b> or <b>Allow</b>.<br />
+              <b>5.</b> Close this tab, open the link again, tap Get my location, and tap Allow when asked.
+            </div>
+          </div>
+        ) : null}
         {ci.loc ? (
           <div className={inside ? s.ok : s.err}>
             You are <b>{dist} m</b> from the store (GPS ±{ci.loc.acc} m). {inside ? 'Inside the check-in circle.' : `Move within ${pin.radius} m to check in.`}
@@ -545,7 +556,7 @@ export default function AmApp(props: {
         <div className={s.sub}>Pick the stores you will visit, in order. The plan locks at 10:00 and goes to the review list. For the test, the Test site (the Corporate Office in Sector 67) lets you check in without going to a store.</div>
         <div className={s.chips}>{ams.map(a => <button key={a} className={`${s.chip} ${a === amF ? s.chipon : ''}`} onClick={() => setAmF(a)}>{a === 'Test' ? 'Test site' : a}</button>)}</div>
         <div className={s.card}>
-          {stores.filter(x => x.am === amF).map(x => {
+          {[...picking.map(p => stores.find(x => x.store === p)!).filter(Boolean), ...stores.filter(x => x.am === amF && !picking.includes(x.store))].map(x => {
             const pos = picking.indexOf(x.store);
             return (
               <button key={x.store} className={s.rowbtn} onClick={() => setPicking(p => (pos >= 0 ? p.filter(y => y !== x.store) : [...p, x.store]))}>
