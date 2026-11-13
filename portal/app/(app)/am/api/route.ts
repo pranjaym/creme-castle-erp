@@ -36,7 +36,7 @@ export async function POST(req: Request) {
         const lat = num(b.lat), lng = num(b.lng), acc = num(b.acc), photo = num(b.photo);
         if (lat == null || lng == null) throw new Error('Your phone did not give a location. Allow location for this site and try again.');
         if (photo == null) throw new Error('Take the store-front photo first.');
-        await am.checkIn(u.id, who(u), { kind: mode === 'visit' ? 'am_visit' : (am.AUDIT_KINDS as string[]).includes(String(b.kind)) ? (b.kind as am.VisitKind) : 'qa_audit', store: String(b.store ?? ''), allowed: (mode === 'audit' ? access.audit.review : access.am.review) || u.role === 'admin' || !u.outletCodes.length ? null : u.outletCodes, planned: b.planned === true, reason: str(b.reason), lat, lng, acc: acc ?? 0, frontPhoto: photo });
+        await am.checkIn(u.id, who(u), { kind: mode === 'visit' ? 'am_visit' : b.kind === 'other_audit' ? 'other_audit' : 'qa_audit', store: String(b.store ?? ''), allowed: (mode === 'audit' ? access.audit.review : access.am.review) || u.role === 'admin' || !u.outletCodes.length ? null : u.outletCodes, planned: b.planned === true, reason: str(b.reason), lat, lng, acc: acc ?? 0, frontPhoto: photo });
         break;
       }
       case 'reportPin': await am.reportPin(u.id, who(u), String(b.store ?? ''), num(b.lat), num(b.lng), num(b.acc), num(b.dist), str(b.note)); break;

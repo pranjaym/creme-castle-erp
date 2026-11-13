@@ -25,7 +25,7 @@ export default async function StoreAuditResults({ searchParams }: { searchParams
     <div className={s.wide}>
       <div className={s.testband}><b>Test version.</b> Everything here is test data and will be cleared from all reports before the app goes live.</div>
       <div className={s.h}>Audit results by store, this month</div>
-      <div className={s.sub}>Latest closed AM monthly audit and latest QA surprise audit per store; Other visits score nothing. Points on the proposed line: 15 at 25 or more of {items.length} passed, 0 at 19 or fewer, straight line between. If one audit is missing the other counts for both. Any critical fail this month caps the store&apos;s month at 60.</div>
+      <div className={s.sub}>AM audit = the audit inside the Area Manager&apos;s latest closed daily visit this month; QA = the latest QA surprise audit. Other visits score nothing. Points on the proposed line: 15 at 25 or more of {items.length} passed, 0 at 19 or fewer, straight line between. If one audit is missing the other counts for both. Any critical fail this month caps the store&apos;s month at 60.</div>
       <div className={s.chips}>
         <Link href="/store-audit/results" className={`${s.chip} ${!amF ? s.chipon : ''}`}>All</Link>
         {ams.map(a => <Link key={a} href={`/store-audit/results?am=${encodeURIComponent(a)}`} className={`${s.chip} ${a === amF ? s.chipon : ''}`}>{a}</Link>)}
@@ -37,7 +37,7 @@ export default async function StoreAuditResults({ searchParams }: { searchParams
             {shown.length ? shown.map(r => (
               <tr key={r.store}>
                 <td>{r.am}</td><td>{r.store.replace(/^CC-/, '')}</td>
-                <td>{r.amVisit ? <Link href={`/store-audit/results/${r.amVisit.id}`}>{r.amVisit.passed}/{items.length}, {when(r.amVisit.at)}</Link> : 'none'}</td>
+                <td>{r.amVisit ? <Link href={`/area-manager-visit/review/${r.amVisit.id}`}>{r.amVisit.passed}/{items.length}, {when(r.amVisit.at)}</Link> : 'none'}</td>
                 <td><b>{pts(r.amPoints, r.standIn === 'qa')}</b></td>
                 <td>{r.qaVisit ? <Link href={`/store-audit/results/${r.qaVisit.id}`}>{r.qaVisit.passed}/{items.length}, {when(r.qaVisit.at)}</Link> : 'none'}</td>
                 <td><b>{pts(r.qaPoints, r.standIn === 'am')}</b></td>

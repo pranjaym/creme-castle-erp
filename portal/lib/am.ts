@@ -412,7 +412,9 @@ export async function storeResults(): Promise<StoreResult[]> {
   const by = new Map<string, StoreResult>();
   for (const r of rows) {
     const x = by.get(r.store) ?? { store: r.store, am: r.am ?? 'Test', amVisit: null, qaVisit: null, amPoints: null, qaPoints: null, standIn: null, critical: 0, capped: false, audits: 0 };
-    if (r.kind === 'other_audit' || r.kind === 'am_visit') continue; // store audit app only; other visits score nothing
+    if (r.kind === 'other_audit') continue; // recorded, no points
+    // AM line = the audit inside the AM's daily visit (Pranjay, 13 Nov); am_audit
+    // is no longer offered but older rows still count as AM audits.
     x.audits += 1; x.critical += r.crit;
     const one = { id: Number(r.id), at: r.checkin_at, by: r.person_name, passed: r.passed, points: auditPoints(r.passed) };
     if (r.kind === 'qa_audit') { if (!x.qaVisit) x.qaVisit = one; } else if (!x.amVisit) x.amVisit = one;

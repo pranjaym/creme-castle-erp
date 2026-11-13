@@ -76,7 +76,7 @@ export default function AmApp(props: {
   const [text, setText] = useState('');
   const [qOpen, setQOpen] = useState(false);
   const [outLoc, setOutLoc] = useState<Loc | null>(null);
-  const [qaKind, setQaKind] = useState<'am_audit' | 'qa_audit' | 'other_audit'>('qa_audit');
+  const [qaKind, setQaKind] = useState<'qa_audit' | 'other_audit'>('qa_audit');
   const [qaStore, setQaStore] = useState(props.stores[0]?.store ?? '');
   const [lastClosed, setLastClosed] = useState<{ store: string; minutes: number | null; from: string; to: string | null } | null>(null);
   const [previews, setPreviews] = useState<Record<string, string>>({});
@@ -577,7 +577,7 @@ export default function AmApp(props: {
       {!v ? (
         <div className={s.card}><div className={s.cardh}>Start an audit</div>
           <div className={s.sub}>The same {items.length} items with a photo on each, no day plan needed. Check-in rules are the same: within the store&apos;s circle, store-front photo.</div>
-          <div className={s.chips} style={{ marginTop: 6 }}>{(['am_audit', 'qa_audit', 'other_audit'] as const).map(k => <button key={k} className={`${s.chip} ${qaKind === k ? s.chipon : ''}`} onClick={() => setQaKind(k)}>{KIND[k]}</button>)}</div>
+          <div className={s.chips} style={{ marginTop: 6 }}>{(['qa_audit', 'other_audit'] as const).map(k => <button key={k} className={`${s.chip} ${qaKind === k ? s.chipon : ''}`} onClick={() => setQaKind(k)}>{KIND[k]}</button>)}</div>
           <div className={s.sub} style={{ marginTop: 4 }}>{KIND_NOTE[qaKind]}</div>
           <label className={s.lbl} htmlFor="am-qa">Store</label>
           <select id="am-qa" className={s.txt} value={qaStore} onChange={e => setQaStore(e.target.value)}>{stores.map(x => <option key={x.store} value={x.store}>{short(x.store)}</option>)}</select>
