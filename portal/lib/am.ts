@@ -27,8 +27,30 @@ export const ORDER_CHECKS = [
   { key: 'sn_po', title: 'SupplyNote purchase orders', hint: 'Open purchase orders for this store checked in SupplyNote' },
   { key: 'sn_so', title: 'SupplyNote sales orders', hint: 'Open sales orders for this store checked in SupplyNote' },
 ] as const;
-const ADD_ONS = ['Birthday candles (pack)', 'Happy Birthday topper', 'Party popper', 'Cake knife'];
-const GOODS = ['Tiramisu Pastry', 'Classic Walnut Brownie', 'Nutella Bomb Cookie', 'Chocolate Truffle Cake (500 Gm)', 'Blueberry Baked Cheesecake', 'Butter Croissant', 'Overload Brownie (1 Pc)', 'Eggless Biscoff Brownie', 'Lotus Biscoff Cheesecake', 'Chocolate Mousse Pastry', 'Almond Biscotti (80 Gm)', 'Belgian Chocolate Tart Slice'];
+// The blind count draws from Petpooja's own inventory item names (the names
+// the store counts against), from the Petpooja stock report in the spine.
+// Items the store sold in the last 14 days come first, so retired items drop
+// out. Piping cream and name plates are made or used up, not counted.
+const GOOD_CATS = ['Brownies', 'Cakes', 'Cheese Cakes', 'Cookies', 'Crossiant', 'Jar', 'Pastry', 'Tea Cake', 'Chocolate'];
+const NOT_COUNTED_ADDONS = ['Chocolate Piping Cream', 'Vanilla Piping Cream', 'Chocolate Name Plate', 'White Chocolate Name Plate'];
+async function countItems(store: string): Promise<{ item: string; kind: string }[]> {
+  const rows = await q<{ item: string; category: string; sold: boolean }>(
+    `with inv as (
+       select distinct on (raw_material) raw_material item, category
+         from landing.petpooja_daily_stock order by raw_material, business_date desc),
+     sold as (
+       select distinct lower(oi.item_name) n from core.order_items oi
+         join public.locations l on l.id = oi.location_id
+        where l.code = $1 and oi.business_date >= current_date - 14)
+     select item, category, lower(item) in (select n from sold) sold from inv`, [store]);
+  const pick = (pool: typeof rows, n: number) => {
+    const sold = shuffle(pool.filter(r => r.sold)), rest = shuffle(pool.filter(r => !r.sold));
+    return [...sold, ...rest].slice(0, n).map(r => r.item);
+  };
+  const addOns = rows.filter(r => r.category === 'Addons' && !NOT_COUNTED_ADDONS.includes(r.item));
+  const goods = rows.filter(r => GOOD_CATS.includes(r.category));
+  return [...pick(addOns, 2).map(item => ({ item, kind: 'add_on' })), ...pick(goods, 6).map(item => ({ item, kind: 'finished_good' }))];
+}
 export const VARIANCE_REASONS = ['Sale not punched', 'Wastage not punched', 'Transfer not received in Petpooja', 'Counting error, recounted', 'Unknown'];
 export const MISS_REASONS = ['Store emergency elsewhere', 'Called to the kitchen or office', 'Traffic or distance', 'Store was shut', 'Rescheduled to tomorrow', 'Other'];
 
@@ -142,10 +164,7 @@ export async function checkIn(person: string, name: string, args: { kind: VisitK
   if (!VISIT_KINDS.includes(args.kind)) throw new Error('Unknown visit type.');
   const qa = args.kind !== 'am_visit';
   const plan = qa ? null : await planFor(person, istDate());
-  const inv = qa ? [] : [
-    ...shuffle(ADD_ONS).slice(0, 2).map(item => ({ item, kind: 'add_on' })),
-    ...shuffle(GOODS).slice(0, 6).map(item => ({ item, kind: 'finished_good' })),
-  ];
+  const inv = qa ? [] : await countItems(args.store);
   return tx(async c => {
     const v = await c.q<{ id: string }>(
       `insert into am.visit (kind, person, person_name, store, plan_id, planned, unplanned_reason, checkin_lat, checkin_lng, checkin_acc_m, checkin_dist_m, inv_items)
